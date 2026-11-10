@@ -16,5 +16,5 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python analyze.py
         env:
-          ESPN_S2: ${{ secrets.ESPN_S2 }}
+          ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
