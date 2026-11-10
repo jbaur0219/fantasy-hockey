@@ -1,0 +1,20 @@
+name: Daily fantasy hockey report
+
+on:
+  schedule:
+    - cron: "0 12 * * *"   # every day at 12:00 UTC (7:00 AM Eastern in winter)
+  workflow_dispatch:        # also lets you press a "Run workflow" button any time
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python analyze.py
+        env:
+          ESPN_S2: ${{ secrets.ESPN_S2 }}
+          SWID: ${{ secrets.SWID }}
