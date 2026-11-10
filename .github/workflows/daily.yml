@@ -29,8 +29,8 @@ jobs:
         env:
           ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
-      - name: Dashboard
-        run: python dashboard.py
+      - name: Interactive site
+        run: python site_builder.py
         env:
           ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
@@ -45,7 +45,6 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    continue-on-error: true   # fine if the website option is not turned on
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
