@@ -2,11 +2,21 @@ name: Daily fantasy hockey report
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # every day at 12:00 UTC (7:00 AM Eastern in winter)
+    - cron: "0 12 * * *"   # 7:00 AM Eastern (winter)
+    - cron: "0 17 * * *"   # noon Eastern, after goalie news settles
   workflow_dispatch:        # also lets you press a "Run workflow" button any time
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
-  report:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,7 +24,31 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - run: python analyze.py
+      - name: Text report
+        run: python analyze.py
         env:
           ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
+      - name: Dashboard
+        run: python dashboard.py
+        env:
+          ESPN_S2: ${{ secrets.ESPN_2 }}
+          SWID: ${{ secrets.SWID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard
+          path: site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true   # fine if the website option is not turned on
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
