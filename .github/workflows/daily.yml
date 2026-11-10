@@ -24,13 +24,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Text report
-        run: python analyze.py
-        env:
-          ESPN_S2: ${{ secrets.ESPN_2 }}
-          SWID: ${{ secrets.SWID }}
-      - name: Interactive site
-        run: python site_builder.py
+      - name: Interactive site with deeper stats
+        run: python build.py
         env:
           ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
