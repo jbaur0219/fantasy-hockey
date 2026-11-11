@@ -31,6 +31,8 @@ def is_droppable(p):
         return p["slot"] == "BN" and (p["out"] or 0) < STR.PROTECT_GOALIE
     if (p["out"] or 0) >= STR.PROTECT_SKATER:
         return False
+    if p.get("ppu") == 1 and p.get("rl") != "Off lines":
+        return False                                       # first power-play unit players are exactly who you want to keep
     if (p.get("ppg") or 0) >= R.KEEP_PPG or (p.get("rec") or 0) >= R.KEEP_REC:
         return False                                       # producing for you: keep
     cls = p.get("cls")
@@ -48,7 +50,7 @@ def add_ok(p):
         return (p.get("sp") or 0) >= 0.3
     if not R.STATE["ok"]:
         return True                                        # no line data at all: don't block everything
-    if p.get("rl") in (None, "Off lines"):
+    if p.get("rl") in (None, "Off lines", "Not listed"):
         return False
     return R.is_top(p["grp"], p.get("ev"), p.get("ppu") or 0)
 

@@ -160,7 +160,7 @@ def classify(p):
     if p.get("rl") == "Off lines":
         return "watch"
     top = is_top(grp, ev, pp)
-    fading = tr is not None and tr <= -2.0
+    fading = tr is not None and tr <= -3.0            # a 2-minute dip is noise; 3+ minutes is a real change
     producing = (p.get("ppg") or 0) >= KEEP_PPG or (p.get("recent_ppg") or 0) >= KEEP_REC
     if top and fading:
         return "watch"
@@ -175,16 +175,31 @@ def classify(p):
 # ---------------------------------------------------------------------------
 # The role-aware outlook (wraps the player parser)
 # ---------------------------------------------------------------------------
+def _find(team, name):
+    """Exact match first; then same last name + same first initial (Gabe vs Gabriel), only if unambiguous."""
+    n = E.norm(name)
+    if n in team:
+        return team[n]
+    parts = n.split()
+    if len(parts) < 2:
+        return None
+    hits = [e for k, e in team.items() if k.split()[-1:] == [parts[-1]] and k[:1] == n[:1]]
+    return hits[0] if len(hits) == 1 else None
+
+
 def _apply(p, pl):
     team = STATE["teams"].get(STATE["abbr"].get(pl.get("proTeamId")))
     if team is None:
         return                                           # that team's page wasn't read: leave the player alone
-    e = team.get(E.norm(pl.get("fullName")))
+    e = _find(team, pl.get("fullName"))
     if p["group"] == "G":
         if e and e.get("g"):
             p["rl"] = e["g"]
         return
-    if e is None or (e["ev"] is None and not e["pp"]):
+    if e is None:
+        p["rl"] = "Not listed"                           # not on the page under any matching name: unknown, so no tag
+        return
+    if e["ev"] is None and not e["pp"]:
         p["rl"], p["ev"], p["ppu"] = "Off lines", None, 0
         p["cls"] = classify(p)
         return
