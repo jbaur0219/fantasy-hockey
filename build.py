@@ -19,6 +19,7 @@ import planner as PL
 import roles as R
 import streams2 as S2
 import streams3 as S3
+import streams4 as S4
 import gameplan as GP
 import streams as STR
 import site_builder as SB
@@ -105,6 +106,8 @@ def main():
                 SB.JS, SB.CSS, _ok = S2.patch_all(SB.JS, SB.CSS)
                 S3.install()
                 SB.JS, v3_ok = S3.patch_all(SB.JS)
+                S4.install()
+                SB.JS, v4_ok = S4.patch_all(SB.JS)
                 if v3_ok:
                     SB.JS, SB.PAGE, gp_on = GP.patch_all(SB.JS, SB.PAGE)
         else:
