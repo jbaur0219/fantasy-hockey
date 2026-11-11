@@ -19,6 +19,7 @@ import planner as PL
 import roles as R
 import streams2 as S2
 import streams3 as S3
+import gameplan as GP
 import streams as STR
 import site_builder as SB
 import starters as S
@@ -79,7 +80,7 @@ def main():
     standings = D.load_nhl_standings()
     abbr, _ = D.schedule_maps(data["schedules"])
 
-    planner_on = streams_on = v3_ok = False
+    planner_on = streams_on = v3_ok = gp_on = False
     print("Loading deeper stats...")
     try:
         nhl = E.load(cfg["season"])
@@ -104,6 +105,8 @@ def main():
                 SB.JS, SB.CSS, _ok = S2.patch_all(SB.JS, SB.CSS)
                 S3.install()
                 SB.JS, v3_ok = S3.patch_all(SB.JS)
+                if v3_ok:
+                    SB.JS, SB.PAGE, gp_on = GP.patch_all(SB.JS, SB.PAGE)
         else:
             print("  no deeper stats available, building the basic version")
     except Exception as e:
@@ -124,7 +127,16 @@ def main():
             for mv in pl["moves"]:
                 print(f"     {mv['day']}: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']})")
         except Exception as e:
-            print(f"  streams data failed ({type(e).__name__}: {e})")
+            print(f"  streams data failed ({type(e).__name__: {e})")
+    if gp_on:
+        try:
+            site_data["gameplan"] = GP.build(cfg, data, league, standings, now_ms, site_data)
+            gp = site_data["gameplan"]
+            print(f"  game plan: {len(gp['moves'])} of {gp['moves_left']} moves, +{gp['gain']} pts")
+            for mv in gp["moves"]:
+                print(f"     {mv['day']} [{mv['tier']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, net {mv['net']})")
+        except Exception as e:
+            print(f"  game plan data failed ({type(e).__name__}: {e})")
     if v3_ok:
         site_data["moves"] = []                  # the Streams tab now owns the move suggestions
     if not site_data["mine"]:
