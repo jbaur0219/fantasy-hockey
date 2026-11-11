@@ -16,6 +16,7 @@ import analyze as A
 import dashboard as D
 import enrich as E
 import site_builder as SB
+import starters as S
 
 _base_slim = SB.slim
 EXTRA = ("toi", "pp", "ixg", "gx", "xgf", "gs", "qs", "gsax", "h60", "b60")
@@ -56,7 +57,7 @@ JS_PATCHES = [
 ]
 PAGE_PATCHES = [
     ('</div><div id="modal"></div>',
-     '<div class="muted" style="margin-top:22px">Data: ESPN, NHL.com and MoneyPuck.com (expected goals). '
+     '<div class="muted" style="margin-top:22px">Data: ESPN, NHL.com, MoneyPuck.com (expected goals) and DailyFaceoff.com (starting goalies). '
      'G vs xG = goals minus expected goals: positive means finishing above expectation (may cool), negative means due to rise.</div>'
      '</div><div id="modal"></div>'),
 ]
@@ -81,6 +82,10 @@ def main():
             SB.slim = slim_plus
             SB.JS = patch_text(SB.JS, JS_PATCHES, "page script")
             SB.PAGE = patch_text(SB.PAGE, PAGE_PATCHES, "page layout")
+            try:
+                S.install(S.load())
+            except Exception as e:
+                print(f"  starting goalies skipped ({type(e).__name__}: {e})")
         else:
             print("  no deeper stats available, building the basic version")
     except Exception as e:
@@ -103,8 +108,12 @@ def main():
         p = gd["p"]
         print(f"  {p['n']}: outlook {p['out']:.2f}, start chance {int((p.get('sp') or 0)*100)}%, "
               f"vs xG {p.get('gsax')}")
+        for r in gd["rows"]:
+            print(f"     {r['day']} {'vs' if r['home'] else '@'} {r['opp']}: win {r['p']*100:.0f}% exp {r['e']:+.1f} -> {r['verdict']}")
     for mv in site_data["moves"]:
         print(f"  MOVE add {mv['add']['n']} ({mv['add']['out']:.2f}) drop {mv['drop']['n']} ({mv['drop']['out']:.2f})")
+    for a in site_data["alerts"]:
+        print("  ALERT:", a["t"])
     print(f"Saved site/index.html ({len(html_text)//1024} KB)")
 
 
