@@ -15,6 +15,7 @@ from pathlib import Path
 import analyze as A
 import dashboard as D
 import enrich as E
+import planner as PL
 import site_builder as SB
 import starters as S
 
@@ -74,6 +75,7 @@ def main():
     standings = D.load_nhl_standings()
     abbr, _ = D.schedule_maps(data["schedules"])
 
+    planner_on = False
     print("Loading deeper stats...")
     try:
         nhl = E.load(cfg["season"])
@@ -86,12 +88,19 @@ def main():
                 S.install(S.load())
             except Exception as e:
                 print(f"  starting goalies skipped ({type(e).__name__}: {e})")
+            SB.JS, SB.PAGE, SB.CSS, planner_on = PL.patch_all(SB.JS, SB.PAGE, SB.CSS)
         else:
             print("  no deeper stats available, building the basic version")
     except Exception as e:
         print(f"  deeper stats failed ({type(e).__name__}: {e}); building the basic version")
 
-    site_data = SB.build_site_data(cfg, data, league, standings, int(time.time() * 1000))
+    now_ms = int(time.time() * 1000)
+    site_data = SB.build_site_data(cfg, data, league, standings, now_ms)
+    if planner_on:
+        try:
+            site_data["planner"] = PL.build(cfg, data, league, standings, now_ms, site_data)
+        except Exception as e:
+            print(f"  planner data failed ({type(e).__name__}: {e})")
     if not site_data["mine"]:
         sys.exit("Couldn't find your team. Check LEAGUE_ID and TEAM_ID.")
     print(E.summary())
