@@ -16,6 +16,8 @@ import analyze as A
 import dashboard as D
 import enrich as E
 import planner as PL
+import roles as R
+import streams2 as S2
 import streams as STR
 import site_builder as SB
 import starters as S
@@ -91,6 +93,14 @@ def main():
                 print(f"  starting goalies skipped ({type(e).__name__}: {e})")
             SB.JS, SB.PAGE, SB.CSS, planner_on = PL.patch_all(SB.JS, SB.PAGE, SB.CSS)
             SB.JS, SB.PAGE, SB.CSS, streams_on = STR.patch_all(SB.JS, SB.PAGE, SB.CSS)
+            try:
+                R.install(R.load(set(abbr.values())), abbr)
+                print(" ", R.summary())
+            except Exception as e:
+                print(f"  line roles skipped ({type(e).__name__}: {e})")
+            if streams_on:
+                S2.install()
+                SB.JS, SB.CSS, _ok = S2.patch_all(SB.JS, SB.CSS)
         else:
             print("  no deeper stats available, building the basic version")
     except Exception as e:

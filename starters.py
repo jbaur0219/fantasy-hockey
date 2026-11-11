@@ -27,7 +27,7 @@ REV = {v: k for k, v in D.NHL_ABBR.items()}          # NHL-style abbreviation ->
 STATE = {"by_team": {}}
 _orig_goalie_decisions = D.goalie_decisions
 _orig_alerts = D.lineup_alerts
-_orig_start_prob = D.start_prob
+PREV = {}
 
 
 def parse_page(page, today):
@@ -86,7 +86,7 @@ def _goalie_decisions(mine, sp, games, abbr, standings, now_ms):
 
 
 def _start_prob(p, standings):
-    base = _orig_start_prob(p, standings)
+    base = PREV["sp"](p, standings)
     return max(base, 0.6) if _is_starter(p) else base
 
 
@@ -110,6 +110,7 @@ def install(by_team):
     STATE["by_team"] = by_team
     if not by_team:
         return
+    PREV["sp"] = D.start_prob                          # keep the NHL games-started version if it is installed
     D.goalie_decisions = _goalie_decisions
     D.start_prob = _start_prob
     D.lineup_alerts = _alerts
