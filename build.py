@@ -16,6 +16,7 @@ import analyze as A
 import dashboard as D
 import enrich as E
 import planner as PL
+import streams as STR
 import site_builder as SB
 import starters as S
 
@@ -75,7 +76,7 @@ def main():
     standings = D.load_nhl_standings()
     abbr, _ = D.schedule_maps(data["schedules"])
 
-    planner_on = False
+    planner_on = streams_on = False
     print("Loading deeper stats...")
     try:
         nhl = E.load(cfg["season"])
@@ -89,6 +90,7 @@ def main():
             except Exception as e:
                 print(f"  starting goalies skipped ({type(e).__name__}: {e})")
             SB.JS, SB.PAGE, SB.CSS, planner_on = PL.patch_all(SB.JS, SB.PAGE, SB.CSS)
+            SB.JS, SB.PAGE, SB.CSS, streams_on = STR.patch_all(SB.JS, SB.PAGE, SB.CSS)
         else:
             print("  no deeper stats available, building the basic version")
     except Exception as e:
@@ -101,6 +103,15 @@ def main():
             site_data["planner"] = PL.build(cfg, data, league, standings, now_ms, site_data)
         except Exception as e:
             print(f"  planner data failed ({type(e).__name__}: {e})")
+    if streams_on:
+        try:
+            site_data["streams"] = STR.build(cfg, data, league, standings, now_ms, site_data)
+            pl = site_data["streams"]["plan"]
+            print(f"  move plan: {len(pl['moves'])} moves, +{pl['gain']} pts")
+            for mv in pl["moves"]:
+                print(f"     {mv['day']}: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']})")
+        except Exception as e:
+            print(f"  streams data failed ({type(e).__name__}: {e})")
     if not site_data["mine"]:
         sys.exit("Couldn't find your team. Check LEAGUE_ID and TEAM_ID.")
     print(E.summary())
