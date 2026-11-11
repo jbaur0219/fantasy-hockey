@@ -18,6 +18,7 @@ import enrich as E
 import planner as PL
 import roles as R
 import streams2 as S2
+import streams3 as S3
 import streams as STR
 import site_builder as SB
 import starters as S
@@ -78,7 +79,7 @@ def main():
     standings = D.load_nhl_standings()
     abbr, _ = D.schedule_maps(data["schedules"])
 
-    planner_on = streams_on = False
+    planner_on = streams_on = v3_ok = False
     print("Loading deeper stats...")
     try:
         nhl = E.load(cfg["season"])
@@ -101,6 +102,8 @@ def main():
             if streams_on:
                 S2.install()
                 SB.JS, SB.CSS, _ok = S2.patch_all(SB.JS, SB.CSS)
+                S3.install()
+                SB.JS, v3_ok = S3.patch_all(SB.JS)
         else:
             print("  no deeper stats available, building the basic version")
     except Exception as e:
@@ -122,6 +125,8 @@ def main():
                 print(f"     {mv['day']}: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']})")
         except Exception as e:
             print(f"  streams data failed ({type(e).__name__}: {e})")
+    if v3_ok:
+        site_data["moves"] = []                  # the Streams tab now owns the move suggestions
     if not site_data["mine"]:
         sys.exit("Couldn't find your team. Check LEAGUE_ID and TEAM_ID.")
     print(E.summary())
