@@ -21,7 +21,9 @@ import dashboard as D
 import planner as PL
 import starters as S
 
-MIN_GAIN = 1.0          # a move must add at least this many points to be suggested
+MIN_GAIN = 1.5          # a move must add at least this many points, net of what it gives up
+FUTURE_GAMES = 3.0      # roughly how many games of future value a dropped player represents
+REPLACEMENT = {"F": 1.45, "D": 1.5, "G": 1.0}   # what a typical free agent gives you per game
 SKATER_POOL = 60        # free-agent skaters considered by the optimizer
 GOALIE_POOL = 15
 DTD = 0.75              # day-to-day players count at 75%
@@ -141,17 +143,19 @@ def plan_moves(mine, fas, game, ndays, days, standings, starters, moves_left):
                         act = _active(entries, d, skip=y)
                         act.append((x["grp"], x["v"][d]))
                         gain += day_value(act) - base_days[d]
-                    if best is None or gain > best[0]:
-                        best = (gain, x, t, y)
+                    net = gain - (0.0 if y["p"]["inj"] in A.BAD_INJURY else
+                                  max(0.0, (y["p"]["out"] or 0) - REPLACEMENT[y["grp"]]) * FUTURE_GAMES)
+                    if best is None or net > best[0]:
+                        best = (net, x, t, y, gain)
         if best is None or best[0] < MIN_GAIN:
             break
-        gain, x, t, y = best
+        net, x, t, y, gain = best
         y["leave"] = t
         entries.append({"p": x["p"], "v": x["v"], "grp": x["grp"], "join": t, "leave": INF})
         x["used"] = True
         base_days = [day_value(_active(entries, d)) for d in range(ndays)]
         moves.append({"t": t, "day": days[t], "add": _brief(x["p"]), "drop": _brief(y["p"]),
-                      "gain": round(gain, 2), "games": sum(1 for i in range(t, ndays) if x["v"][i] > 0),
+                      "gain": round(gain, 2), "net": round(net, 2), "games": sum(1 for i in range(t, ndays) if x["v"][i] > 0),
                       "waiver": x["waiver"]})
     return {"base": round(start_total, 1), "total": round(sum(base_days), 1),
             "gain": round(sum(base_days) - start_total, 1), "moves": moves}
@@ -217,7 +221,7 @@ function streamsRender(){
       h+='<div class="step"><div class="num">'+(i+1)+'</div><div><div><b>'+esc(m.day)+'</b>: add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' game'+(m.games===1?'':'s')+' left)</span>'+(m.waiver?' <span class="warn">on waivers, claim the day before</span>':'')+'</div>'
       +'<div>drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span></div></div></div>';});
   }
-  h+='<div class="muted" style="margin-top:8px">The plan checks every free agent on every remaining day against every player you could drop, then picks moves one at a time that add the most points to your best daily lineup. It accounts for how many games each team plays and how tough the opponents are, and stops when a move is not worth it. Your best players (outlook 1.9 or higher) are never suggested as drops. '+(pl.used_known?'':'ESPN did not report your adds used, so it assumes none. ')+'Later steps assume the earlier ones were made.</div></div>';
+  h+='<div class="muted" style="margin-top:8px">The plan checks every free agent on every remaining day against every player you could drop, then picks moves one at a time that add the most points to your best daily lineup. It accounts for how many games each team plays and how tough the opponents are, and stops when a move is not worth it. Your best players (outlook 1.9 or higher) are never suggested as drops, and a move must add at least 1.5 points after allowing for what you give up. '+(pl.used_known?'':'ESPN did not report your adds used, so it assumes none. ')+'Later steps assume the earlier ones were made.</div></div>';
   h+='<div class="card"><h2>Best skater streams by day</h2><div class="controls"><span id="stPos"></span></div><div class="chips">';
   S.days.forEach(function(d,i){
     var list=S.rows.filter(function(r){return r.i===i&&(ST.pos==='All'||r.grp===ST.pos);}).sort(function(a,b){return b.e-a.e;}).slice(0,ST.pos==='All'?8:6);
