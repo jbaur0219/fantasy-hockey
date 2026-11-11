@@ -22,13 +22,13 @@ STREAM_POOL = 25            # look at the best 25 free-agent goalies
 MOVE_LIMIT = 7
 
 
-def _grid(schedules, sp, abbr, games, now_ms):
+def _grid(schedules, sp, abbr, games, now_ms, ndays):
     teams = []
     for tid, ab in abbr.items():
         if not ab or ab in ("FA", "?"):
             continue
         row = []
-        for i in range(7):
+        for i in range(ndays):
             gl = games.get(tid, {}).get(str(sp + i), [])
             if gl:
                 g = gl[0]
@@ -41,7 +41,7 @@ def _grid(schedules, sp, abbr, games, now_ms):
     return teams
 
 
-def _stream(site_data, sp, abbr, games, standings, now_ms):
+def _stream(site_data, sp, abbr, games, standings, now_ms, ndays):
     tid_of = {ab: tid for tid, ab in abbr.items()}
     pool = [p for p in site_data["fas"] if p["grp"] == "G" and p["inj"] not in A.BAD_INJURY]
     pool = sorted(pool, key=lambda p: -(p["out"] or 0))[:STREAM_POOL]
@@ -51,7 +51,7 @@ def _stream(site_data, sp, abbr, games, standings, now_ms):
             continue
         tid = tid_of.get(p["tm"])
         s_me = D.team_strength(p["tm"], standings)
-        for i in range(7):
+        for i in range(ndays):
             for g in games.get(tid, {}).get(str(sp + i), [])[:1]:
                 if i == 0 and g.get("date", 0) <= now_ms:
                     continue                                    # today's game already started
@@ -90,9 +90,11 @@ def build(cfg, data, league, standings, now_ms, site_data):
     sp = data["roster"].get("scoringPeriodId", 1)
     abbr, games = D.schedule_maps(data["schedules"])
     today = datetime.fromtimestamp(now_ms / 1000, D.et_zone()).date()
-    days = [(today + timedelta(days=i)).strftime("%a %b %d").replace(" 0", " ") for i in range(7)]
-    return {"days": days, "teams": _grid(data["schedules"], sp, abbr, games, now_ms),
-            "stream": _stream(site_data, sp, abbr, games, standings, now_ms),
+    m = site_data.get("matchup")
+    ndays = max(1, min(int(m["days_left"]) if m else 7, 7))       # only the rest of THIS matchup week (through Sunday)
+    days = [(today + timedelta(days=i)).strftime("%a %b %d").replace(" 0", " ") for i in range(ndays)]
+    return {"days": days, "teams": _grid(data["schedules"], sp, abbr, games, now_ms, ndays),
+            "stream": _stream(site_data, sp, abbr, games, standings, now_ms, ndays),
             "moves_used": _moves_used(league, cfg["team"]), "limit": MOVE_LIMIT}
 
 
@@ -141,7 +143,7 @@ function plannerRender(){
   var cols=[{h:'Team',v:function(r){return r.tm;}}];
   P.days.forEach(function(d,i){cols.push({h:d,v:function(r){return r.g[i]?1:0;},num:1,r:function(r){var c=r.g[i];return c?'<span class="gcell">'+(c[1]?'vs':'@')+' '+esc(c[0])+'</span>':'<span class="muted">-</span>';}});});
   cols.push({h:'Games',v:function(r){return r.total;},num:1},{h:'Back-to-backs',v:function(r){return r.b2b;},num:1},{h:'My players',v:function(r){return r.mine;},num:1});
-  h+='<div class="card"><h2>Games per team, next 7 days</h2>'+mkTable(cols,trows)
+  h+='<div class="card"><h2>Games per team, rest of this matchup</h2>'+mkTable(cols,trows)
     +'<div class="muted">Bold rows are teams you own players on. More games means more points, and back-to-backs often mean a backup goalie in the second game.</div></div>';
   $('#t-planner').innerHTML=h;
   $$('#t-planner table').forEach(function(t){wireSort(t.parentNode);});
