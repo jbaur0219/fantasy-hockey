@@ -27,6 +27,8 @@ GOALIE_POOL = 15
 DTD = 0.75              # day-to-day players count at 75%
 INF = 99
 ROWS_F, ROWS_D = 8, 6   # rows kept per day in the stream lists
+PROTECT_SKATER = 1.9    # skaters this good are never suggested as drops (they matter beyond this week)
+PROTECT_GOALIE = 2.0
 
 
 def _mult(me, opp, home, standings):
@@ -98,7 +100,8 @@ def _active(entries, d, skip=None):
 
 
 def _droppable(entries, t, x_group):
-    cur = [e for e in entries if e["leave"] == INF and e["join"] <= t]
+    cur = [e for e in entries if e["leave"] == INF and e["join"] <= t
+           and (e["p"]["inj"] in A.BAD_INJURY or (e["p"]["out"] or 0) < (PROTECT_GOALIE if e["grp"] == "G" else PROTECT_SKATER))]
     picks = (("G", 3), ("F", 2)) if x_group == "G" else (("F", 6), ("D", 4))
     out = []
     for g, k in picks:
@@ -214,7 +217,7 @@ function streamsRender(){
       h+='<div class="step"><div class="num">'+(i+1)+'</div><div><div><b>'+esc(m.day)+'</b>: add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' game'+(m.games===1?'':'s')+' left)</span>'+(m.waiver?' <span class="warn">on waivers, claim the day before</span>':'')+'</div>'
       +'<div>drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span></div></div></div>';});
   }
-  h+='<div class="muted" style="margin-top:8px">The plan checks every free agent on every remaining day against every player you could drop, then picks moves one at a time that add the most points to your best daily lineup. It accounts for how many games each team plays and how tough the opponents are, and stops when a move is not worth it. '+(pl.used_known?'':'ESPN did not report your adds used, so it assumes none. ')+'Later steps assume the earlier ones were made.</div></div>';
+  h+='<div class="muted" style="margin-top:8px">The plan checks every free agent on every remaining day against every player you could drop, then picks moves one at a time that add the most points to your best daily lineup. It accounts for how many games each team plays and how tough the opponents are, and stops when a move is not worth it. Your best players (outlook 1.9 or higher) are never suggested as drops. '+(pl.used_known?'':'ESPN did not report your adds used, so it assumes none. ')+'Later steps assume the earlier ones were made.</div></div>';
   h+='<div class="card"><h2>Best skater streams by day</h2><div class="controls"><span id="stPos"></span></div><div class="chips">';
   S.days.forEach(function(d,i){
     var list=S.rows.filter(function(r){return r.i===i&&(ST.pos==='All'||r.grp===ST.pos);}).sort(function(a,b){return b.e-a.e;}).slice(0,ST.pos==='All'?8:6);
