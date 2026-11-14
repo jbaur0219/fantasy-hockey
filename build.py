@@ -130,7 +130,7 @@ def main():
             for mv in pl["moves"]:
                 print(f"     {mv['day']}: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']})")
         except Exception as e:
-            print(f"  streams data failed ({type(e).__name__: {e})")
+            print(f"  streams data failed ({type(e).__name__}: {e})")
     if gp_on:
         try:
             site_data["gameplan"] = GP.build(cfg, data, league, standings, now_ms, site_data)
