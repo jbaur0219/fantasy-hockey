@@ -3,7 +3,7 @@
 STREAMS tab (READ-ONLY): the best use of your weekly adds, plus the best skater streams for each day.
 
 How it values a player on a given day
-  - He only scores on days his team plays (and, today, only if his game hasn't started yet).
+  - He only scores on days his team plays (and only while that day is still open: once the first game of the day starts, nobody can be added for it).
   - Points per game = his outlook, nudged up against weak opponents / strong teams and down against strong
     opponents (a modest +/- 15% at most), plus a small home-ice bump.
   - Day-to-day players count at 75%, players ruled out at 0.
@@ -42,15 +42,23 @@ def _mult(me, opp, home, standings):
 
 def make_game_fn(abbr, games, sp, now_ms):
     tid_of = {ab: tid for tid, ab in abbr.items()}
+    locked = {}
+
+    def day_locked(i):
+        """No adds once the first game of the day (any NHL game) has started, so the whole day is off the table."""
+        if i not in locked:
+            starts = [g.get("date") for gl in games.values() for g in gl.get(str(sp + i), []) if g.get("date")]
+            locked[i] = bool(starts) and now_ms >= min(starts)
+        return locked[i]
 
     def game(tm, i):
+        if day_locked(i):
+            return None                                  # the day has started: nobody can be added for it
         tid = tid_of.get(tm)
         gl = games.get(tid, {}).get(str(sp + i), [])
         if not gl:
             return None
         g = gl[0]
-        if i == 0 and g.get("date", 0) <= now_ms:
-            return None                                  # today's game already started
         home = g.get("homeProTeamId") == tid
         opp = abbr.get(g.get("awayProTeamId") if home else g.get("homeProTeamId"), "?")
         return opp, home
@@ -190,8 +198,7 @@ def build(cfg, data, league, standings, now_ms, site_data):
     ndays = max(1, min(int(m["days_left"]) if m else 7, 7))
     game = make_game_fn(abbr, games, sp, now_ms)
     starters = S.STATE["by_team"]
-    today = datetime.fromtimestamp(now_ms / 1000, D.et_zone()).date()
-    days = [(today + timedelta(days=i)).strftime("%a %b %d").replace(" 0", " ") for i in range(ndays)]
+    days = D.day_clock(data["schedules"], sp, ndays, now_ms)["labels"]
     used = PL._moves_used(league, cfg["team"])
     moves_left = max(0, PL.MOVE_LIMIT - (used or 0))
 
@@ -212,8 +219,8 @@ var ST={pos:'All'};
 function streamsRender(){
   var S=D.streams,h='';
   if(!S){$('#t-streams').innerHTML='<div class="card">Streaming data is not available right now.</div>';return;}
-  var pl=S.plan;
-  h+='<div class="card"><h2>Best use of your moves this week</h2>';
+  var pl=lkPlan(S.plan);
+  h+='<div class="card"><h2>Best use of your moves this week</h2>'+lkNote(pl);
   if(!pl.moves.length)h+='<div class="muted">No add is worth a move right now ('+pl.moves_left+' moves left). Your lineup already beats everything available.</div>';
   else{
     h+='<div><span class="big">+'+f(pl.gain,1)+'</span> <span class="muted">projected points from '+pl.moves.length+' of your '+pl.moves_left+' remaining moves (about '+f(pl.base,0)+' to '+f(pl.total,0)+' for the rest of the matchup)</span></div>';
@@ -224,12 +231,14 @@ function streamsRender(){
   h+='<div class="muted" style="margin-top:8px">The plan checks every free agent on every remaining day against every player you could drop, then picks moves one at a time that add the most points to your best daily lineup. It accounts for how many games each team plays and how tough the opponents are, and stops when a move is not worth it. Your best players (outlook 1.9 or higher) are never suggested as drops, and a move must add at least 1.5 points after allowing for what you give up. '+(pl.used_known?'':'ESPN did not report your adds used, so it assumes none. ')+'Later steps assume the earlier ones were made.</div></div>';
   h+='<div class="card"><h2>Best skater streams by day</h2><div class="controls"><span id="stPos"></span></div><div class="chips">';
   S.days.forEach(function(d,i){
+    if(LK.closed(i))return;
     var list=S.rows.filter(function(r){return r.i===i&&(ST.pos==='All'||r.grp===ST.pos);}).sort(function(a,b){return b.e-a.e;}).slice(0,ST.pos==='All'?8:6);
     h+='<div class="chip" style="min-width:270px"><div class="d">'+esc(d)+'</div>';
     if(!list.length)h+='<div class="m muted">No games</div>';
     list.forEach(function(r){
       h+='<div class="m"><a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> <span class="muted">'+esc(r.pos)+' '+esc(r.tm)+'</span> '+(r.h?'vs':'@')+' '+esc(r.o)+' <span class="'+(r.tag==='weak'?'good':(r.tag==='strong'?'warn':'muted'))+'">'+(r.tag==='weak'?'soft':(r.tag==='strong'?'tough':'avg'))+'</span> &middot; <b>'+f(r.e,1)+'</b> &middot; '+r.gl+' gm left'+(r.w?' <span class="warn">(waivers)</span>':'')+'</div>';});
     h+='</div>';});
+  if(LK.first()>=S.days.length)h+='<div class="muted">Every game day left in this matchup week has started, so there is nothing left to add for. Next week\'s streams appear after the next refresh.</div>';
   h+='</div><div class="muted" style="margin-top:8px">Expected points for that day (outlook adjusted for opponent strength and home ice). Players whose teams play more games this week score higher in the move plan above.</div></div>';
   $('#t-streams').innerHTML=h;
   chips('#stPos',['All','F','D'],ST.pos,function(v){ST.pos=v;streamsRender();});
