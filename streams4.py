@@ -435,8 +435,7 @@ def _build4(cfg, data, league, standings, now_ms, site_data):
         m = site_data.get("matchup")
         ndays = max(1, min(int(m["days_left"]) if m else 7, 7))
         game = STR.make_game_fn(abbr, games, sp, now_ms)
-        today = datetime.fromtimestamp(now_ms / 1000, D.et_zone()).date()
-        days = [(today + timedelta(days=i)).strftime("%a %b %d").replace(" 0", " ") for i in range(ndays)]
+        days = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
         starters = STR.S.STATE["by_team"]
         d["audit"] = audit4(site_data, game, ndays, days, standings, starters)
         d["week"] = week_adds(site_data, game, ndays, days, standings, starters)
@@ -492,13 +491,13 @@ function wiResult(){
   if(!W)return '';
   var a=wiFind(W.fas,WI.add),d=wiFind(W.mine,WI.drop);
   if(!a||!d)return '<div class="muted" style="margin-top:8px">Pick a free agent to add and one of your players to drop.</div>';
-  var n=W.days.length,st=Math.min(WI.day,n-1),base=0,aft=0,rows='';
+  var n=W.days.length,st=Math.max(Math.min(WI.day,n-1),Math.min(LK.first(),n-1)),base=0,aft=0,rows='';
   for(var i=0;i<n;i++){
     var act=W.mine.map(function(p){return {g:p.grp,v:p.v[i],id:p.id};});
     var b=wiDay(act);
     var c=wiDay(i>=st?act.filter(function(x){return x.id!==d.id;}).concat([{g:a.grp,v:a.v[i],id:a.id}]):act);
     base+=b;aft+=c;
-    rows+='<tr><td>'+esc(W.days[i])+'</td><td>'+f(b,1)+'</td><td>'+(i>=st?f(c,1):'-')+'</td><td>'+(i>=st?sgn(c-b,1):'-')+'</td></tr>';
+    if(!LK.closed(i))rows+='<tr><td>'+esc(W.days[i])+'</td><td>'+f(b,1)+'</td><td>'+(i>=st?f(c,1):'-')+'</td><td>'+(i>=st?sgn(c-b,1):'-')+'</td></tr>';
   }
   var diff=aft-base;
   var h='<div style="margin-top:10px"><span class="big">'+sgn(diff,1)+'</span> <span class="muted">projected points for your lineup over the rest of this week ('+f(base,1)+' to '+f(aft,1)+')</span></div>';
@@ -530,7 +529,7 @@ function whatifHtml(){
     +W.fas.map(function(p){return '<option value="'+p.id+'"'+(String(p.id)===String(WI.add)?' selected':'')+'>'+esc(p.n)+' ('+esc(p.pos)+', '+esc(p.tm)+', '+p.gl+' gm)</option>';}).join('')
     +'</select></label></div>';
   h+='<div style="margin-top:6px"><label>Starting <select id="wiDay">'
-    +W.days.map(function(x,i){return '<option value="'+i+'"'+(i===WI.day?' selected':'')+'>'+esc(x)+'</option>';}).join('')
+    +W.days.map(function(x,i){if(LK.closed(i))return '';return '<option value="'+i+'"'+(i===Math.max(WI.day,LK.first())?' selected':'')+'>'+esc(x)+'</option>';}).join('')
     +'</select></label></div>';
   return h+'<div id="wiOut">'+wiResult()+'</div></div>';
 }

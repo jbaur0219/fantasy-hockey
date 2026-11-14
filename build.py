@@ -10,6 +10,7 @@ it falls back to the basic version automatically.
 """
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import analyze as A
@@ -68,6 +69,84 @@ PAGE_PATCHES = [
      'G vs xG = goals minus expected goals: positive means finishing above expectation (may cool), negative means due to rise.</div>'
      '</div><div id="modal"></div>'),
 ]
+
+
+LOCK_JS = r"""/* ---------- daily lock: once the first game of a day starts, nobody can be added for that day ---------- */
+var LK=(function(){
+  var C=D.clock||null;
+  function etDate(ms){
+    try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ms));}
+    catch(e){return new Date(ms).toISOString().slice(0,10);}
+  }
+  function closed(i,now){
+    if(!C)return false;
+    now=now||Date.now();
+    var l=C.lock[i];
+    if(l)return now>=l;
+    return !!C.dates[i]&&C.dates[i]<etDate(now);
+  }
+  function count(){var c=0;if(C)for(var i=0;i<C.dates.length;i++)if(closed(i))c++;return c;}
+  function first(){if(!C)return 0;var n=C.dates.length;for(var i=0;i<n;i++)if(!closed(i))return i;return n;}
+  function age(){
+    if(!C||!C.built)return '';
+    var m=Math.max(0,Math.round((Date.now()-C.built)/60000));
+    return m<2?' (just now)':(m<90?' ('+m+' min ago)':' ('+Math.round(m/60)+' h ago)');
+  }
+  function bar(){
+    var el=document.getElementById('lockbar');
+    if(!el||!C)return;
+    var n=C.dates.length,k=count(),fi=first();
+    if(!k){el.innerHTML='';return;}
+    var staleSince=0;
+    for(var i=0;i<n;i++){if(closed(i)&&C.lock[i]&&C.lock[i]>C.built)staleSince=1;}
+    var ti=C.dates.indexOf(etDate(Date.now())),started=ti>=0&&closed(ti);
+    var msg=(started?'<b>Today\'s games have started, so adds are locked.</b> ':'<b>Earlier days in this matchup week are already over.</b> ')+(fi<n?'Everything below is for '+esc(C.labels[fi])+' onward.':'Every game day left in this matchup week has started.');
+    if(staleSince)msg+=' <span class="muted">This page was built before puck drop. A fresh build starts automatically within about 15 minutes of the first game, and the tabs already skip the closed day.</span>';
+    el.innerHTML='<div class="card" style="margin:8px 0;border-left:4px solid var(--amber)">&#128274; '+msg+'</div>';
+  }
+  function start(){
+    bar();
+    var last=count();
+    setInterval(function(){
+      var c=count();
+      if(c===last)return;
+      last=c;bar();
+      try{if(typeof gameplanRender==='function')gameplanRender();}catch(e){}
+      try{if(typeof streamsRender==='function')streamsRender();}catch(e){}
+      try{if(typeof plannerRender==='function')plannerRender();}catch(e){}
+    },30000);
+  }
+  return {closed:closed,count:count,first:first,age:age,bar:bar,start:start};
+})();
+function lkPlan(pl){
+  if(!pl||!LK.count())return pl;
+  var keep=function(m){return !LK.closed(m.t);};
+  var c={};for(var k in pl)c[k]=pl[k];
+  c.moves=(pl.moves||[]).filter(keep);
+  c.hidden=(pl.moves||[]).length-c.moves.length;
+  if(pl.marginal)c.marginal=pl.marginal.filter(keep);
+  if(c.hidden){
+    c.gain=c.moves.reduce(function(s,m){return s+m.gain;},0);
+    if(pl.matchup){var mm={};for(var q in pl.matchup)mm[q]=pl.matchup[q];mm.p_win_after=null;c.matchup=mm;}
+  }
+  return c;
+}
+function lkNote(pl){
+  return (pl&&pl.hidden)?'<div class="why warn" style="margin-bottom:8px">'+pl.hidden+' suggested move'+(pl.hidden===1?'':'s')+' for a day that has already started '+(pl.hidden===1?'was':'were')+' hidden. A fresh plan builds automatically shortly after puck drop.</div>':'';
+}
+
+/* ---------- tabs + startup ---------- */"""
+
+LOCK_PATCHES = [
+    ("/* ---------- tabs + startup ---------- */", LOCK_JS),
+    ("showTab((location.hash||'').slice(1));", "LK.start();\nshowTab((location.hash||'').slice(1));"),
+    ("+' \\u00b7 updated '+D.updated+'", "+' \\u00b7 updated '+D.updated+LK.age()+'"),
+]
+LOCK_PAGE = [("<noscript>", '<div id="lockbar" role="status" aria-live="polite"></div><noscript>'),
+             ("<!doctype html><html>", '<!doctype html><html lang="en">'),
+             ('<meta name="robots" content="noindex">', '<meta name="robots" content="noindex"><meta name="theme-color" content="#2563eb">')]
+LOCK_CSS = [(".me td{font-weight:700}", ".me td{font-weight:700}td,th{font-variant-numeric:tabular-nums}"
+             "button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}")]
 
 
 REFRESH_BAR = r"""<div id="rfbar" style="margin:6px 0 10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
@@ -178,8 +257,23 @@ def main():
     except Exception as e:
         print(f"  deeper stats failed ({type(e).__name__}: {e}); building the basic version")
 
+    SB.JS = patch_text(SB.JS, LOCK_PATCHES, "daily lock")
+    SB.PAGE = patch_text(SB.PAGE, LOCK_PAGE, "daily lock layout")
+    SB.CSS = patch_text(SB.CSS, LOCK_CSS, "polish styles")
+
     now_ms = int(time.time() * 1000)
     site_data = SB.build_site_data(cfg, data, league, standings, now_ms)
+    try:
+        _m = site_data.get("matchup")
+        _nd = max(1, min(int(_m["days_left"]) if _m else 7, 7))
+        site_data["clock"] = D.day_clock(data["schedules"], data["roster"].get("scoringPeriodId", 1), _nd, now_ms)
+        lk = [i for i in range(_nd) if D.day_locked(site_data["clock"], i, now_ms)]
+        first = site_data["clock"]["lock"][0]
+        print(f"  day lock: {site_data['clock']['labels'][0]} first puck "
+              f"{datetime.fromtimestamp(first / 1000, D.et_zone()).strftime('%I:%M %p') if first else 'no games'}; "
+              f"{len(lk)} day(s) already locked")
+    except Exception as e:                                  # the page copes without it; never fail the build over this
+        print(f"  day lock clock skipped ({type(e).__name__}: {e})")
     if planner_on:
         try:
             site_data["planner"] = PL.build(cfg, data, league, standings, now_ms, site_data)

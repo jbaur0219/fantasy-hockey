@@ -157,8 +157,7 @@ def build(cfg, data, league, standings, now_ms, site_data):
     ndays = max(1, min(int(m["days_left"]) if m else 7, 7))
     game = STR.make_game_fn(abbr, games, sp, now_ms)
     starters = S.STATE["by_team"]
-    today = datetime.fromtimestamp(now_ms / 1000, D.et_zone()).date()
-    days = [(today + timedelta(days=i)).strftime("%a %b %d").replace(" 0", " ") for i in range(ndays)]
+    days = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
     used = PL._moves_used(league, cfg["team"])
     moves_left = max(0, PL.MOVE_LIMIT - (used or 0))
 
@@ -196,10 +195,10 @@ function gpTargets(list,label){
   return h+'</div>';
 }
 function gameplanRender(){
-  var P=D.gameplan,h='';
+  var P=lkPlan(D.gameplan),h='';
   if(!P){$('#t-gameplan').innerHTML='<div class="card">The game plan is not available right now.</div>';return;}
   var M=P.matchup,n=P.moves.length;
-  h+='<div class="card"><h2>Your game plan for the rest of this week</h2>';
+  h+='<div class="card"><h2>Your game plan for the rest of this week</h2>'+lkNote(P);
   if(M){
     var pa=M.p_win_after;
     h+='<div class="vs"><div class="team"><div class="n">'+esc(D.me)+'</div><div class="s">'+f(M.me_now,1)+'</div><div class="r">projected final '+Math.round(M.proj_me)+(P.gain>0?' &rarr; '+Math.round(M.proj_me+P.gain)+' with the plan':'')+'</div></div>'
@@ -218,6 +217,7 @@ function gameplanRender(){
     h+='<div class="muted" style="margin-top:8px">Each step assumes the earlier ones were made. First power-play players, players producing for you and your best players are never suggested as drops. Every add is on a top-six line, top-four pair or first power-play unit.</div></div>';}
   h+='<div class="card"><h2>Day-by-day lineup check</h2><div class="scroll"><table><thead><tr><th>Day</th><th>Pts now</th><th>Pts with plan</th><th>F</th><th>D</th><th>G</th><th>Empty slots</th></tr></thead><tbody>';
   P.after.forEach(function(a,i){
+    if(LK.closed(i))return;
     var b=P.before[i],dl=a.pts-b.pts;
     h+='<tr><td><b>'+esc(a.day)+'</b></td><td>'+f(b.pts,1)+'</td><td>'+f(a.pts,1)+(dl>0.05?' <span class="good">('+sgn(dl,1)+')</span>':'')+'</td>'
     +'<td>'+a.f+'/9</td><td>'+a.d+'/5</td><td>'+a.g+'/2</td><td>'+(a.open?'<span class="'+(a.open<b.open?'warn':'bad')+'">'+a.open+'</span>':'<span class="good">0</span>')+(a.open!==b.open?' <span class="muted">(was '+b.open+')</span>':'')+'</td></tr>';});

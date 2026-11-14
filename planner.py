@@ -43,6 +43,7 @@ def _grid(schedules, sp, abbr, games, now_ms, ndays):
 
 def _stream(site_data, sp, abbr, games, standings, now_ms, ndays):
     tid_of = {ab: tid for tid, ab in abbr.items()}
+    clock = D.day_clock_games(games, sp, ndays, now_ms)
     pool = [p for p in site_data["fas"] if p["grp"] == "G" and p["inj"] not in A.BAD_INJURY]
     pool = sorted(pool, key=lambda p: -(p["out"] or 0))[:STREAM_POOL]
     out = []
@@ -52,9 +53,9 @@ def _stream(site_data, sp, abbr, games, standings, now_ms, ndays):
         tid = tid_of.get(p["tm"])
         s_me = D.team_strength(p["tm"], standings)
         for i in range(ndays):
+            if D.day_locked(clock, i, now_ms):
+                continue                                        # the day has started: nobody can be added for it
             for g in games.get(tid, {}).get(str(sp + i), [])[:1]:
-                if i == 0 and g.get("date", 0) <= now_ms:
-                    continue                                    # today's game already started
                 home = g.get("homeProTeamId") == tid
                 opp = abbr.get(g.get("awayProTeamId") if home else g.get("homeProTeamId"), "?")
                 pw = D.log5(s_me, D.team_strength(opp, standings)) + (D.HOME_ICE if home else -D.HOME_ICE)
@@ -89,10 +90,9 @@ def _moves_used(league, my_id):
 def build(cfg, data, league, standings, now_ms, site_data):
     sp = data["roster"].get("scoringPeriodId", 1)
     abbr, games = D.schedule_maps(data["schedules"])
-    today = datetime.fromtimestamp(now_ms / 1000, D.et_zone()).date()
     m = site_data.get("matchup")
     ndays = max(1, min(int(m["days_left"]) if m else 7, 7))       # only the rest of THIS matchup week (through Sunday)
-    days = [(today + timedelta(days=i)).strftime("%a %b %d").replace(" 0", " ") for i in range(ndays)]
+    days = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
     return {"days": days, "teams": _grid(data["schedules"], sp, abbr, games, now_ms, ndays),
             "stream": _stream(site_data, sp, abbr, games, standings, now_ms, ndays),
             "moves_used": _moves_used(league, cfg["team"]), "limit": MOVE_LIMIT}
@@ -114,7 +114,7 @@ function plannerRender(){
     var Ga=act.filter(function(p){return p.grp==='G'&&plays(p,i);}).length;
     var fF=Math.min(9,Fa),fD=Math.min(5,Da),left=(Fa-fF)+(Da-fD),util=left>0?1:0;
     return {d:d,i:i,F:Fa,D:Da,G:Ga,empty:(9-fF)+(5-fD)+(1-util)};
-  });
+  }).filter(function(r){return !LK.closed(r.i);});
   h+='<div class="card"><h2>Your week at a glance</h2>'+mkTable([
     {h:'Day',v:function(r){return r.i;},r:function(r){return esc(r.d);}},
     {h:'Forwards playing (9 slots)',v:function(r){return r.F;},num:1},
@@ -128,6 +128,7 @@ function plannerRender(){
   h+='<div class="muted" style="margin-top:6px">Waivers clear after 1 day, so a claim placed today is usually yours tomorrow. Plan a pickup a day before you need it. Players marked FREEAGENT can be added immediately.</div></div>';
   h+='<div class="card"><h2>Streaming goalies by day</h2><div class="chips">';
   P.days.forEach(function(d,i){
+    if(LK.closed(i))return;
     var list=P.stream.filter(function(s){return s.i===i;}).sort(function(a,b){return b.e-a.e;}).slice(0,3);
     h+='<div class="chip"><div class="d">'+esc(d)+'</div>';
     if(!list.length)h+='<div class="m muted">No good options</div>';
