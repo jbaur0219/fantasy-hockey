@@ -184,7 +184,7 @@ def main():
         try:
             site_data["planner"] = PL.build(cfg, data, league, standings, now_ms, site_data)
         except Exception as e:
-            print(f"  planner data failed ({type(e).__name__: {e})")
+            print(f"  planner data failed ({type(e).__name__}: {e})")
     if streams_on:
         try:
             site_data["streams"] = STR.build(cfg, data, league, standings, now_ms, site_data)
@@ -202,7 +202,7 @@ def main():
             for mv in gp["moves"]:
                 print(f"     {mv['day']} [{mv['tier']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, net {mv['net']})")
         except Exception as e:
-            print(f"  game plan data failed ({type(e).__name__: {e})")
+            print(f"  game plan data failed ({type(e).__name__}: {e})")
     if v3_ok:
         site_data["moves"] = []                  # the Streams tab now owns the move suggestions
     if not site_data["mine"]:
