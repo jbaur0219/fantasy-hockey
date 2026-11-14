@@ -1,0 +1,37 @@
+name: Smart refresh check
+run-name: Smart refresh check
+
+# Every 15 minutes (7am to about 3am Eastern) this looks at the NHL schedule and starts the daily build when:
+#   - the last game of the night is over, or
+#   - it is 4 hours before the first game of the day.
+# Pressing "Run workflow" here does a dry run by default: it only prints what it would do.
+
+on:
+  schedule:
+    - cron: "7,22,37,52 12-23,0-7 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only print what would happen"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: smart-refresh
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decide whether to rebuild
+        run: python3 scheduler.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
