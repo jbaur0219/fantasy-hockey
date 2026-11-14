@@ -2,12 +2,14 @@
 """
 Decides whether the site should be rebuilt right now, and starts the build if so.
 
-Runs every 15 minutes from .github/workflows/refresh.yml. Two triggers, each at most once per day:
+Runs every 15 minutes from .github/workflows/refresh.yml. Three triggers, each at most once per day:
 
   post-game : every NHL game on that day's slate is over -> rebuild (the build waits ~10 min so stats can settle)
   pre-game  : we are inside the 4 hours before that day's first puck drop -> rebuild (injuries, goalie news, lines)
+  lock      : the day's first puck has dropped -> rebuild, so the site drops that day (nobody can be added once the
+              first game starts) and leads with tomorrow
 
-A started build is titled "post-game YYYY-MM-DD" or "pre-game YYYY-MM-DD". A trigger is skipped if a run with that
+A started build is titled "post-game YYYY-MM-DD", "pre-game YYYY-MM-DD" or "lock YYYY-MM-DD". A trigger is skipped if a run with that
 title already exists and did not fail, so a failed or cancelled build is retried on the next check.
 
 Set DRY_RUN=true to only print what it would do.
@@ -106,6 +108,16 @@ def main():
         reason = f"pre-game {today}"
         print(f"First puck drop {first.astimezone(ET):%I:%M %p} ET, pre-game window opens {opens.astimezone(ET):%I:%M %p} ET")
         if opens <= now < first:
+            if done(reason):
+                print(f"{reason}: already refreshed")
+            else:
+                start(reason)
+                started = True
+
+    # 3) lock: today's first puck has dropped, so today is closed for adds; rebuild to lead with tomorrow
+    if games and not started and any(g["state"] in PENDING for g in games):   # not when the slate is over: post-game covers that
+        reason = f"lock {today}"
+        if now >= min(g["start"] for g in games):
             if done(reason):
                 print(f"{reason}: already refreshed")
             else:
