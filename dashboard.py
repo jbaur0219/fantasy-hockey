@@ -18,7 +18,7 @@ import html
 import math
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -64,6 +64,48 @@ def et_zone():
 def fmt_game(ms):
     d = datetime.fromtimestamp(ms / 1000, et_zone())
     return d.strftime("%a %b %d").replace(" 0", " "), d.strftime("%I:%M %p").lstrip("0")
+
+
+def day_clock(schedules, sp, ndays, now_ms):
+    """Same as day_clock_games, reading the games out of ESPN's schedule JSON."""
+    return day_clock_games(schedule_maps(schedules)[1], sp, ndays, now_ms)
+
+
+def day_clock_games(games, sp, ndays, now_ms):
+    """The days the site plans for, and when each one locks.
+
+    In this league nobody can add a player once the first game of the day has started, so a day is "locked"
+    from the first puck drop of ANY NHL game that day. Returns {"built", "dates", "labels", "lock"} with one entry
+    per day: the ET date (YYYY-MM-DD), its label ("Sat Nov 14") and the first puck drop in ms (None on an off day).
+    Dates come from the real schedule for each scoring period, so they stay right even if ESPN has not rolled
+    over to the new scoring period yet (late games, early morning).
+    """
+    tz = et_zone()
+    firsts = []
+    for i in range(ndays):
+        starts = [g.get("date") for gl in games.values() for g in gl.get(str(sp + i), []) if g.get("date")]
+        firsts.append(min(starts) if starts else None)
+    # anchor: the first day with a known first game, else today
+    anchor = None
+    for i, ms in enumerate(firsts):
+        if ms:
+            anchor = datetime.fromtimestamp(ms / 1000, tz).date() - timedelta(days=i)
+            break
+    if anchor is None:
+        anchor = datetime.fromtimestamp(now_ms / 1000, tz).date()
+    dates = [anchor + timedelta(days=i) for i in range(ndays)]
+    return {"built": int(now_ms),
+            "dates": [d.isoformat() for d in dates],
+            "labels": [d.strftime("%a %b %d").replace(" 0", " ") for d in dates],
+            "lock": firsts}
+
+
+def day_locked(clock, i, now_ms):
+    """True once day i can no longer take adds (its first puck has dropped, or the day is over)."""
+    ms = clock["lock"][i] if i < len(clock["lock"]) else None
+    if ms:
+        return now_ms >= ms
+    return clock["dates"][i] < datetime.fromtimestamp(now_ms / 1000, et_zone()).date().isoformat()
 
 
 # ---------------------------------------------------------------------------
