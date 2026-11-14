@@ -1,10 +1,15 @@
 name: Daily fantasy hockey report
+run-name: Daily fantasy hockey report (${{ github.event.inputs.reason || github.event_name }})
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # 7:00 AM Eastern (winter)
-    - cron: "0 17 * * *"   # noon Eastern, after goalie news settles
-  workflow_dispatch:        # also lets you press a "Run workflow" button any time
+    - cron: "11 12 * * *"   # about 7:11 AM Eastern, a daily safety net; refresh.yml starts the game-time rebuilds
+  workflow_dispatch:         # also lets you press a "Run workflow" button any time
+    inputs:
+      reason:
+        description: "Why this run was started (the checker fills this in)"
+        required: false
+        default: "manual"
 
 permissions:
   contents: read
@@ -24,6 +29,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      - name: Let final stats settle after the last game
+        if: startsWith(github.event.inputs.reason, 'post-game')
+        run: sleep 600
       - name: Interactive site with deeper stats
         run: python build.py
         env:
