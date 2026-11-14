@@ -70,6 +70,69 @@ PAGE_PATCHES = [
 ]
 
 
+REFRESH_BAR = r"""<div id="rfbar" style="margin:6px 0 10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+<button id="rfbtn" type="button" style="padding:6px 14px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer">&#8635; Refresh data</button>
+<span id="rfmsg" class="muted" style="font-size:13px"></span>
+<a id="rfforget" href="#" style="display:none;font-size:12px;opacity:.7">forget token</a></div>"""
+
+REFRESH_JS = r"""(function(){
+var OWNER='jbaur0219',REPO='fantasy-hockey',WF='daily.yml',KEY='fh_gh_token';
+var btn=document.getElementById('rfbtn'),msg=document.getElementById('rfmsg'),fg=document.getElementById('rfforget');
+if(!btn)return;
+function tok(){try{return localStorage.getItem(KEY)||'';}catch(e){return '';}}
+function setTok(v){try{if(v)localStorage.setItem(KEY,v);else localStorage.removeItem(KEY);}catch(e){}fg.style.display=tok()?'inline':'none';}
+function say(t,bad){msg.textContent=t;msg.style.color=bad?'#d33':'';}
+function api(path,opt){opt=opt||{};opt.headers={'Authorization':'Bearer '+tok(),'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};return fetch('https://api.github.com/repos/'+OWNER+'/'+REPO+path,opt);}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+setTok(tok());
+fg.addEventListener('click',function(e){e.preventDefault();setTok('');say('Token removed from this browser.');});
+var busy=false;
+btn.addEventListener('click',async function(){
+  if(busy)return;
+  if(!tok()){
+    var v=window.prompt('One-time setup: paste a GitHub token for this repo (Actions: read and write). It is saved only in this browser.\n\nCreate one at https://github.com/settings/personal-access-tokens/new');
+    if(!v){say('A token is needed to start a refresh.',true);return;}
+    setTok(v.trim());
+  }
+  busy=true;btn.disabled=true;var t0=Date.now();
+  try{
+    say('Starting refresh...');
+    var r=await api('/actions/workflows/'+WF+'/dispatches',{method:'POST',body:JSON.stringify({ref:'main',inputs:{reason:'manual-button'}})});
+    if(r.status===401||r.status===403||r.status===404){setTok('');say('GitHub rejected the token (expired or missing permission). Click again to paste a new one.',true);return;}
+    if(r.status!==204){say('Could not start the refresh (HTTP '+r.status+').',true);return;}
+    var run=null;
+    for(var i=0;i<60;i++){
+      await sleep(6000);
+      var q=await api('/actions/workflows/'+WF+'/runs?event=workflow_dispatch&per_page=10');
+      if(!q.ok)continue;
+      var j=await q.json();
+      var runs=(j.workflow_runs||[]).filter(function(x){return (x.display_title||'').indexOf('manual-button')>=0&&Date.parse(x.created_at)>=t0-60000;});
+      run=runs[0]||null;
+      var secs=Math.round((Date.now()-t0)/1000);
+      say((run&&run.status==='in_progress'?'Building... ':'Queued... ')+secs+'s');
+      if(run&&run.status==='completed')break;
+    }
+    if(run&&run.status==='completed'&&run.conclusion==='success'){say('Done. Reloading...');location.href=location.pathname+'?r='+Date.now()+location.hash;return;}
+    if(run&&run.status==='completed'){say('The build failed. Check the Actions tab on GitHub.',true);return;}
+    say('Still running after 6 minutes. Reload in a bit.',true);
+  }catch(e){say('Something went wrong: '+e.message,true);}
+  finally{busy=false;btn.disabled=false;}
+});
+})();"""
+
+
+def add_refresh_button(html_text):
+    """Adds a 'Refresh data' button under the page title. It asks GitHub to rebuild the site, then reloads the page."""
+    marker = '<div class="sub" id="sub"></div>'
+    end = html_text.rfind("</body>")
+    if html_text.count(marker) != 1 or end < 0:
+        print("  (refresh button skipped: page layout changed)")
+        return html_text
+    html_text = html_text.replace(marker, marker + REFRESH_BAR)
+    end = html_text.rfind("</body>")
+    return html_text[:end] + "<script>" + REFRESH_JS + "</script>" + html_text[end:]
+
+
 def main():
     cfg = A.get_config()
     print("Reading your ESPN league...")
@@ -121,7 +184,7 @@ def main():
         try:
             site_data["planner"] = PL.build(cfg, data, league, standings, now_ms, site_data)
         except Exception as e:
-            print(f"  planner data failed ({type(e).__name__}: {e})")
+            print(f"  planner data failed ({type(e).__name__: {e})")
     if streams_on:
         try:
             site_data["streams"] = STR.build(cfg, data, league, standings, now_ms, site_data)
@@ -139,7 +202,7 @@ def main():
             for mv in gp["moves"]:
                 print(f"     {mv['day']} [{mv['tier']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, net {mv['net']})")
         except Exception as e:
-            print(f"  game plan data failed ({type(e).__name__}: {e})")
+            print(f"  game plan data failed ({type(e).__name__: {e})")
     if v3_ok:
         site_data["moves"] = []                  # the Streams tab now owns the move suggestions
     if not site_data["mine"]:
@@ -150,6 +213,7 @@ def main():
         print("  roster skaters without NHL stats:", ", ".join(miss))
     Path("site").mkdir(exist_ok=True)
     html_text = SB.render_site(site_data)
+    html_text = add_refresh_button(html_text)
     Path("site/index.html").write_text(html_text, encoding="utf-8")
     m = site_data["matchup"]
     if m:
