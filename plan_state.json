@@ -1,0 +1,34 @@
+{
+ "base": 25.7,
+ "gain": 1.7,
+ "locked_at": 1794770052826,
+ "moves": [
+  {
+   "add": {
+    "id": 3114985,
+    "n": "Ivan Barbashev",
+    "pos": "LW",
+    "tm": "VGK"
+   },
+   "day": "Sun Nov 15",
+   "drop": {
+    "id": 2970615,
+    "n": "Tom Wilson",
+    "pos": "RW",
+    "tm": "WSH"
+   },
+   "gain": 1.75,
+   "games": 1,
+   "net": 0.66,
+   "t": 0,
+   "tier": "spare",
+   "waiver": false,
+   "why": [
+    "Ivan Barbashev is on the top line for VGK (F1)."
+   ]
+  }
+ ],
+ "mp": 7,
+ "total": 27.4,
+ "week_label": "Sun Nov 15"
+}
