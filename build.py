@@ -17,6 +17,7 @@ from pathlib import Path
 import analyze as A
 import dashboard as D
 import pwa
+import ui as UI
 import enrich as E
 import planner as PL
 import roles as R
@@ -296,6 +297,7 @@ def main():
     _pp, _pj = pwa.page_patches()
     SB.PAGE = patch_text(SB.PAGE, _pp, "phone app layout")
     SB.JS = patch_text(SB.JS, _pj, "phone app script")
+    SB.JS, SB.PAGE, SB.CSS, _ui_ok = UI.apply(SB.JS, SB.PAGE, SB.CSS)      # grouped tabs, photos, contrast (cosmetic only)
 
     now_ms = int(time.time() * 1000)
     site_data = SB.build_site_data(cfg, data, league, standings, now_ms)

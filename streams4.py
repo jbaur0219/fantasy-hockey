@@ -469,7 +469,7 @@ NEW_NOTE = ("Stars and anyone producing for you are never suggested as drops. Pl
             "Options below the bar are listed separately as marginal. ")
 
 V4_JS = r"""
-var WI={add:'',drop:'',day:0};
+var WI={add:'',drop:'',day:0,addQ:'',dropQ:''};
 function wiDay(act){
   var F=[],Dn=[],G=[];
   act.forEach(function(a){(a.g==='F'?F:(a.g==='D'?Dn:G)).push(a.v);});
@@ -518,27 +518,147 @@ function wiResult(){
   h+='<div style="overflow-x:auto"><table style="margin-top:6px"><tr><th>Day</th><th>Before</th><th>After</th><th>Change</th></tr>'+rows+'</table></div>';
   return h;
 }
+/* ---------- searchable pickers for Try a swap ---------- */
+function wiNorm(x){var t=String(x==null?'':x).toLowerCase();return t.normalize?t.normalize('NFD').replace(/[\u0300-\u036f]/g,''):t;}
+function wiSuggest(){
+  var W=(D.streams&&D.streams.whatif)||{mine:[],fas:[]},S=D.streams||{};
+  var pairs={},addRank={},dropRank={},k=0;
+  function note(m){
+    k++;
+    var a=m.add.id,d=m.drop.id;
+    (pairs[d]=pairs[d]||[]).push(a);
+    if(addRank[a]==null)addRank[a]=k;
+    if(dropRank[d]==null)dropRank[d]=k;
+  }
+  var gp=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):D.gameplan;
+  var sp=(typeof lkPlan==='function'&&S.plan)?lkPlan(S.plan):S.plan;
+  if(gp)(gp.moves||[]).forEach(note);
+  if(sp){(sp.moves||[]).forEach(note);(sp.marginal||[]).forEach(note);}
+  (S.audit||[]).forEach(function(a){
+    k++;if(dropRank[a.id]==null)dropRank[a.id]=k+50;
+    (a.repl||[]).forEach(function(r){(pairs[a.id]=pairs[a.id]||[]).push(r.id);if(addRank[r.id]==null)addRank[r.id]=k+50;});
+  });
+  (S.week||[]).forEach(function(r){k++;if(addRank[r.id]==null)addRank[r.id]=k+100;});
+  return {pairs:pairs,addRank:addRank,dropRank:dropRank};
+}
+function wiOptions(kind){
+  var W=(D.streams&&D.streams.whatif)||{mine:[],fas:[]},sg=wiSuggest(),q=wiNorm(kind==='add'?WI.addQ:WI.dropQ).trim();
+  var list=kind==='add'?W.fas:W.mine,groups=[];
+  function match(p){
+    if(!q)return true;
+    var hay=wiNorm(p.n+' '+p.pos+' '+p.tm);
+    return q.split(/\s+/).every(function(t){return hay.indexOf(t)>=0;});
+  }
+  var rows=list.filter(match);
+  var sel=kind==='add'?WI.drop:WI.add;
+  var pairIds=(kind==='add'&&sel&&sg.pairs[sel])?sg.pairs[sel]:[];
+  var rank=kind==='add'?sg.addRank:sg.dropRank,taken={};
+  function take(label,arr){arr=arr.filter(function(p){return !taken[p.id];});arr.forEach(function(p){taken[p.id]=1;});if(arr.length)groups.push({t:label,l:arr});}
+  if(kind==='add'){
+    if(pairIds.length){
+      var dn=(wiFind(W.mine,sel)||{}).n||'this player';
+      take('Suggested to replace '+dn,rows.filter(function(p){return pairIds.indexOf(p.id)>=0;}).sort(function(x,y){return (sg.addRank[x.id]||999)-(sg.addRank[y.id]||999);}));
+    }
+    take('Suggested adds',rows.filter(function(p){return rank[p.id]!=null;}).sort(function(x,y){return rank[x.id]-rank[y.id];}));
+    take(q?'Matches':'All free agents, best this week first',rows.slice().sort(function(x,y){return y.e-x.e||y.out-x.out;}));
+  }else{
+    take('Suggested drops',rows.filter(function(p){return rank[p.id]!=null;}).sort(function(x,y){return rank[x.id]-rank[y.id];}));
+    take(q?'Matches':'Your roster, weakest first',rows.slice().sort(function(x,y){return x.out-y.out;}));
+  }
+  return groups;
+}
+function wiOptHtml(p,kind){
+  var av=(typeof avHtml==='function')?avHtml(p.id,p.tm):'';
+  return '<div class="opt2" data-pick="'+kind+'" data-id="'+p.id+'">'+av+'<div class="nm"><b>'+esc(p.n)+'</b><span>'+esc(p.pos)+' &middot; '+esc(p.tm)+(p.rl?' &middot; '+esc(p.rl):'')+' &middot; '+p.gl+' gm left</span></div><div class="pt">'+f(p.e,1)+' pts</div></div>';
+}
+function wiListHtml(kind){
+  var gs=wiOptions(kind),h='';
+  gs.forEach(function(g){h+='<div class="gh2">'+esc(g.t)+'</div>'+g.l.slice(0,kind==='add'?80:40).map(function(p){return wiOptHtml(p,kind);}).join('');});
+  return h||'<div class="none">No players match that search.</div>';
+}
+function wiPicker(kind){
+  var W=(D.streams&&D.streams.whatif)||{mine:[],fas:[]};
+  var id=kind==='add'?WI.add:WI.drop,p=wiFind(kind==='add'?W.fas:W.mine,id);
+  var label=kind==='add'?'Add (free agent)':'Drop (your player)';
+  var ph=kind==='add'?'Search free agents or pick a suggestion':'Search your roster or pick a suggestion';
+  return '<div class="cb" data-kind="'+kind+'"><label>'+label+'</label><div class="cbin"><input type="text" class="cbq" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="'+ph+'" value="'+esc(p?p.n:'')+'">'+(id?'<button type="button" class="cbx" data-clear="'+kind+'" aria-label="Clear">&times;</button>':'')+'</div><div class="cbl" style="display:none"></div></div>';
+}
 function whatifHtml(){
   var W=(D.streams&&D.streams.whatif)||null;
   if(!W)return '';
-  var h='<div class="card"><h2>Try a swap</h2><div class="muted">Pick a free agent and one of your players. It re-scores your best daily lineup for the rest of the week with and without the swap. Injured free agents are not listed.</div>';
-  h+='<div style="margin-top:8px"><label>Drop <select id="wiDrop"><option value="">choose a player</option>'
-    +W.mine.slice().sort(function(x,y){return x.out-y.out;}).map(function(p){return '<option value="'+p.id+'"'+(String(p.id)===String(WI.drop)?' selected':'')+'>'+esc(p.n)+' ('+esc(p.pos)+', '+esc(p.tm)+', '+p.gl+' gm)</option>';}).join('')
-    +'</select></label></div>';
-  h+='<div style="margin-top:6px"><label>Add <select id="wiAdd"><option value="">choose a free agent</option>'
-    +W.fas.map(function(p){return '<option value="'+p.id+'"'+(String(p.id)===String(WI.add)?' selected':'')+'>'+esc(p.n)+' ('+esc(p.pos)+', '+esc(p.tm)+', '+p.gl+' gm)</option>';}).join('')
-    +'</select></label></div>';
-  h+='<div style="margin-top:6px"><label>Starting <select id="wiDay">'
+  var h='<div class="card"><h2>Try a swap</h2><div class="muted">Search or pick a free agent and one of your players. It re-scores your best daily lineup for the rest of the week with and without the swap. Players your plan suggests are listed first. Injured free agents are not listed.</div>';
+  h+=wiPicker('drop')+wiPicker('add');
+  h+='<div style="margin-top:10px"><label class="muted">Starting <select id="wiDay">'
     +W.days.map(function(x,i){if(LK.closed(i))return '';return '<option value="'+i+'"'+(i===Math.max(WI.day,LK.first())?' selected':'')+'>'+esc(x)+'</option>';}).join('')
     +'</select></label></div>';
   return h+'<div id="wiOut">'+wiResult()+'</div></div>';
 }
+function wiOpen(box,keepQ){
+  var kind=box.getAttribute('data-kind'),l=box.querySelector('.cbl');
+  l.innerHTML=wiListHtml(kind);l.style.display='block';
+  var first=l.querySelector('.opt2');if(first)first.classList.add('act');
+  if(!keepQ&&box.scrollIntoView)setTimeout(function(){try{box.scrollIntoView({block:'start',behavior:'smooth'});}catch(e){}},60);
+}
+function wiClose(box){var l=box.querySelector('.cbl');if(l)l.style.display='none';}
+function wiPick(kind,id){
+  if(kind==='add'){WI.add=id;WI.addQ='';}else{WI.drop=id;WI.dropQ='';}
+  var box=document.querySelector('.cb[data-kind="'+kind+'"]');
+  var W=(D.streams&&D.streams.whatif)||{mine:[],fas:[]};
+  var p=wiFind(kind==='add'?W.fas:W.mine,id);
+  if(box){
+    box.querySelector('.cbq').value=p?p.n:'';
+    var inb=box.querySelector('.cbin'),x=inb.querySelector('.cbx');
+    if(id&&!x)inb.insertAdjacentHTML('beforeend','<button type="button" class="cbx" data-clear="'+kind+'" aria-label="Clear">&times;</button>');
+    if(!id&&x)inb.removeChild(x);
+    wiClose(box);box.querySelector('.cbq').blur();
+  }
+  var o=document.getElementById('wiOut');if(o)o.innerHTML=wiResult();
+}
+document.addEventListener('focusin',function(e){
+  var t=e.target;
+  if(t&&t.classList&&t.classList.contains('cbq')){
+    var box=t.closest('.cb');
+    if(t.value&&!(box.getAttribute('data-kind')==='add'?WI.addQ:WI.dropQ))t.select();
+    wiOpen(box);
+  }
+});
+document.addEventListener('input',function(e){
+  var t=e.target;
+  if(t&&t.classList&&t.classList.contains('cbq')){
+    var box=t.closest('.cb'),kind=box.getAttribute('data-kind');
+    if(kind==='add')WI.addQ=t.value;else WI.dropQ=t.value;
+    wiOpen(box,true);
+  }
+});
+document.addEventListener('keydown',function(e){
+  var t=e.target;
+  if(!t||!t.classList||!t.classList.contains('cbq'))return;
+  var box=t.closest('.cb'),l=box.querySelector('.cbl'),opts=[].slice.call(l.querySelectorAll('.opt2')),i=opts.findIndex(function(x){return x.classList.contains('act');});
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();if(l.style.display==='none')wiOpen(box);
+    if(i>=0)opts[i].classList.remove('act');
+    i=e.key==='ArrowDown'?Math.min(opts.length-1,i+1):Math.max(0,i-1);
+    if(opts[i]){opts[i].classList.add('act');opts[i].scrollIntoView({block:'nearest'});}
+  }else if(e.key==='Enter'){
+    e.preventDefault();var a=l.querySelector('.opt2.act');if(a)wiPick(box.getAttribute('data-kind'),a.getAttribute('data-id'));
+  }else if(e.key==='Escape'){wiClose(box);t.blur();}
+});
+document.addEventListener('mousedown',function(e){
+  var t=e.target;if(!t||!t.closest)return;
+  var o=t.closest('.opt2[data-pick]');
+  if(o){e.preventDefault();wiPick(o.getAttribute('data-pick'),o.getAttribute('data-id'));return;}
+  var x=t.closest('[data-clear]');
+  if(x){e.preventDefault();var k=x.getAttribute('data-clear');if(k==='add')WI.addQ='';else WI.dropQ='';wiPick(k,'');var b=document.querySelector('.cb[data-kind="'+k+'"] .cbq');if(b)b.focus();return;}
+  if(!t.closest('.cb'))[].forEach.call(document.querySelectorAll('.cb'),wiClose);
+});
+document.addEventListener('touchstart',function(e){
+  var t=e.target;if(!t||!t.closest)return;
+  if(!t.closest('.cb'))[].forEach.call(document.querySelectorAll('.cb'),wiClose);
+},{passive:true});
 document.addEventListener('change',function(e){
   var t=e.target;
-  if(!t||!t.id||t.id.indexOf('wi')!==0)return;
-  if(t.id==='wiAdd')WI.add=t.value;
-  if(t.id==='wiDrop')WI.drop=t.value;
-  if(t.id==='wiDay')WI.day=parseInt(t.value,10)||0;
+  if(!t||t.id!=='wiDay')return;
+  WI.day=parseInt(t.value,10)||0;
   var o=document.getElementById('wiOut');
   if(o)o.innerHTML=wiResult();
 });
