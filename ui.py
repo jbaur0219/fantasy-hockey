@@ -72,6 +72,12 @@ transform:rotate(45deg);margin:-4px 4px 0 0;flex:none;transition:transform .15s}
 .av.nf>img:first-child{visibility:hidden}
 .mhead .av{width:52px;height:52px;margin-right:10px}.mhead .av .tl{width:22px;height:22px}
 body.nophoto .av{display:none}
+/* player popup: sits above the bottom nav, fits the visible screen, scrolls on its own */
+#modal{z-index:60;overscroll-behavior:contain;touch-action:none}
+#modal .box{max-height:calc(100vh - 28px);max-height:calc(100dvh - 28px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+#modal .mhead{position:sticky;top:-16px;background:var(--card);z-index:2;padding:12px 0 8px;margin:-16px 0 10px;align-items:center}
+#modal .mhead .x{margin-left:auto;font-size:26px;line-height:1;padding:4px 12px}
+body.mlock{overflow:hidden;position:fixed;left:0;right:0;width:100%}
 td a.pl{white-space:nowrap}
 
 /* tables: keep the player name pinned while the rest scrolls */
@@ -451,7 +457,18 @@ function uiEdge(){
   h+='</tbody></table></div>';
   uiPut('Schedule edge',h,{v:'roster',s:'week',c:0});
 }
-function uiStart(){
+
+var _mo=null,_msy=0;
+function uiModalWatch(){
+  var m=document.getElementById('modal');if(!m||_mo)return;
+  _mo=new MutationObserver(function(){
+    var open=m.classList.contains('open'),b=document.body;
+    if(open&&!b.classList.contains('mlock')){_msy=window.pageYOffset||0;b.style.top=(-_msy)+'px';b.classList.add('mlock');}
+    else if(!open&&b.classList.contains('mlock')){b.classList.remove('mlock');b.style.top='';window.scrollTo(0,_msy);}
+  });
+  _mo.observe(m,{attributes:true,attributeFilter:['class']});
+}
+function uiStart(){uiModalWatch();
   uiBuild();uiLayout();
   var secs=$$('section[id^="t-"]'),q=false;
   var mo=new MutationObserver(function(){if(q)return;q=true;setTimeout(function(){q=false;uiLayout();},0);});
