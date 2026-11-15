@@ -92,6 +92,7 @@ function appRender(){
         });
         return;
       }
+      if(!/[?&]setup\b/.test(location.search)){appBox('');return;}   /* alerts already on: hide the box (add ?setup to the address to bring the phone code back) */
       var code=JSON.stringify(sub);
       appBox('&#128276; <b>Alerts are on for this phone.</b> <button class="chip-btn" id="appCopy" style="margin-left:6px">Copy phone code</button><span id="appMsg" class="muted"></span>'
         +'<div class="muted" style="margin-top:4px">The phone code is only needed once, to link this phone to the daily build.</div>'
