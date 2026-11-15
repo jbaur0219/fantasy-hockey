@@ -82,6 +82,17 @@ td,th{white-space:nowrap}
 td:last-child{white-space:normal;min-width:120px}
 th{color:var(--muted)}
 
+/* streams + playbook */
+.stchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
+.stchips .chip-btn{white-space:nowrap;flex:none}
+.sgh{font-weight:700;font-size:13px;margin:14px 0 2px;color:var(--text)}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.srow .sm{min-width:0;flex:1}.srow .sr{display:flex;align-items:center;gap:10px;flex:none;text-align:right}
+.srow .sr .chip-btn{padding:6px 10px;font-size:13px}
+.pbh{font-weight:700;margin:14px 0 4px;padding-top:10px;border-top:1px solid var(--line)}.pbh:first-child{border-top:0;margin-top:0;padding-top:0}
+.pbl{margin:0;padding-left:18px}.pbl li{margin:6px 0}
+@media (max-width:720px){.srow{flex-wrap:wrap}.srow .sr{width:100%;justify-content:space-between}}
+
 /* search combobox (Try a swap) */
 .cb{position:relative;margin-top:8px;scroll-margin-top:72px}
 .cb>label{display:block;font-weight:600;font-size:13px;color:var(--muted);margin-bottom:4px}
@@ -134,7 +145,7 @@ var ICON={
 var VIEWS=[
  {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['This week matchup'],['Goalie decisions'],['Suggested moves'],['Lineup alerts (today)']]}]},
  {id:'moves',label:'Moves',subs:[
-   {id:'plan',label:'Game plan',cards:[['Your game plan for the rest of this week'],['The moves, in the order to make them'],['Moves and waivers'],['Day-by-day lineup check',1],['Best use of your moves this week',1]]},
+   {id:'plan',label:'Game plan',cards:[['Your game plan for the rest of this week'],['Day-by-day playbook'],['The moves, in the order to make them'],['Moves and waivers'],['Day-by-day lineup check',1],['Best use of your moves this week',1]]},
    {id:'swap',label:'Swap lab',cards:[['Try a swap'],['Your roster: who to look at this week']]},
    {id:'streams',label:'Streams',cards:[['Best skater streams by day'],['Best adds for the rest of this week'],['Streaming goalies by day'],['Best stream targets for the week',1]]}]},
  {id:'roster',label:'Roster',subs:[
@@ -203,6 +214,7 @@ function uiLayout(){
   var fresh=$$('section[id^="t-"] > .card');
   fresh.forEach(function(c){
     var t=uiTitle(c),sp=SPEC[t];
+    if(HIDE[t])return;
     if(!sp){var hm=(HOME[c.parentNode.id.replace('t-','')]||'today/main').split('/');sp={v:hm[0],s:hm[1],c:0};}
     var box=document.getElementById('s-'+sp.v+'-'+sp.s);
     c.setAttribute('data-ut',t);c.classList.add('collapsible');
@@ -215,6 +227,7 @@ function uiLayout(){
     var box=document.getElementById('s-'+v.id+'-'+s.id);
     s.cards.forEach(function(c){$$('.card',box).forEach(function(x){if(x.getAttribute('data-ut')===c[0])box.appendChild(x);});});
   });});
+  try{uiStreams();uiPlaybook();}catch(e){}
   uiBadge();
   if(!decQ){decQ=true;setTimeout(uiDecorate,0);}
 }
@@ -238,6 +251,97 @@ function showTab(n){
   if(UI.booted)window.scrollTo(0,0);
   UI.booted=true;
 }
+
+/* ---------- Streams (one card) + Day-by-day playbook (built from the existing data) ---------- */
+var HIDE={'Best skater streams by day':1,'Best adds for the rest of the week':1,'Best stream targets for the week':1,'Streaming goalies by day':1};
+UI.st={sel:'week',pos:'All'};
+function dayShort(l){var p=String(l).split(' ');return p[0]+(p[2]?' '+p[2]:'');}
+function uiPut(title,html,home){
+  var sp=SPEC[title]||home,box=document.getElementById('s-'+sp.v+'-'+sp.s);
+  if(!box)return;
+  var c=document.createElement('div');c.className='card collapsible';c.setAttribute('data-ut',title);
+  var st=UI.open[title];if(st===undefined?!!sp.c:!st)c.classList.add('closed');
+  c.innerHTML='<h2>'+esc(title)+'</h2>'+html;
+  var old=null;$$('.card',box).forEach(function(x){if(x.getAttribute('data-ut')===title)old=x;});
+  if(old)old.parentNode.replaceChild(c,old);else box.appendChild(c);
+}
+function stRow(r,sub,pts,unit){
+  return '<div class="srow"><div class="sm"><a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> <span class="muted">'+esc(r.pos||'G')+' '+esc(r.tm)+(r.rl?' ['+esc(r.rl)+']':'')+'</span><div class="muted">'+sub+'</div></div>'
+    +'<div class="sr"><span><b>'+pts+'</b> <span class="muted">'+unit+'</span></span><button type="button" class="chip-btn" data-sw="'+r.id+'">Try swap</button></div></div>';
+}
+function uiStreams(){
+  var S=D.streams,G=D.gameplan,Pl=D.planner;
+  if(!S){return;}
+  var sel=UI.st.sel,h='',open=[];
+  S.days.forEach(function(d,i){if(!LK.closed(i))open.push(i);});
+  if(sel!=='week'&&sel!=='goalies'&&open.indexOf(+sel)<0)sel=UI.st.sel='week';
+  h+='<div class="stchips"><button type="button" class="chip-btn'+(sel==='week'?' on':'')+'" data-st="week">Week</button><button type="button" class="chip-btn'+(sel==='goalies'?' on':'')+'" data-st="goalies">Goalies</button>'
+    +open.map(function(i){return '<button type="button" class="chip-btn'+(String(i)===String(sel)?' on':'')+'" data-st="'+i+'">'+esc(dayShort(S.days[i]))+'</button>';}).join('')+'</div>';
+  if(!open.length){h+='<div class="muted" style="margin-top:10px">Every game day left in this matchup week has started, so there is nothing left to add for. Next week appears after the next refresh.</div>';uiPut('Streams',h,{v:'moves',s:'streams',c:0});return;}
+  var inPlan={},top={};
+  if(G&&G.moves)(lkPlan(G).moves||[]).forEach(function(m){inPlan[m.add.id]=1;});
+  open.forEach(function(i){['F','D'].forEach(function(g){
+    S.rows.filter(function(r){return r.i===i&&r.grp===g;}).sort(function(a,b){return b.e-a.e;}).slice(0,3).forEach(function(r){if(!top[r.id])top[r.id]=dayShort(S.days[i]);});});});
+  if(sel==='week'){
+    h+='<div class="muted" style="margin:10px 0 2px">Best pickups to hold for the rest of the week, ranked by total expected points over their remaining games.</div>';
+    ['F','D'].forEach(function(g){
+      var L=(S.week||[]).filter(function(r){return r.grp===g;});
+      if(!L.length)return;
+      h+='<div class="sgh">'+(g==='F'?'Forwards':'Defensemen')+'</div>';
+      L.forEach(function(r){
+        var tags=(inPlan[r.id]?' <span class="good">in your game plan</span>':'')+(top[r.id]?' <span class="muted">&middot; top pick '+esc(top[r.id])+'</span>':'')+(r.w?' <span class="warn">&middot; waivers</span>':'');
+        h+=stRow(r,esc(r.opps||'')+tags,f(r.e,1),'pts / '+r.gl+' gm');
+      });
+    });
+  }else if(sel==='goalies'){
+    var T=(G&&G.targets&&G.targets.G)||[];
+    h+='<div class="sgh">Best goalie pickups for the week</div>';
+    if(!T.length)h+='<div class="muted">No free-agent goalie clears the starter filter right now.</div>';
+    T.forEach(function(r){h+=stRow(r,esc(r.role||'')+' &middot; from '+esc(String(r.first).split(' ')[0])+(r.waiver?' <span class="warn">&middot; waivers</span>':'')+(inPlan[r.id]?' <span class="good">&middot; in your game plan</span>':''),f(r.total,1),'pts / '+r.games+' gm');});
+    h+='<div class="sgh">Goalie streams by day</div>';
+    open.forEach(function(i){
+      var L=((Pl&&Pl.stream)||[]).filter(function(x){return x.i===i;}).sort(function(a,b){return b.e-a.e;}).slice(0,3);
+      h+='<div class="muted" style="margin-top:8px"><b>'+esc(S.days[i])+'</b></div>';
+      if(!L.length)h+='<div class="muted">No good options</div>';
+      L.forEach(function(x){h+=stRow({id:x.id,n:x.n,pos:'G',tm:''},(x.h?'vs ':'@ ')+esc(x.o)+' &middot; win '+Math.round(x.p*100)+'%'+(x.st?' &middot; '+esc(x.st):''),sgn(x.e,1),'pts');});
+    });
+    h+='<div class="muted" style="margin-top:8px">Starters are only confirmed for today, so check the morning before adding.</div>';
+  }else{
+    var i=+sel;
+    h+='<div class="controls" style="margin-top:10px"><span>'+['All','F','D'].map(function(v){return '<button type="button" class="chip-btn'+(UI.st.pos===v?' on':'')+'" data-stpos="'+v+'">'+v+'</button>';}).join(' ')+'</span></div>';
+    [['F',8],['D',6]].forEach(function(gk){
+      if(UI.st.pos!=='All'&&UI.st.pos!==gk[0])return;
+      var L=S.rows.filter(function(r){return r.i===i&&r.grp===gk[0];}).sort(function(a,b){return b.e-a.e;}).slice(0,UI.st.pos==='All'?gk[1]:gk[1]+2);
+      h+='<div class="sgh">'+(gk[0]==='F'?'Forwards':'Defensemen')+'</div>';
+      if(!L.length)h+='<div class="muted">No games</div>';
+      L.forEach(function(r){h+=stRow(r,(r.h?'vs ':'@ ')+esc(r.o)+' <span class="'+(r.tag==='weak'?'good':(r.tag==='strong'?'warn':'muted'))+'">'+(r.tag==='weak'?'soft':(r.tag==='strong'?'tough':'avg'))+'</span> &middot; '+r.gl+' gm left'+(r.w?' <span class="warn">&middot; waivers</span>':''),f(r.e,1),'pts');});
+    });
+    h+='<div class="muted" style="margin-top:8px">Expected points for that day: outlook adjusted for opponent strength and home ice.</div>';
+  }
+  uiPut('Streams',h,{v:'moves',s:'streams',c:0});
+}
+function uiPlaybook(){
+  var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,S=D.streams;
+  if(!P||!S)return;
+  var h='',any=false,mv=P.moves||[];
+  S.days.forEach(function(lbl,i){
+    if(LK.closed(i))return;
+    var items=[];
+    mv.forEach(function(m){
+      if(m.waiver&&m.t-1===i)items.push('<li><b>Claim</b> <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">(waivers, so the claim must go in today to add him '+esc(dayShort(m.day))+')</span></li>');
+      if(m.t===i)items.push('<li><span class="'+(m.tier==='make'?'good':'warn')+'"><b>'+(m.tier==='make'?'Make this move':'Spare move')+'</b></span>: add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' gm)</span>, drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span></li>');
+    });
+    (D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){
+      if(r.day!==lbl)return;
+      items.push('<li><b>Goalie</b> <a class="pl" data-id="'+g.p.id+'">'+esc(g.p.n)+'</a> '+(r.home?'vs':'@')+' '+esc(r.opp)+': <span class="pill '+r.cls+'">'+esc(r.verdict)+'</span> <span class="muted">win '+Math.round(r.p*100)+'%</span></li>');});});
+    var tl=(((D.planner&&D.planner.stream)||[]).filter(function(x){return x.i===i;}).sort(function(a,b){return b.e-a.e;}))[0];
+    if(tl&&tl.e>=0.8)items.push('<li><span class="muted">Optional goalie stream: <a class="pl" data-id="'+tl.id+'">'+esc(tl.n)+'</a> '+(tl.h?'vs':'@')+' '+esc(tl.o)+', win '+Math.round(tl.p*100)+'%</span></li>');
+    if(items.length)any=true;
+    h+='<div class="pbh">'+esc(lbl)+'</div>'+(items.length?'<ul class="pbl">'+items.join('')+'</ul>':'<div class="muted">No move today. Set your lineup and check the alerts.</div>');
+  });
+  h+='<div class="muted" style="margin-top:10px">This is a projection built from lines, schedules and opponents, not a guarantee. It re-plans every refresh, and each step assumes the earlier ones were made. Unconfirmed starters and late scratches can change a day, so recheck the morning of.</div>';
+  uiPut('Day-by-day playbook',h,{v:'moves',s:'plan',c:0});
+}
 function uiStart(){
   uiBuild();uiLayout();
   var secs=$$('section[id^="t-"]'),q=false;
@@ -250,6 +354,12 @@ function uiStart(){
     var g=t.closest('[data-go]');
     if(g){showTab(g.getAttribute('data-go'));return;}
     if(t.closest('#phBtn')){UI.photos=!UI.photos;try{localStorage.setItem('fh_photos',UI.photos?'on':'off');}catch(x){}uiPhotos();return;}
+    var b=t.closest('[data-st]');
+    if(b){UI.st.sel=b.getAttribute('data-st');uiStreams();return;}
+    b=t.closest('[data-stpos]');
+    if(b){UI.st.pos=b.getAttribute('data-stpos');uiStreams();return;}
+    b=t.closest('[data-sw]');
+    if(b){WI.add=b.getAttribute('data-sw');WI.addQ='';if(typeof streamsRender==='function')streamsRender();showTab('moves/swap');return;}
     var h=t.closest('.card.collapsible > h2');
     if(h){var c=h.parentNode;c.classList.toggle('closed');UI.open[c.getAttribute('data-ut')]=!c.classList.contains('closed');}
   });
