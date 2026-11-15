@@ -85,7 +85,7 @@ th{color:var(--muted)}
 /* streams + playbook */
 .stchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
 .stchips .chip-btn{white-space:nowrap;flex:none}
-table.edge{width:100%;border-collapse:collapse;font-size:13px}table.edge th,table.edge td{padding:6px 5px;border-bottom:1px solid var(--line,#ddd);text-align:left;white-space:nowrap}table.edge td:last-child{white-space:normal;min-width:150px}
+table.edge{width:100%;border-collapse:collapse;font-size:13px}table.edge th,table.edge td{padding:6px 5px;border-bottom:1px solid var(--line,#ddd);text-align:left;white-space:nowrap}table.edge td:last-child{white-space:nowrap;min-width:0}
 .sgh{font-weight:700;font-size:13px;margin:14px 0 2px;color:var(--text)}
 .srow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
 .srow .sm{min-width:0;flex:1}.srow .sr{display:flex;align-items:center;gap:10px;flex:none;text-align:right}
@@ -125,6 +125,11 @@ max-height:min(48vh,380px);overflow:auto;box-shadow:0 8px 24px rgba(16,24,40,.25
   table{font-size:14px}
   td a.pl+span.muted{display:none}
   .av{width:28px;height:28px;margin-right:7px}
+  .scroll td .av{width:24px;height:24px;margin-right:6px}.scroll td .av .tl{display:none}
+  .scroll td,.scroll th{padding:8px 6px}
+  .scroll td:last-child{white-space:nowrap;min-width:0}
+  .scroll td:first-child{max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+  table.edge td:first-child,table.edge th:first-child{max-width:none}
   .controls{gap:10px}
   .controls input[type=text]{flex:1 1 100%}
   .big{font-size:26px}
@@ -167,12 +172,15 @@ function avHtml(id,tm){
   return '<span class="av"><img src="https://a.espncdn.com/i/headshots/nhl/players/full/'+id+'.png" loading="lazy" alt="" onerror="this.parentNode.className+=\' nf\'">'+logo+'</span>';
 }
 var decQ=false;
+function shortName(n){var s=String(n||'').trim().split(/\s+/);return s.length<2?n:s[0].charAt(0)+'. '+s.slice(1).join(' ');}
 function uiDecorate(){
   decQ=false;
+  var mob=window.matchMedia&&window.matchMedia('(max-width:720px)').matches;
   $$('a.pl:not([data-av])').forEach(function(a){
     a.setAttribute('data-av','1');
     var id=a.getAttribute('data-id'),p=ALL[id];
-    a.insertAdjacentHTML('beforebegin',avHtml(id,p&&p.tm));
+    if(!a.hasAttribute('data-noav'))a.insertAdjacentHTML('beforebegin',avHtml(id,p&&p.tm));
+    if(mob&&a.closest('td')&&!a.hasAttribute('data-noav')&&a.children.length===0){a.title=a.textContent;a.textContent=shortName(a.textContent);}
   });
 }
 function uiTitle(c){var h=c.querySelector('h2');return h?h.textContent.trim():'';}
@@ -431,14 +439,14 @@ function uiEdge(){
   var w=E[Math.min(UI.edgeWin,E.length-1)],h='<div class="stchips">';
   E.forEach(function(x,i){h+='<button type="button" class="chip-btn'+(i===UI.edgeWin?' on':'')+'" data-ew="'+i+'">'+esc(x.label)+'</button>';});
   h+='</div><div class="muted" style="margin:6px 0">Teams ranked by games and opponent strength (3 easy games beat 3 average ones). Green = weak opponent, red = strong. @ = away. Best free-agent skaters from each team are on the right.</div>';
-  h+='<div class="tw"><table class="edge"><thead><tr><th>Team</th><th>GP</th>';
+  h+='<div class="scroll"><table class="edge"><thead><tr><th>Team</th><th>GP</th>';
   w.days.forEach(function(d){h+='<th>'+esc(d)+'</th>';});
   h+='<th>Best adds</th></tr></thead><tbody>';
   w.rows.forEach(function(r){
     var by={};r.opps.forEach(function(o){by[o.d]=o;});
     h+='<tr><td><b>'+esc(r.tm)+'</b></td><td><b>'+r.g+'</b></td>';
     w.days.forEach(function(d){var o=by[d];h+='<td>'+(o?'<span class="'+(o.t==='weak'?'good':o.t==='strong'?'bad':'muted')+'">'+(o.h?'':'@')+esc(o.o)+'</span>':'')+'</td>';});
-    h+='<td>'+(r.fa.length?r.fa.map(function(p){return '<a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">'+esc(p.pos)+(p.w?' W':'')+'</span>';}).join('<br>'):'<span class="muted">none</span>')+'</td></tr>';
+    h+='<td>'+(r.fa.length?r.fa.map(function(p){return '<a class="pl" data-id="'+p.id+'" data-noav="1">'+esc(shortName(p.n))+'</a> <span class="muted">'+esc(p.pos)+(p.w?' W':'')+'</span>';}).join('<br>'):'<span class="muted">none</span>')+'</td></tr>';
   });
   h+='</tbody></table></div>';
   uiPut('Schedule edge',h,{v:'roster',s:'week',c:0});
