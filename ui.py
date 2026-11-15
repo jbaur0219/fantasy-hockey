@@ -357,7 +357,7 @@ function uiPlaybook(){
     }
     h+='<div class="pbh">'+esc(lbl)+'</div>'+(items.length?'<ul class="pbl">'+items.join('')+'</ul>':'<div class="muted">No move today. Set your lineup and check the alerts.</div>');
   });
-  h+='<div class="muted" style="margin-top:10px">A projection built from lines, schedules and opponents, not a guarantee. Each step assumes the earlier ones were made. Unconfirmed starters and late scratches can change a day, so recheck the morning of. The card below, "Your game plan", is today\'s fresh model for comparison.</div>';
+  h+='<div class="muted" style="margin-top:10px">A projection built from lines, schedules and opponents, not a guarantee. Each step assumes the earlier ones were made. Unconfirmed starters and late scratches can change a day, so recheck the morning of. The card below, "Your game plan", is today\'s fresh model for comparison.'+((P.opt&&P.opt.changed&&P.opt.delta>=0.3)?' The optimizer found +'+f(P.opt.delta,1)+' points over simple move-by-move planning.':'')+'</div>';
   uiPut('Day-by-day playbook',h,{v:'moves',s:'plan',c:0});
   var PV=WP&&WP.preview;
   if(PV){

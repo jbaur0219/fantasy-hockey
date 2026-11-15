@@ -26,6 +26,7 @@ import streams3 as S3
 import streams4 as S4
 import gameplan as GP
 import weekplan as WK
+import optimizer as OPT
 import streams as STR
 import site_builder as SB
 import starters as S
@@ -287,6 +288,8 @@ def main():
                 SB.JS, v4_ok = S4.patch_all(SB.JS)
                 if v3_ok:
                     SB.JS, SB.PAGE, gp_on = GP.patch_all(SB.JS, SB.PAGE)
+                    if gp_on:
+                        OPT.install()                      # week optimizer: improves the greedy game plan (never worse on its score)
         else:
             print("  no deeper stats available, building the basic version")
     except Exception as e:
