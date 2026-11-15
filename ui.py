@@ -85,6 +85,7 @@ th{color:var(--muted)}
 /* streams + playbook */
 .stchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
 .stchips .chip-btn{white-space:nowrap;flex:none}
+table.edge{width:100%;border-collapse:collapse;font-size:13px}table.edge th,table.edge td{padding:6px 5px;border-bottom:1px solid var(--line,#ddd);text-align:left;white-space:nowrap}table.edge td:last-child{white-space:normal;min-width:150px}
 .sgh{font-weight:700;font-size:13px;margin:14px 0 2px;color:var(--text)}
 .srow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
 .srow .sm{min-width:0;flex:1}.srow .sr{display:flex;align-items:center;gap:10px;flex:none;text-align:right}
@@ -150,7 +151,7 @@ var VIEWS=[
    {id:'streams',label:'Streams',cards:[['Best skater streams by day'],['Best adds for the rest of this week'],['Streaming goalies by day'],['Best stream targets for the week',1]]}]},
  {id:'roster',label:'Roster',subs:[
    {id:'team',label:'My team',cards:[['My roster']]},
-   {id:'week',label:'Schedule',cards:[['Your week at a glance'],['Games per team, rest of this matchup',1]]}]},
+   {id:'week',label:'Schedule',cards:[['Schedule edge'],['Your week at a glance'],['Games per team, rest of this matchup',1]]}]},
  {id:'players',label:'Players',subs:[{id:'main',label:'Players',cards:[['Free agents and waivers']]}]},
  {id:'league',label:'League',subs:[
    {id:'table',label:'Standings',cards:[['Standings and power rankings']]},
@@ -225,6 +226,7 @@ function uiLayout(){
   });
   try{uiStreams();uiPlaybook();}catch(e){}
   try{uiLineup();}catch(e){}
+  try{uiEdge();}catch(e){}
   VIEWS.forEach(function(v){v.subs.forEach(function(s){
     var box=document.getElementById('s-'+v.id+'-'+s.id);
     s.cards.forEach(function(c){$$('.card',box).forEach(function(x){if(x.getAttribute('data-ut')===c[0])box.appendChild(x);});});
@@ -421,6 +423,26 @@ function uiLineup(){
   if(!anyTight)h+='<div class="muted" style="margin-top:10px">No day this week has more skaters playing than lineup spots, so there are no skater sit/start decisions. Goalies are the only calls.</div>';
   uiPut('Lineup sheet',h,{v:'today',s:'main',c:0});
 }
+
+/* ---------- Schedule edge: per-team games + opponents + best free agents ---------- */
+UI.edgeWin=UI.edgeWin||0;
+function uiEdge(){
+  var E=D.edge;if(!E||!E.length)return;
+  var w=E[Math.min(UI.edgeWin,E.length-1)],h='<div class="stchips">';
+  E.forEach(function(x,i){h+='<button type="button" class="chip-btn'+(i===UI.edgeWin?' on':'')+'" data-ew="'+i+'">'+esc(x.label)+'</button>';});
+  h+='</div><div class="muted" style="margin:6px 0">Teams ranked by games and opponent strength (3 easy games beat 3 average ones). Green = weak opponent, red = strong. @ = away. Best free-agent skaters from each team are on the right.</div>';
+  h+='<div class="tw"><table class="edge"><thead><tr><th>Team</th><th>GP</th>';
+  w.days.forEach(function(d){h+='<th>'+esc(d)+'</th>';});
+  h+='<th>Best adds</th></tr></thead><tbody>';
+  w.rows.forEach(function(r){
+    var by={};r.opps.forEach(function(o){by[o.d]=o;});
+    h+='<tr><td><b>'+esc(r.tm)+'</b></td><td><b>'+r.g+'</b></td>';
+    w.days.forEach(function(d){var o=by[d];h+='<td>'+(o?'<span class="'+(o.t==='weak'?'good':o.t==='strong'?'bad':'muted')+'">'+(o.h?'':'@')+esc(o.o)+'</span>':'')+'</td>';});
+    h+='<td>'+(r.fa.length?r.fa.map(function(p){return '<a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">'+esc(p.pos)+(p.w?' W':'')+'</span>';}).join('<br>'):'<span class="muted">none</span>')+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  uiPut('Schedule edge',h,{v:'roster',s:'week',c:0});
+}
 function uiStart(){
   uiBuild();uiLayout();
   var secs=$$('section[id^="t-"]'),q=false;
@@ -437,7 +459,9 @@ function uiStart(){
     if(b){UI.st.sel=b.getAttribute('data-st');uiStreams();return;}
     b=t.closest('[data-stpos]');
     if(b){UI.st.pos=b.getAttribute('data-stpos');uiStreams();return;}
-    b=t.closest('[data-sw]');
+    b=t.closest('[data-ew]');
+      if(b){UI.edgeWin=+b.getAttribute('data-ew');uiEdge();return;}
+      b=t.closest('[data-sw]');
     if(b){WI.add=b.getAttribute('data-sw');WI.addQ='';if(typeof streamsRender==='function')streamsRender();showTab('moves/swap');return;}
     var h=t.closest('.card.collapsible > h2');
     if(h){var c=h.parentNode;c.classList.toggle('closed');UI.open[c.getAttribute('data-ut')]=!c.classList.contains('closed');}

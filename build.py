@@ -27,6 +27,7 @@ import streams4 as S4
 import gameplan as GP
 import weekplan as WK
 import optimizer as OPT
+import edge as EDG
 import streams as STR
 import site_builder as SB
 import starters as S
@@ -344,6 +345,10 @@ def main():
             site_data["weekplan"] = WK.build(cfg, data, league, standings, now_ms, site_data)
         except Exception as e:                              # the locked plan is an extra: never fail the build over it
             print(f"  weekly plan skipped ({type(e).__name__}: {e})")
+    try:
+        site_data["edge"] = EDG.build(cfg, data, league, standings, now_ms, site_data)
+    except Exception as e:                                  # the schedule matrix is an extra: never fail the build over it
+        print(f"  schedule edge skipped ({type(e).__name__}: {e})")
     if v3_ok:
         site_data["moves"] = []                  # the Streams tab now owns the move suggestions
     if not site_data["mine"]:
