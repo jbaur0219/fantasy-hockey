@@ -143,7 +143,7 @@ var ICON={
 };
 /* each sub-view lists its cards by title: [title, startsCollapsed] */
 var VIEWS=[
- {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['This week matchup'],['Goalie decisions'],['Suggested moves'],['Lineup alerts (today)']]}]},
+ {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['This week matchup'],['Goalie decisions'],['Lineup sheet'],['Suggested moves'],['Lineup alerts (today)']]}]},
  {id:'moves',label:'Moves',subs:[
    {id:'plan',label:'Game plan',cards:[['Your game plan for the rest of this week'],['Next week preview'],['Day-by-day playbook'],['The moves, in the order to make them'],['Moves and waivers'],['Day-by-day lineup check',1],['Best use of your moves this week',1]]},
    {id:'swap',label:'Swap lab',cards:[['Try a swap'],['Your roster: who to look at this week']]},
@@ -224,6 +224,7 @@ function uiLayout(){
     if(old)old.parentNode.replaceChild(c,old);else box.appendChild(c);
   });
   try{uiStreams();uiPlaybook();}catch(e){}
+  try{uiLineup();}catch(e){}
   VIEWS.forEach(function(v){v.subs.forEach(function(s){
     var box=document.getElementById('s-'+v.id+'-'+s.id);
     s.cards.forEach(function(c){$$('.card',box).forEach(function(x){if(x.getAttribute('data-ut')===c[0])box.appendChild(x);});});
@@ -370,6 +371,55 @@ function uiPlaybook(){
   }else{
     $$('.card[data-ut="Next week preview"]').forEach(function(x){x.parentNode.removeChild(x);});
   }
+}
+
+/* ---------- Lineup sheet: goalies each day, and skater priorities only on days with more skaters than spots ---------- */
+function lsVal(p,i){var v=(p.v&&p.v[i]>0)?p.v[i]:(p.out||0)*((p.inj&&p.inj!=='ACTIVE')?0.75:1);return v;}
+function lsLine(p,i,tag){
+  return '<li><a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">'+esc(p.pos)+' '+esc(p.tm)+' &middot; '+f(lsVal(p,i),1)+' pts</span>'+(tag?' '+tag:'')+'</li>';
+}
+function uiLineup(){
+  var S=D.streams,W=S&&S.whatif,P=D.planner;
+  if(!S||!W||!P)return;
+  var gm={};P.teams.forEach(function(t){gm[t.tm]=t.g;});
+  var act=W.mine.filter(function(p){return p.slot!=='IR'&&!isInj(p)&&p.grp!=='G';});
+  var h='<div class="muted" style="margin-bottom:4px">Goalies each day, and skater start order only on days when more of your skaters play than you have spots (9 F, 5 D, 1 UTIL). On other days everyone with a game starts.</div>';
+  var anyTight=false;
+  S.days.forEach(function(lbl,i){
+    var playing=act.filter(function(p){var g=gm[p.tm];return !!(g&&g[i]);});
+    var F=playing.filter(function(p){return p.grp==='F';}).sort(function(a,b){return lsVal(b,i)-lsVal(a,i);});
+    var Dn=playing.filter(function(p){return p.grp==='D';}).sort(function(a,b){return lsVal(b,i)-lsVal(a,i);});
+    var startF=F.slice(0,9),startD=Dn.slice(0,5),rest=F.slice(9).concat(Dn.slice(5)).sort(function(a,b){return lsVal(b,i)-lsVal(a,i);});
+    var util=rest[0]||null,bench=rest.slice(1);
+    var gl=[];
+    (D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){if(r.day===lbl)gl.push({g:g.p,r:r});});});
+    gl.sort(function(a,b){return b.r.e-a.r.e;});
+    var tight=bench.length>0;
+    if(tight)anyTight=true;
+    h+='<div class="pbh">'+esc(lbl)+(i===0?' <span class="muted">(today)</span>':'')+'</div>';
+    if(gl.length)h+='<div><b>Goalies</b></div><ul class="pbl">'+gl.map(function(x){
+      return '<li><a class="pl" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a> '+(x.r.home?'vs':'@')+' '+esc(x.r.opp)+' <span class="pill '+x.r.cls+'">'+esc(x.r.verdict)+'</span> <span class="muted">win '+Math.round(x.r.p*100)+'% &middot; '+sgn(x.r.e,1)+' pts</span></li>';}).join('')+'</ul>';
+    else h+='<div class="muted">No goalie of yours plays.</div>';
+    if(!tight){
+      h+='<div class="muted" style="margin-top:6px">Skaters: '+playing.length+' play and all fit your lineup. Start everyone with a game.</div>';
+      return;
+    }
+    var now=function(p,want){
+      if(i!==0)return '';
+      var onBench=p.slot==='BN';
+      if(want==='start'&&onBench)return '<span class="warn">move into lineup</span>';
+      if(want==='bench'&&!onBench)return '<span class="warn">move to bench</span>';
+      return '';
+    };
+    h+='<div style="margin-top:8px"><b>Skaters: '+playing.length+' play for '+(9+5+1)+' spots. Bench '+bench.length+'.</b></div>';
+    h+='<div class="muted" style="margin-top:4px">Start</div><ul class="pbl">'
+      +startF.map(function(p){return lsLine(p,i,now(p,'start'));}).join('')
+      +startD.map(function(p){return lsLine(p,i,now(p,'start'));}).join('')
+      +(util?lsLine(util,i,'<span class="muted">UTIL</span> '+now(util,'start')):'')+'</ul>';
+    h+='<div class="muted">Bench (lowest value first to sit)</div><ul class="pbl">'+bench.slice().reverse().map(function(p){return lsLine(p,i,now(p,'bench'));}).join('')+'</ul>';
+  });
+  if(!anyTight)h+='<div class="muted" style="margin-top:10px">No day this week has more skaters playing than lineup spots, so there are no skater sit/start decisions. Goalies are the only calls.</div>';
+  uiPut('Lineup sheet',h,{v:'today',s:'main',c:0});
 }
 function uiStart(){
   uiBuild();uiLayout();
