@@ -25,6 +25,7 @@ import streams2 as S2
 import streams3 as S3
 import streams4 as S4
 import gameplan as GP
+import weekplan as WK
 import streams as STR
 import site_builder as SB
 import starters as S
@@ -335,6 +336,11 @@ def main():
                 print(f"     {mv['day']} [{mv['tier']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, net {mv['net']})")
         except Exception as e:
             print(f"  game plan data failed ({type(e).__name__}: {e})")
+    if gp_on:
+        try:
+            site_data["weekplan"] = WK.build(cfg, data, league, standings, now_ms, site_data)
+        except Exception as e:                              # the locked plan is an extra: never fail the build over it
+            print(f"  weekly plan skipped ({type(e).__name__}: {e})")
     if v3_ok:
         site_data["moves"] = []                  # the Streams tab now owns the move suggestions
     if not site_data["mine"]:

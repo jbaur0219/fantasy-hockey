@@ -145,7 +145,7 @@ var ICON={
 var VIEWS=[
  {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['This week matchup'],['Goalie decisions'],['Suggested moves'],['Lineup alerts (today)']]}]},
  {id:'moves',label:'Moves',subs:[
-   {id:'plan',label:'Game plan',cards:[['Your game plan for the rest of this week'],['Day-by-day playbook'],['The moves, in the order to make them'],['Moves and waivers'],['Day-by-day lineup check',1],['Best use of your moves this week',1]]},
+   {id:'plan',label:'Game plan',cards:[['Your game plan for the rest of this week'],['Next week preview'],['Day-by-day playbook'],['The moves, in the order to make them'],['Moves and waivers'],['Day-by-day lineup check',1],['Best use of your moves this week',1]]},
    {id:'swap',label:'Swap lab',cards:[['Try a swap'],['Your roster: who to look at this week']]},
    {id:'streams',label:'Streams',cards:[['Best skater streams by day'],['Best adds for the rest of this week'],['Streaming goalies by day'],['Best stream targets for the week',1]]}]},
  {id:'roster',label:'Roster',subs:[
@@ -320,27 +320,56 @@ function uiStreams(){
   }
   uiPut('Streams',h,{v:'moves',s:'streams',c:0});
 }
+function wpPill(m){
+  var t={done:['start','DONE'],due:['risky','DO TODAY'],missed:['done','MISSED'],unavailable:['bench','NOT AVAILABLE']}[m.state];
+  return t?'<span class="pill '+t[0]+'">'+t[1]+'</span> ':'';
+}
+function wpMove(m){
+  var why=(m.why&&m.why[0])?'<div class="muted">'+esc(m.why[0])+'</div>':'';
+  var note=(m.agree===false)?' <span class="warn">&middot; today\'s model no longer picks him</span>':'';
+  return '<li>'+wpPill(m)+'<span class="'+(m.tier==='make'?'good':'warn')+'"><b>'+(m.tier==='make'?'Make this move':'Spare move')+'</b></span>: add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' gm)</span>, drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span>'+(m.state==='done'?'':note)+why+'</li>';
+}
 function uiPlaybook(){
-  var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,S=D.streams;
+  var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,S=D.streams,WP=D.weekplan;
   if(!P||!S)return;
-  var h='',any=false,mv=P.moves||[];
-  S.days.forEach(function(lbl,i){
-    if(LK.closed(i))return;
+  var locked=!!(WP&&WP.moves&&WP.moves.length),mv=locked?WP.moves:(P.moves||[]),h='';
+  if(WP&&WP.moves){
+    var nd=WP.moves.filter(function(m){return m.state==='done';}).length,due=WP.moves.filter(function(m){return m.state==='due';}).length;
+    h+='<div class="muted" style="margin-bottom:6px">Locked plan for the week of <b>'+esc(WP.week_label||'')+'</b>: +'+f(WP.gain,1)+' projected points ('+f(WP.base,0)+' &rarr; '+f(WP.total,0)+'). It does not change during the week. Each refresh only updates each move\'s status. '+nd+' of '+WP.moves.length+' done'+(due?', '+due+' due today':'')+'.</div>';
+  }
+  var labels=[],seen={};
+  if(locked)mv.forEach(function(m){if(S.days.indexOf(m.day)<0&&!seen[m.day]){seen[m.day]=1;labels.push(m.day);}});
+  S.days.forEach(function(l){labels.push(l);});
+  labels.forEach(function(lbl){
+    var i=S.days.indexOf(lbl),past=i<0,closed=!past&&LK.closed(i);
+    if(closed&&!mv.some(function(m){return m.day===lbl;}))return;
     var items=[];
     mv.forEach(function(m){
-      if(m.waiver&&m.t-1===i)items.push('<li><b>Claim</b> <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">(waivers, so the claim must go in today to add him '+esc(dayShort(m.day))+')</span></li>');
-      if(m.t===i)items.push('<li><span class="'+(m.tier==='make'?'good':'warn')+'"><b>'+(m.tier==='make'?'Make this move':'Spare move')+'</b></span>: add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' gm)</span>, drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span></li>');
+      if(!past&&m.waiver&&m.t-1===i&&m.state!=='done')items.push('<li><b>Claim</b> <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">(waivers, so the claim must go in today to add him '+esc(dayShort(m.day))+')</span></li>');
+      if(m.day===lbl)items.push(wpMove(m));
     });
-    (D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){
-      if(r.day!==lbl)return;
-      items.push('<li><b>Goalie</b> <a class="pl" data-id="'+g.p.id+'">'+esc(g.p.n)+'</a> '+(r.home?'vs':'@')+' '+esc(r.opp)+': <span class="pill '+r.cls+'">'+esc(r.verdict)+'</span> <span class="muted">win '+Math.round(r.p*100)+'%</span></li>');});});
-    var tl=(((D.planner&&D.planner.stream)||[]).filter(function(x){return x.i===i;}).sort(function(a,b){return b.e-a.e;}))[0];
-    if(tl&&tl.e>=0.8)items.push('<li><span class="muted">Optional goalie stream: <a class="pl" data-id="'+tl.id+'">'+esc(tl.n)+'</a> '+(tl.h?'vs':'@')+' '+esc(tl.o)+', win '+Math.round(tl.p*100)+'%</span></li>');
-    if(items.length)any=true;
+    if(!past&&!closed){
+      (D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){
+        if(r.day!==lbl)return;
+        items.push('<li><b>Goalie</b> <a class="pl" data-id="'+g.p.id+'">'+esc(g.p.n)+'</a> '+(r.home?'vs':'@')+' '+esc(r.opp)+': <span class="pill '+r.cls+'">'+esc(r.verdict)+'</span> <span class="muted">win '+Math.round(r.p*100)+'%</span></li>');});});
+      var tl=(((D.planner&&D.planner.stream)||[]).filter(function(x){return x.i===i;}).sort(function(a,b){return b.e-a.e;}))[0];
+      if(tl&&tl.e>=0.8)items.push('<li><span class="muted">Optional goalie stream: <a class="pl" data-id="'+tl.id+'">'+esc(tl.n)+'</a> '+(tl.h?'vs':'@')+' '+esc(tl.o)+', win '+Math.round(tl.p*100)+'%</span></li>');
+    }
     h+='<div class="pbh">'+esc(lbl)+'</div>'+(items.length?'<ul class="pbl">'+items.join('')+'</ul>':'<div class="muted">No move today. Set your lineup and check the alerts.</div>');
   });
-  h+='<div class="muted" style="margin-top:10px">This is a projection built from lines, schedules and opponents, not a guarantee. It re-plans every refresh, and each step assumes the earlier ones were made. Unconfirmed starters and late scratches can change a day, so recheck the morning of.</div>';
+  h+='<div class="muted" style="margin-top:10px">A projection built from lines, schedules and opponents, not a guarantee. Each step assumes the earlier ones were made. Unconfirmed starters and late scratches can change a day, so recheck the morning of. The card below, "Your game plan", is today\'s fresh model for comparison.</div>';
   uiPut('Day-by-day playbook',h,{v:'moves',s:'plan',c:0});
+  var PV=WP&&WP.preview;
+  if(PV){
+    var g='<div class="muted" style="margin-bottom:6px">Draft for the week starting <b>'+esc(PV.first_day||'')+'</b>: +'+f(PV.gain,1)+' projected points ('+f(PV.base,0)+' &rarr; '+f(PV.total,0)+'). Built from your roster and the real schedule as of now. It locks on the first refresh of the new week, with fresher news.</div>';
+    var byDay={},order=[];
+    PV.moves.forEach(function(m){if(!byDay[m.day]){byDay[m.day]=[];order.push(m.day);}byDay[m.day].push(m);});
+    if(!order.length)g+='<div class="muted">No move clearly adds points next week yet.</div>';
+    order.forEach(function(d){g+='<div class="pbh">'+esc(d)+'</div><ul class="pbl">'+byDay[d].map(function(m){return wpMove({add:m.add,drop:m.drop,games:m.games,gain:m.gain,tier:m.tier,why:m.why,state:'waiting'});}).join('')+'</ul>';});
+    uiPut('Next week preview',g,{v:'moves',s:'plan',c:0});
+  }else{
+    $$('.card[data-ut="Next week preview"]').forEach(function(x){x.parentNode.removeChild(x);});
+  }
 }
 function uiStart(){
   uiBuild();uiLayout();

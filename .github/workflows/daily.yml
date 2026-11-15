@@ -12,7 +12,7 @@ on:
         default: "manual"
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -37,6 +37,13 @@ jobs:
         env:
           ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
+      - name: Save the locked weekly plan
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add plan_state.json
+          git diff --cached --quiet || (git commit -m "Update locked weekly plan" && git push)
       - name: Keep the alert text for the alert job
         if: startsWith(github.event.inputs.reason, 'morning')
         uses: actions/upload-artifact@v4
