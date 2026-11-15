@@ -223,11 +223,11 @@ function uiLayout(){
     var old=null;$$('.card',box).forEach(function(x){if(x.getAttribute('data-ut')===t&&x!==c)old=x;});
     if(old)old.parentNode.replaceChild(c,old);else box.appendChild(c);
   });
+  try{uiStreams();uiPlaybook();}catch(e){}
   VIEWS.forEach(function(v){v.subs.forEach(function(s){
     var box=document.getElementById('s-'+v.id+'-'+s.id);
     s.cards.forEach(function(c){$$('.card',box).forEach(function(x){if(x.getAttribute('data-ut')===c[0])box.appendChild(x);});});
   });});
-  try{uiStreams();uiPlaybook();}catch(e){}
   uiBadge();
   if(!decQ){decQ=true;setTimeout(uiDecorate,0);}
 }
