@@ -2,14 +2,15 @@
 """
 Decides whether the site should be rebuilt right now, and starts the build if so.
 
-Runs every 15 minutes from .github/workflows/refresh.yml. Three triggers, each at most once per day:
+Runs every 15 minutes from .github/workflows/refresh.yml. Four triggers, each at most once per day:
 
+  morning   : from 8:50 AM Eastern -> rebuild, so the site is fresh by 9 AM every day (also sends the morning alert)
   post-game : every NHL game on that day's slate is over -> rebuild (the build waits ~10 min so stats can settle)
   pre-game  : we are inside the 4 hours before that day's first puck drop -> rebuild (injuries, goalie news, lines)
   lock      : the day's first puck has dropped -> rebuild, so the site drops that day (nobody can be added once the
               first game starts) and leads with tomorrow
 
-A started build is titled "post-game YYYY-MM-DD", "pre-game YYYY-MM-DD" or "lock YYYY-MM-DD". A trigger is skipped if a run with that
+A started build is titled "morning YYYY-MM-DD", "post-game YYYY-MM-DD", "pre-game YYYY-MM-DD" or "lock YYYY-MM-DD". A trigger is skipped if a run with that
 title already exists and did not fail, so a failed or cancelled build is retried on the next check.
 
 Set DRY_RUN=true to only print what it would do.
@@ -24,6 +25,8 @@ from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
 PRE_GAME_HOURS = 4
+MORNING_START = (8, 50)                       # ET; the build takes a few minutes, so it is fresh by 9 AM
+MORNING_END_HOUR = 12                         # a missed morning build is skipped after noon
 PENDING = {"FUT", "PRE", "LIVE", "CRIT"}      # anything else (FINAL, OFF, postponed...) counts as over
 WORKFLOW = "daily.yml"
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() == "true"
@@ -123,6 +126,16 @@ def main():
             else:
                 start(reason)
                 started = True
+
+    # 4) morning: fresh by 9 AM Eastern every day (and the morning alert goes out with this build)
+    et_now = now.astimezone(ET)
+    reason = f"morning {today}"
+    if not started and (et_now.hour, et_now.minute) >= MORNING_START and et_now.hour < MORNING_END_HOUR:
+        if done(reason):
+            print(f"{reason}: already refreshed")
+        else:
+            start(reason)
+            started = True
 
     if not started:
         print("Nothing to do this time.")

@@ -37,6 +37,13 @@ jobs:
         env:
           ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
+      - name: Keep the alert text for the alert job
+        if: startsWith(github.event.inputs.reason, 'morning')
+        uses: actions/upload-artifact@v4
+        with:
+          name: alert
+          path: notify_payload.json
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: dashboard
@@ -54,3 +61,22 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  alert:
+    # Sends the morning push only after the new build is live, so tapping it always shows fresh data.
+    needs: deploy
+    if: startsWith(github.event.inputs.reason, 'morning')
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: alert
+      - run: pip install pywebpush
+      - run: python notify.py
+        env:
+          PUSH_CONFIG: ${{ secrets.PUSH_CONFIG }}

@@ -8,6 +8,7 @@ Same as site_builder.py, plus: expected goals, ice time, power-play time, goalie
 real goalie start rates, and extra columns/flags on the page. If the extra data can't be loaded,
 it falls back to the basic version automatically.
 """
+import json
 import sys
 import time
 from datetime import datetime
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import analyze as A
 import dashboard as D
+import pwa
 import enrich as E
 import planner as PL
 import roles as R
@@ -212,6 +214,37 @@ def add_refresh_button(html_text):
     return html_text[:end] + "<script>" + REFRESH_JS + "</script>" + html_text[end:]
 
 
+def write_notify_payload(site_data, now_ms):
+    """The text of the morning push notification, for notify.py."""
+    clock = site_data.get("clock")
+    gp = site_data.get("gameplan") or {}
+    moves = gp.get("moves") or []
+    first_open = 0
+    if clock:
+        first_open = next((i for i in range(len(clock["lock"])) if not D.day_locked(clock, i, now_ms)), None)
+    label = clock["labels"][first_open] if clock and first_open is not None else datetime.fromtimestamp(now_ms / 1000, D.et_zone()).strftime("%a %b %d")
+
+    def line(m):
+        return f"add {m['add']['n']} ({m['add']['tm']}), drop {m['drop']['n']} (+{m['gain']:.1f})"
+
+    today = [m for m in moves if m.get("t") == first_open]
+    if today:
+        parts = [("Move today: " if len(today) == 1 else "Moves today: ") + "; ".join(line(m) for m in today[:2]) + "."]
+    elif moves:
+        nxt = moves[0]
+        parts = [f"No move needed today. Next: {nxt['day']}, {line(nxt)}."]
+    else:
+        parts = ["No add is worth a move today."]
+    m = site_data.get("matchup")
+    if m:
+        parts.append(f"Win chance {m['p_win'] * 100:.0f}%.")
+    if gp.get("moves_left") is not None:
+        parts.append(f"{gp['moves_left']} moves left.")
+    payload = {"title": f"Fantasy Hockey \u00b7 {label}", "body": " ".join(parts), "url": "./", "tag": "fh-daily"}
+    Path("notify_payload.json").write_text(json.dumps(payload), encoding="utf-8")
+    print(f"  alert text: {payload['title']} | {payload['body']}")
+
+
 def main():
     cfg = A.get_config()
     print("Reading your ESPN league...")
@@ -260,6 +293,9 @@ def main():
     SB.JS = patch_text(SB.JS, LOCK_PATCHES, "daily lock")
     SB.PAGE = patch_text(SB.PAGE, LOCK_PAGE, "daily lock layout")
     SB.CSS = patch_text(SB.CSS, LOCK_CSS, "polish styles")
+    _pp, _pj = pwa.page_patches()
+    SB.PAGE = patch_text(SB.PAGE, _pp, "phone app layout")
+    SB.JS = patch_text(SB.JS, _pj, "phone app script")
 
     now_ms = int(time.time() * 1000)
     site_data = SB.build_site_data(cfg, data, league, standings, now_ms)
@@ -309,6 +345,11 @@ def main():
     html_text = SB.render_site(site_data)
     html_text = add_refresh_button(html_text)
     Path("site/index.html").write_text(html_text, encoding="utf-8")
+    try:
+        pwa.write_files("site")
+        write_notify_payload(site_data, now_ms)
+    except Exception as e:                                  # the app files and alert text are extras: never fail the build
+        print(f"  phone app files skipped ({type(e).__name__}: {e})")
     m = site_data["matchup"]
     if m:
         print(f"Matchup vs {m['opp_name']}: {m['me_now']:.1f}-{m['opp_now']:.1f}, win chance {m['p_win']*100:.0f}%")
