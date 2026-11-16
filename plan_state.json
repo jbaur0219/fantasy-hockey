@@ -1,34 +1,178 @@
 {
- "base": 25.7,
- "gain": 1.7,
- "locked_at": 1794770052826,
+ "base": 112.2,
+ "gain": 18.5,
+ "locked_at": 1794824677083,
  "moves": [
   {
    "add": {
-    "id": 3114985,
-    "n": "Ivan Barbashev",
+    "id": 4233648,
+    "n": "Kailer Yamamoto",
+    "pos": "RW",
+    "tm": "UTA"
+   },
+   "day": "Mon Nov 16",
+   "drop": {
+    "id": 5216887,
+    "n": "Trevor Connelly",
     "pos": "LW",
     "tm": "VGK"
    },
-   "day": "Sun Nov 15",
+   "gain": 4.58,
+   "games": 3,
+   "net": 4.58,
+   "t": 0,
+   "tier": "make",
+   "waiver": false,
+   "why": [
+    "Kailer Yamamoto is on the second line and first power-play unit for UTA (F2 - PP1)."
+   ]
+  },
+  {
+   "add": {
+    "id": 4697399,
+    "n": "Kaiden Guhle",
+    "pos": "D",
+    "tm": "MTL"
+   },
+   "day": "Mon Nov 16",
+   "drop": {
+    "id": 4565230,
+    "n": "Trevor Zegras",
+    "pos": "C",
+    "tm": "PHI"
+   },
+   "gain": 3.93,
+   "games": 4,
+   "net": 2.85,
+   "t": 0,
+   "tier": "make",
+   "waiver": false,
+   "why": [
+    "Kaiden Guhle is on the second pair for MTL (D2)."
+   ]
+  },
+  {
+   "add": {
+    "id": 5080173,
+    "n": "Sam Rinzel",
+    "pos": "D",
+    "tm": "CHI"
+   },
+   "day": "Tue Nov 17",
+   "drop": {
+    "id": 3904186,
+    "n": "Rasmus Andersson",
+    "pos": "D",
+    "tm": "VGK"
+   },
+   "gain": 2.17,
+   "games": 4,
+   "net": 1.79,
+   "t": 1,
+   "tier": "make",
+   "waiver": false,
+   "why": [
+    "Sam Rinzel is on the top pair and first power-play unit for CHI (D1 - PP1)."
+   ]
+  },
+  {
+   "add": {
+    "id": 5080157,
+    "n": "Frank Nazar",
+    "pos": "C",
+    "tm": "CHI"
+   },
+   "day": "Tue Nov 17",
    "drop": {
     "id": 2970615,
     "n": "Tom Wilson",
     "pos": "RW",
     "tm": "WSH"
    },
-   "gain": 1.75,
+   "gain": 2.58,
+   "games": 4,
+   "net": 1.49,
+   "t": 1,
+   "tier": "make",
+   "waiver": false,
+   "why": [
+    "Frank Nazar is on the third line and first power-play unit for CHI (F3 - PP1)."
+   ]
+  },
+  {
+   "add": {
+    "id": 3069352,
+    "n": "Esa Lindell",
+    "pos": "D",
+    "tm": "DAL"
+   },
+   "day": "Sun Nov 22",
+   "drop": {
+    "id": 5149155,
+    "n": "Will Smith",
+    "pos": "RW",
+    "tm": "SJ"
+   },
+   "gain": 1.95,
    "games": 1,
-   "net": 0.66,
-   "t": 0,
+   "net": 1.31,
+   "t": 6,
+   "tier": "make",
+   "waiver": false,
+   "why": [
+    "Esa Lindell is on the second pair and second power-play unit for DAL (D2 - PP2)."
+   ]
+  },
+  {
+   "add": {
+    "id": 5149231,
+    "n": "Roman Kantserov",
+    "pos": "RW",
+    "tm": "CHI"
+   },
+   "day": "Sun Nov 22",
+   "drop": {
+    "id": 5080154,
+    "n": "Pavel Mintyukov",
+    "pos": "D",
+    "tm": "ANA"
+   },
+   "gain": 1.69,
+   "games": 1,
+   "net": 1.38,
+   "t": 6,
    "tier": "spare",
    "waiver": false,
    "why": [
-    "Ivan Barbashev is on the top line for VGK (F1)."
+    "Roman Kantserov is on the top line and first power-play unit for CHI (F1 - PP1)."
+   ]
+  },
+  {
+   "add": {
+    "id": 5080159,
+    "n": "Jonathan Lekkerimaki",
+    "pos": "RW",
+    "tm": "VAN"
+   },
+   "day": "Sun Nov 22",
+   "drop": {
+    "id": 4697387,
+    "n": "Jamie Drysdale",
+    "pos": "D",
+    "tm": "PHI"
+   },
+   "gain": 1.65,
+   "games": 1,
+   "net": 0.69,
+   "t": 6,
+   "tier": "spare",
+   "waiver": false,
+   "why": [
+    "Jonathan Lekkerimaki is on the top line and first power-play unit for VAN (F1 - PP1)."
    ]
   }
  ],
- "mp": 7,
- "total": 27.4,
- "week_label": "Sun Nov 15"
+ "mp": 8,
+ "total": 130.8,
+ "week_label": "Mon Nov 16"
 }
