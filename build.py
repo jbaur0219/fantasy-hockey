@@ -287,6 +287,9 @@ def write_notify_payload(site_data, now_ms):
         parts.append(f"Win chance {m['p_win'] * 100:.0f}%.")
     if gp.get("moves_left") is not None:
         parts.append(f"{gp['moves_left']} moves left.")
+    h = site_data.get("health") or {}
+    if h.get("level") == "bad":
+        parts.append("Warning: " + " ".join(h.get("items", [])[:1]))
     payload = {"title": f"Fantasy Hockey \u00b7 {label}", "body": " ".join(parts), "url": "./", "tag": "fh-daily"}
     Path("notify_payload.json").write_text(json.dumps(payload), encoding="utf-8")
     print(f"  alert text: {payload['title']} | {payload['body']}")

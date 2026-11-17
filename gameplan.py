@@ -164,7 +164,10 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
     moves_left = max(0, PL.MOVE_LIMIT - (used or 0))
     nxt = C.team_games(games, abbr, sp + ndays, 7)
 
-    res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, nxt, prev=prev)
+    import roles as R
+    cautious = R.health()["state"] == "missing"          # no line data at all: don't invent new moves without roles
+    res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, nxt, prev=prev,
+                 only_prev=cautious)
     entries, _, pool = C.build_inputs(site_data["mine"], site_data["fas"], game, ndays, standings, starters)
     before_rows = _day_rows(entries, ndays, days, game)
     after_rows = _day_rows(res["ents"], ndays, days, game)
@@ -184,7 +187,7 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
             "targets": {g: [target(x) for x in ranked if x["g"] == g][:k]
                         for g, k in (("F", TARGETS_F), ("D", TARGETS_D), ("G", TARGETS_G))},
             "moves_left": moves_left, "limit": PL.MOVE_LIMIT, "used_known": used is not None,
-            "next_games": nxt}
+            "next_games": nxt, "cautious": cautious}
     plan["unused"] = max(0, moves_left - len(plan["moves"]))
     if m:
         # one projection model for the whole site: same daily-lineup values as the plan, for both teams
@@ -226,7 +229,7 @@ function gameplanRender(){
   var P=lkPlan(D.gameplan),h='';
   if(!P){$('#t-gameplan').innerHTML='<div class="card">The game plan is not available right now.</div>';return;}
   var M=P.matchup,n=P.moves.length;
-  h+='<div class="card"><h2>Your game plan for the rest of this week</h2>'+lkNote(P);
+  h+='<div class="card"><h2>Your game plan for the rest of this week</h2>'+lkNote(P)+(P.cautious?'<div class="why warn" style="margin-bottom:8px">Line data could not be loaded this update, so only moves from the last good update are shown. New suggestions return with the next good update.</div>':'');
   if(M){
     var pa=M.p_win_after;
     h+='<div class="vs"><div class="team"><div class="n">'+esc(D.me)+'</div><div class="s">'+f(M.me_now,1)+'</div><div class="r">projected final '+Math.round(M.proj_me)+(P.gain>0?' &rarr; '+Math.round(M.proj_me+P.gain)+' with the plan':'')+'</div></div>'

@@ -94,7 +94,8 @@ def load(season):
     """Returns {'sk': {...}, 'gk': {...}} keyed by NHL player id."""
     sid = f"{season - 1}{season}"
     sk, gk = {}, {}
-    _merge(sk, nhl_report("skater/summary", sid), "skaterFullName", {"gamesPlayed": "gp", "timeOnIcePerGame": "toi"})
+    _merge(sk, nhl_report("skater/summary", sid), "skaterFullName", {"gamesPlayed": "gp", "timeOnIcePerGame": "toi",
+                                                                     "positionCode": "pos"})
     _merge(sk, nhl_report("skater/timeonice", sid), "skaterFullName", {"ppTimeOnIcePerGame": "pp"})
     _merge(sk, nhl_report("skater/realtime", sid), "skaterFullName", {"hitsPer60": "h60", "blockedShotsPer60": "b60"})
     _merge(gk, nhl_report("goalie/summary", sid), "goalieFullName", {"gamesStarted": "gs", "gamesPlayed": "gp"})
@@ -122,7 +123,14 @@ def _index(store):
 
 
 def _find(group, name, team_id):
-    cands = STATE["idx"]["gk" if group == "G" else "sk"].get(norm(name), [])
+    idx = STATE["idx"]["gk" if group == "G" else "sk"]
+    cands = idx.get(norm(name), [])
+    if not cands:                                        # "Elias N. Pettersson" on ESPN is "Elias Pettersson" on NHL.com
+        short = " ".join(w for w in norm(name).split() if len(w) > 1)
+        cands = idx.get(short, [])
+    if group in ("F", "D") and len(cands) > 1:           # two players with one name: match forward/defense too
+        same_pos = [c for c in cands if (c.get("pos") == "D") == (group == "D")]
+        cands = same_pos or cands
     if len(cands) <= 1:
         return cands[0] if cands else None
     espn = STATE["abbr"].get(team_id)

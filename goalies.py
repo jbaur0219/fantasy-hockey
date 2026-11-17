@@ -19,13 +19,13 @@ def _status(p, i, sp_chance):
     if s:
         if E.norm(s["name"]) == E.norm(p["name"]):
             st = s.get("status") or "Unconfirmed"
-            return 1.0, ("confirmed starter" if st == "Confirmed" else f"listed to start ({st.lower()})"), True
+            return 1.0, ("confirmed starter" if st == "Confirmed" else f"expected to start ({st.lower()}, not confirmed yet)"), True
         return 0.0, f"not starting ({s['name'].split()[-1]} in net)", True
     if sp_chance >= 0.6:
         return sp_chance, "usual starter", False
     if sp_chance >= 0.4:
         return sp_chance, "splits starts", False
-    return sp_chance, "usually the backup", False
+    return sp_chance, "usually the backup, so he may not play: check the morning of", False
 
 
 def build(mine, sp, games, abbr, standings, now_ms, ndays, slots=2):

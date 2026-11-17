@@ -2,7 +2,7 @@
 """
 Decides whether the site should be rebuilt right now, and starts the build if so.
 
-Runs every 15 minutes from .github/workflows/refresh.yml. Four triggers, each at most once per day:
+Runs every 10 minutes from watch.py (the Watcher workflow). Four triggers, each at most once per day:
 
   morning   : from 8:50 AM Eastern -> rebuild, so the site is fresh by 9 AM every day (also sends the morning alert)
   post-game : every NHL game on that day's slate is over -> rebuild (the build waits ~10 min so stats can settle)

@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Small checks of the rules that matter most. Run:  python -m unittest discover tests"""
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import core as C          # noqa: E402
+import dashboard as D     # noqa: E402
+import goalies as GL      # noqa: E402
+import starters as S      # noqa: E402
+
+
+def sk(n, grp="F", out=1.8, tm="AAA", inj="ACTIVE", **kw):
+    p = {"id": n, "n": n, "grp": grp, "pos": grp, "tm": tm, "out": out, "inj": inj, "ppg": out, "rec": out, "gp": 20,
+         "slot": "F", "sp": 0.6}
+    p.update(kw)
+    return p
+
+
+class DayLock(unittest.TestCase):
+    def test_day_locks_at_first_puck(self):
+        clock = {"dates": ["2026-11-17", "2026-11-18"], "lock": [1000, None]}
+        self.assertFalse(D.day_locked(clock, 0, 999))
+        self.assertTrue(D.day_locked(clock, 0, 1000))
+
+    def test_off_day_locks_when_the_date_passes(self):
+        clock = {"dates": ["2000-01-01"], "lock": [None]}
+        self.assertTrue(D.day_locked(clock, 0, 10 ** 13))
+
+
+class Lineup(unittest.TestCase):
+    def test_nine_f_five_d_one_util_two_g(self):
+        v = C.day_value([1.0] * 12, [1.0] * 7, [3.0, 2.0, 1.0])
+        self.assertAlmostEqual(v, 9 + 5 + 1 + 5)
+
+
+class Cost(unittest.TestCase):
+    def test_injured_drop_costs_nothing(self):
+        self.assertEqual(C.cost(sk("a", inj="OUT", out=3.0), sk("b", out=1.0), {"AAA": 4}), 0.0)
+
+    def test_dropping_the_better_player_costs_points(self):
+        nxt = {"AAA": 3, "BBB": 3}
+        good, stream = sk("good", out=2.4, tm="AAA"), sk("stream", out=1.5, tm="BBB")
+        self.assertGreater(C.cost(good, stream, nxt), 2.0)
+        self.assertEqual(C.cost(stream, good, nxt), 0.0)
+
+    def test_next_week_schedule_counts(self):
+        a, b = sk("a", out=1.8, tm="AAA"), sk("b", out=1.8, tm="BBB")
+        self.assertGreater(C.cost(a, b, {"AAA": 4, "BBB": 2}), C.cost(a, b, {"AAA": 2, "BBB": 4}))
+
+
+class Settings(unittest.TestCase):
+    def test_matchup_length_and_moves(self):
+        lg = {"settings": {"scheduleSettings": {"matchupPeriods": {"8": [8], "20": [20, 21]}},
+                           "acquisitionSettings": {"matchupAcquisitionLimit": 1, "matchupLimitPerScoringPeriod": True}}}
+        self.assertEqual(D.matchup_length(lg, 8), 7)
+        self.assertEqual(D.matchup_length(lg, 20), 14)
+        self.assertEqual(D.move_limit(lg, 7), 7)
+        self.assertEqual(D.move_limit(lg, 14), 14)
+
+
+class Goalies(unittest.TestCase):
+    def test_three_goalies_one_day_start_best_two(self):
+        S.STATE["by_team"] = {}
+        D.start_prob = lambda p, st: p["spx"]
+        games = {i: {"50": [{"date": 10 ** 13, "homeProTeamId": i, "awayProTeamId": 99}]} for i in (1, 2, 3)}
+        abbr = {1: "AAA", 2: "BBB", 3: "CCC", 99: "ZZZ"}
+        mine = [{"name": n, "group": "G", "slot": 5, "team": abbr[i], "team_id": i, "outlook": o, "gp": 10, "svp": None,
+                 "spx": sp} for n, i, o, sp in (("A", 1, 3.0, 0.8), ("B", 2, 2.0, 0.8), ("C", 3, 3.0, 0.3))]
+        rows = {g["p"]["name"]: g["rows"][0] for g in GL.build(mine, 50, games, abbr, {}, 0, 1)}
+        self.assertEqual(rows["A"]["verdict"], "START")
+        self.assertEqual(rows["B"]["verdict"], "START")
+        self.assertEqual(rows["C"]["verdict"], "BENCH")
+
+
+if __name__ == "__main__":
+    unittest.main()

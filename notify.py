@@ -18,7 +18,7 @@ def main():
     if not cfg_raw:
         print("No PUSH_CONFIG secret set, so no alert sent.")
         return
-    payload_path = Path("notify_payload.json")
+    payload_path = Path(sys.argv[1] if len(sys.argv) > 1 else "notify_payload.json")
     if not payload_path.exists():
         print("No notify_payload.json from the build, so no alert sent.")
         return

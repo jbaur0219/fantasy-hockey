@@ -1,0 +1,34 @@
+name: Watcher
+run-name: Watcher (${{ github.event_name }})
+
+# One long-running job that checks every 10 minutes whether the site should be rebuilt (see watch.py) and starts
+# the next watcher before it ends. GitHub's timer below only restarts the chain if it ever breaks; while a watcher
+# is running, a new one waits its turn (only one runs at a time).
+on:
+  schedule:
+    - cron: "23 1,7,13,19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: watcher
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pywebpush
+      - run: python watch.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PUSH_CONFIG: ${{ secrets.PUSH_CONFIG }}

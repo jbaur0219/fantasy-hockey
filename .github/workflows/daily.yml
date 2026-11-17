@@ -2,9 +2,7 @@ name: Daily fantasy hockey report
 run-name: Daily fantasy hockey report (${{ github.event.inputs.reason || github.event_name }})
 
 on:
-  schedule:
-    - cron: "11 12 * * *"   # about 7:11 AM Eastern, a daily safety net; refresh.yml starts the game-time rebuilds
-  workflow_dispatch:         # also lets you press a "Run workflow" button any time
+  workflow_dispatch:         # started by the Watcher (watch.yml) at the right times, by the Refresh button, or by hand         # also lets you press a "Run workflow" button any time
     inputs:
       reason:
         description: "Why this run was started (the checker fills this in)"
@@ -54,14 +52,17 @@ jobs:
           rm -rf preview && mkdir preview && cp -r site/. preview/ && cp snapshot.json.gz preview/
           git add preview
           git commit -m "Preview build" && git push origin HEAD:${{ github.ref_name }}
-      - name: Save the locked weekly plan
+      - name: Save the weekly plan and the saved Daily Faceoff data
         if: github.event.inputs.mode != 'preview'
         continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add plan_state.json
-          git diff --cached --quiet || (git commit -m "Update locked weekly plan" && git push)
+          for f in plan_state.json cache history; do [ -e "$f" ] && git add "$f" || true; done
+          if ! git diff --cached --quiet; then
+            git commit -m "Update weekly plan and saved Daily Faceoff data"
+            for i in 1 2 3; do git pull --rebase -q origin main && git push && break; sleep 5; done
+          fi
       - name: Keep the alert text for the alert job
         if: startsWith(github.event.inputs.reason, 'morning')
         uses: actions/upload-artifact@v4

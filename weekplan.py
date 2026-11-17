@@ -22,6 +22,7 @@ import streams as STR
 import streams4 as S4
 
 STATE_FILE = Path(__file__).with_name("plan_state.json")
+LOG_FILE = Path(__file__).with_name("history") / "moves.jsonl"     # every planned move that was made or missed
 KEEP = ("t", "day", "add", "drop", "gain", "cost", "net", "games", "waiver", "tier")
 
 
@@ -95,6 +96,15 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
     out = {"mp": mp, "done": list(done.values()), "missed": list(missed.values()), "changes": changes,
            "saved": healthy, "preview": None}
     if healthy:
+        new = [("done", m) for k, m in done.items() if k not in {(x["add"]["id"], x["drop"]["id"]) for x in state.get("done", [])}]
+        new += [("missed", m) for k, m in missed.items() if k not in {(x["add"]["id"], x["drop"]["id"]) for x in state.get("missed", [])}]
+        if new:
+            LOG_FILE.parent.mkdir(exist_ok=True)
+            with LOG_FILE.open("a", encoding="utf-8") as f:
+                for kind, m in new:
+                    f.write(json.dumps({"mp": mp, "logged": now_ms, "result": kind, "day": m.get("day"),
+                                        "add": m["add"], "drop": m["drop"], "expected_gain": m.get("gain"),
+                                        "net": m.get("net")}) + "\n")
         _save({"mp": mp, "updated": now_ms, "moves": [{k: m.get(k) for k in KEEP} for m in fresh["moves"]],
                "done": out["done"], "missed": out["missed"]})
         print(f"  weekly plan saved for matchup {mp}: {len(fresh['moves'])} moves, {len(done)} done, "

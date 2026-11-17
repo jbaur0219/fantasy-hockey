@@ -3,7 +3,8 @@ Turns the site into an installable phone app (home-screen icon, opens full scree
 
   - write_files(): copies the icons and writes manifest.webmanifest + sw.js next to index.html
   - HEAD / APP_JS / APPBAR: what the page needs (patched in by build.py)
-  - the service worker only handles pushes and taps. It never caches pages, so the app always shows the newest build.
+  - the service worker handles pushes and taps, and keeps a fallback copy of the page for when there is no signal
+    (network first, so the app always shows the newest build when online).
 
 The public key below is safe to publish. The matching private key lives only in the PUSH_CONFIG secret.
 """
@@ -30,7 +31,18 @@ MANIFEST = {
     ],
 }
 
-SW = r"""/* Fantasy Hockey service worker: push alerts only, no caching (the app must always show the latest build). */
+SW = r"""/* Fantasy Hockey service worker: push alerts, plus a fallback copy of the page.
+   Network first: when online you always get the newest build. The saved copy is only used with no signal. */
+var CACHE = 'fh-page-v1';
+self.addEventListener('fetch', function (e) {
+  var r = e.request;
+  if (r.method !== 'GET' || new URL(r.url).origin !== self.location.origin) return;
+  var key = r.url.split('?')[0].split('#')[0];
+  e.respondWith(fetch(r).then(function (resp) {
+    if (resp && resp.ok) { var c = resp.clone(); caches.open(CACHE).then(function (k) { k.put(key, c); }); }
+    return resp;
+  }).catch(function () { return caches.match(key).then(function (m) { return m || caches.match(self.registration.scope); }); }));
+});
 self.addEventListener('install', function (e) { self.skipWaiting(); });
 self.addEventListener('activate', function (e) { e.waitUntil(self.clients.claim()); });
 self.addEventListener('push', function (e) {

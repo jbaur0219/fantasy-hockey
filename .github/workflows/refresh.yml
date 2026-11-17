@@ -1,14 +1,10 @@
 name: Smart refresh check
 run-name: Smart refresh check
 
-# Every 15 minutes (7am to about 3am Eastern) this looks at the NHL schedule and starts the daily build when:
-#   - the last game of the night is over, or
-#   - it is 4 hours before the first game of the day.
-# Pressing "Run workflow" here does a dry run by default: it only prints what it would do.
+# Manual check only. The automatic checks now run inside the Watcher workflow (watch.yml), because GitHub only ran
+# this file's 15-minute timer a few times a day. Pressing "Run workflow" here does a dry run by default.
 
 on:
-  schedule:
-    - cron: "7,22,37,52 12-23,0-7 * * *"
   workflow_dispatch:
     inputs:
       dry_run:

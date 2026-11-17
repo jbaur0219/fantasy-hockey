@@ -234,7 +234,7 @@ def build_inputs(mine, fas, game, ndays, standings, starters):
     return entries, base, [{"g": x["grp"], "v": x["v"], "waiver": x["waiver"], "p": x["p"], "x": x} for x in pool]
 
 
-def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_games, prev=None, reasons=True):
+def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_games, prev=None, reasons=True, only_prev=False):
     """The plan. prev = [(add_id, day_label, drop_id), ...] from the previous build (kept unless clearly beaten)."""
     t0 = time.time()
     entries, base, pool = build_inputs(mine, fas, game, ndays, standings, starters)
@@ -249,11 +249,14 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             if x["v"][t] > 0 and not (x["waiver"] and t == 0):
                 keep.append((pi[add_id], t, bi[drop_id]))
     keep = keep[:moves_left]
-    g = M.greedy(moves_left)
-    starts = [g] + ([keep] if keep else [])
+    if only_prev:                     # data too incomplete to trust new suggestions: keep the last good plan only
+        g, starts = keep, [keep]
+    else:
+        g = M.greedy(moves_left)
+        starts = [g] + ([keep] if keep else [])
     best, best_s = None, None
     for st in starts:
-        m = M.search(st, moves_left, keep=keep, deadline=t0 + TIME_BUDGET)
+        m = st if only_prev else M.search(st, moves_left, keep=keep, deadline=t0 + TIME_BUDGET)
         s = M.score(m) + STICKY * sum(1 for q in m if q in keep)
         if best is None or s > best_s:
             best, best_s = m, s
