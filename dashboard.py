@@ -1,23 +1,9 @@
 #!/usr/bin/env python3
 """
-Fantasy Hockey DASHBOARD  (READ-ONLY)
-
-Run:  python3 dashboard.py        ->  writes site/index.html
-
-Shows, at a glance:
-  - Your weekly matchup: score so far, projected final, win probability
-  - Goalie decisions: win probability + START / BENCH call for each upcoming game
-  - Suggested add/drop moves
-  - Lineup alerts (injured starters, idle starters, bench players with a game)
-  - League standings, your roster, and the best free agents
-
-It never adds, drops, trades, or changes your lineup. It only reads.
-Uses analyze.py (same folder) for the player math.
+LEAGUE CONTEXT (READ-ONLY): the matchup, schedule helpers, the daily add-lock clock, team strength, win chance
+inputs, lineup alerts and standings. build.py uses it through site_builder.py. It never changes anything in ESPN.
 """
-import html
 import math
-import sys
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -260,36 +246,9 @@ def expected_remaining(players, periods, games, now_ms, standings):
 # Goalie decisions
 # ---------------------------------------------------------------------------
 def goalie_decisions(mine, sp, games, abbr, standings, now_ms):
-    out = []
-    for p in mine:
-        if p["group"] != "G" or A.slot_name(p["slot"]) == "IR":
-            continue
-        s_me = team_strength(p["team"], standings)
-        rows = []
-        for d in range(sp, sp + GOALIE_DAYS):
-            for g in games_on(games, p["team_id"], d):
-                home = g.get("homeProTeamId") == p["team_id"]
-                opp_id = g.get("awayProTeamId") if home else g.get("homeProTeamId")
-                opp = abbr.get(opp_id, "?")
-                pw = log5(s_me, team_strength(opp, standings)) + (HOME_ICE if home else -HOME_ICE)
-                if p.get("svp") and p["gp"] >= 5:                 # his own save % nudges the odds
-                    pw += clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
-                pw = clamp(pw, 0.15, 0.85)
-                exp_pts = p["outlook"] + 4 * (pw - s_me)          # opponent/home effect on a win (worth 4)
-                started = g.get("date", 0) <= now_ms
-                if started:
-                    verdict, cls = "GAME STARTED", "done"
-                elif exp_pts < 0:
-                    verdict, cls = "BENCH", "bench"
-                elif exp_pts < 1.0:
-                    verdict, cls = "START (RISKY)", "risky"
-                else:
-                    verdict, cls = "START", "start"
-                day, tm = fmt_game(g.get("date", 0))
-                rows.append({"day": day, "time": tm, "opp": opp, "home": home, "p": pw,
-                             "e": exp_pts, "verdict": verdict, "cls": cls})
-        out.append({"p": p, "rows": rows})
-    return out
+    """Start / bench calls for every day left in the matchup (see goalies.py)."""
+    import goalies
+    return goalies.build(mine, sp, games, abbr, standings, now_ms, CUR_DAYS)
 
 
 # ---------------------------------------------------------------------------
@@ -318,152 +277,6 @@ def lineup_alerts(mine, sp, games, now_ms):
 
 
 # ---------------------------------------------------------------------------
-# HTML
-# ---------------------------------------------------------------------------
-CSS = """
-:root{--bg:#f5f6f8;--card:#fff;--text:#1d2330;--muted:#6a7385;--line:#e4e7ee;--accent:#2563eb;
---green:#16a34a;--amber:#d97706;--red:#dc2626;--gray:#6b7280}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1420;--card:#171e2e;--text:#e8ecf5;--muted:#9aa5bd;
---line:#263049;--accent:#60a5fa;--green:#4ade80;--amber:#fbbf24;--red:#f87171;--gray:#9ca3af}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);
-font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
-.wrap{max-width:980px;margin:0 auto;padding:18px 14px 60px}
-h1{font-size:22px;margin:0}.sub{color:var(--muted);font-size:13px;margin:2px 0 16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
-.card h2{font-size:15px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-.vs{display:flex;justify-content:space-between;gap:10px;align-items:flex-end;flex-wrap:wrap}
-.team{flex:1;min-width:140px}.team .n{font-weight:600}.team .s{font-size:28px;font-weight:700}
-.team .r{color:var(--muted);font-size:13px}.right{text-align:right}
-.bar{height:14px;border-radius:8px;background:var(--line);overflow:hidden;margin:12px 0 6px;display:flex}
-.bar i{display:block;height:100%}.bar .a{background:var(--accent)}.bar .b{background:var(--gray)}
-.big{font-size:30px;font-weight:700}.muted{color:var(--muted);font-size:13px}
-.g{border-top:1px solid var(--line);padding:10px 0}.g:first-of-type{border-top:0}
-.gh{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px}.gh b{font-size:16px}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.chip{border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:150px;flex:1}
-.chip .d{font-size:12px;color:var(--muted)}.chip .o{font-weight:600}.chip .m{font-size:13px}
-.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;color:#fff}
-.start{background:var(--green)}.risky{background:var(--amber)}.bench{background:var(--red)}.done{background:var(--gray)}
-table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
-th{color:var(--muted);font-weight:600}.scroll{overflow-x:auto}
-.good{color:var(--green);font-weight:600}.warn{color:var(--amber)}.bad{color:var(--red)}
-ul{margin:0;padding-left:18px}li{margin:4px 0}details{margin:8px 0}summary{cursor:pointer;font-weight:600;padding:4px 0}
-.me td{font-weight:700}
-"""
-
-
-def table(headers, rows, row_class=None):
-    h = "".join(f"<th>{html.escape(x)}</th>" for x in headers)
-    body = ""
-    for i, r in enumerate(rows):
-        cls = f" class='{row_class(i)}'" if row_class and row_class(i) else ""
-        body += f"<tr{cls}>" + "".join(f"<td>{html.escape(str(c))}</td>" for c in r) + "</tr>"
-    return f"<div class='scroll'><table><tr>{h}</tr>{body}</table></div>"
-
-
-def fmt(x, d=2):
-    return "-" if x is None else f"{x:.{d}f}"
-
-
-def player_line(p):
-    return f"{p['name']} ({p['pos']}, {p['team']})"
-
-
-def render(c):
-    e = html.escape
-    out = [f"<!doctype html><html><head><meta charset='utf-8'><meta name='robots' content='noindex'>"
-           f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
-           f"<title>Fantasy Hockey Dashboard</title><style>{CSS}</style></head><body><div class='wrap'>",
-           f"<h1>{e(c['my_name'])}</h1>",
-           f"<div class='sub'>{e(c['league_name'])} &middot; record {c['my_rec']} &middot; updated {e(c['updated'])} "
-           f"&middot; read-only, nothing is changed in ESPN</div>"]
-
-    # --- Matchup
-    m = c["matchup"]
-    if m:
-        pw = m["p_win"]
-        out.append(
-            "<div class='card'><h2>This week's matchup</h2><div class='vs'>"
-            f"<div class='team'><div class='n'>{e(c['my_name'])}</div><div class='s'>{m['me_now']:.1f}</div>"
-            f"<div class='r'>projected final {m['proj_me']:.0f}</div></div>"
-            f"<div class='team right'><div class='n'>{e(m['opp_name'])}</div><div class='s'>{m['opp_now']:.1f}</div>"
-            f"<div class='r'>{e(m['opp_rec'])} &middot; projected final {m['proj_opp']:.0f}</div></div></div>"
-            f"<div class='bar'><i class='a' style='width:{pw*100:.0f}%'></i><i class='b' style='width:{(1-pw)*100:.0f}%'></i></div>"
-            f"<div><span class='big'>{pw*100:.0f}%</span> <span class='muted'>chance you win this week "
-            f"({m['days_left']} scoring days left, using each team's best lineup every day)</span></div></div>")
-
-    # --- Goalies
-    out.append("<div class='card'><h2>Goalie decisions</h2>")
-    if not c["goalies"]:
-        out.append("<div class='muted'>No goalies found on your roster.</div>")
-    for gd in c["goalies"]:
-        p = gd["p"]
-        svp = f" &middot; save % {p['svp']:.3f}" if p.get("svp") else ""
-        out.append(f"<div class='g'><div class='gh'><b>{e(p['name'])} <span class='muted'>({e(p['team'])}, "
-                   f"{A.slot_name(p['slot'])})</span></b><span class='muted'>{fmt(p['outlook'])} pts/start outlook{svp}</span></div>")
-        if not gd["rows"]:
-            out.append("<div class='muted'>No games in the next few days.</div>")
-        else:
-            out.append("<div class='chips'>")
-            for r in gd["rows"]:
-                at = "vs" if r["home"] else "@"
-                out.append(f"<div class='chip'><div class='d'>{e(r['day'])} &middot; {e(r['time'])}</div>"
-                           f"<div class='o'>{at} {e(r['opp'])}</div>"
-                           f"<div class='m'>Win chance {r['p']*100:.0f}% &middot; exp. {r['e']:+.1f} pts</div>"
-                           f"<div style='margin-top:6px'><span class='pill {r['cls']}'>{e(r['verdict'])}</span></div></div>")
-            out.append("</div>")
-        out.append("</div>")
-    out.append("<div class='muted' style='margin-top:8px'>BENCH = expected points below zero. START (RISKY) = slightly "
-               "positive but a big swing either way. NHL single games are close to coin flips, so treat win chances as leans, "
-               "not promises. Confirmed starters are not included yet.</div></div>")
-
-    # --- Moves
-    out.append("<div class='card'><h2>Suggested moves</h2>")
-    if c["moves"]:
-        rows = [[player_line(mv["add"]), fmt(mv["add"]["outlook"]), mv["add"]["g7"], player_line(mv["drop"]),
-                 fmt(mv["drop"]["outlook"]), f"+{mv['gain']:.2f}", f"+{mv['week_gain']:.1f}"] for mv in c["moves"]]
-        out.append(table(["Add", "Outlook", "Games (7d)", "Drop", "Outlook", "Gain/game", "Gain (7d)"], rows))
-        out.append("<div class='muted'>Outlook = expected fantasy points per game. Players with very few games and no ESPN "
-                   "projection can look better than they are, so check small samples before acting.</div>")
-    else:
-        out.append("<div class='muted'>Nothing available clearly beats your weakest players.</div>")
-    out.append("</div>")
-
-    # --- Alerts
-    out.append("<div class='card'><h2>Lineup alerts (today)</h2>")
-    if c["alerts"]:
-        out.append("<ul>" + "".join(f"<li class='{k}'>{e(t)}</li>" for k, t in c["alerts"]) + "</ul>")
-    else:
-        out.append("<div class='good'>No lineup problems found.</div>")
-    out.append("</div>")
-
-    # --- Standings
-    rows = [[i + 1, s["name"], s["rec"], f"{s['pf']:.1f}"] for i, s in enumerate(c["standings"])]
-    out.append("<div class='card'><h2>League standings</h2>"
-               + table(["#", "Team", "W-L-T", "Points for"], rows,
-                       row_class=lambda i: "me" if c["standings"][i]["me"] else "") + "</div>")
-
-    # --- Roster + free agents
-    mine = sorted(c["mine"], key=lambda x: (x["group"], -x["outlook"]))
-    rows = [[player_line(p), A.slot_name(p["slot"]), int(p["gp"]), fmt(p["ppg"]), fmt(p["exp_ppg"]), fmt(p["proj_ppg"]),
-             fmt(p["outlook"]), p["g7"], "; ".join(p["flags"])] for p in mine]
-    out.append("<div class='card'><h2>Your roster</h2><details open><summary>Show / hide</summary>"
-               + table(["Player", "Slot", "GP", "PPG", "Exp", "Proj", "Outlook", "G7", "Flags"], rows)
-               + "<div class='muted'>PPG = actual points per game. Exp = luck-adjusted. Proj = ESPN projection. "
-                 "Outlook = blend used for ranking. G7 = games in the next 7 days.</div></details></div>")
-    for group, label in (("G", "Goalies"), ("D", "Defense"), ("F", "Forwards")):
-        top = sorted([p for p in c["fas"] if p["group"] == group and p["injury"] not in A.BAD_INJURY],
-                     key=lambda p: -p["outlook"])[:12]
-        rows = [[player_line(p), fmt(p["outlook"]), fmt(p["ppg"]), fmt(p["proj_ppg"]), int(p["gp"]), p["g7"],
-                 fmt(p["own"], 0) + "%", p["status"] or "", "; ".join(p["flags"])] for p in top]
-        out.append(f"<div class='card'><h2>Best available - {label}</h2><details><summary>Show / hide</summary>"
-                   + table(["Player", "Outlook", "PPG", "Proj", "GP", "G7", "Owned", "Status", "Flags"], rows)
-                   + "</details></div>")
-    out.append("</div></body></html>")
-    return "".join(out)
-
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def build_context(cfg, data, league, standings, now_ms):
@@ -471,7 +284,7 @@ def build_context(cfg, data, league, standings, now_ms):
     abbr, games = schedule_maps(data["schedules"])
     sp = data["roster"].get("scoringPeriodId", 1)
     mine, fas = A.build_players(data, cfg)
-    moves = A.recommend(mine, fas)
+    moves = []                                   # move suggestions come from core.py (Game plan)
 
     teams = {t.get("id"): t for t in league.get("teams", [])}
     me_t = teams.get(my_id, {})
@@ -518,32 +331,3 @@ def build_context(cfg, data, league, standings, now_ms):
         "mine": mine,
         "fas": fas,
     }
-
-
-def main():
-    cfg = A.get_config()
-    print("Reading your ESPN league...")
-    data = A.fetch_all(cfg)
-    base = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/fhl/seasons/{cfg['season']}"
-    league = A.espn_get(f"{base}/segments/0/leagues/{cfg['league']}", cfg["cookies"],
-                        params=[("view", "mSettings"), ("view", "mTeam"),
-                                ("view", "mMatchup"), ("view", "mMatchupScore")])
-    standings = load_nhl_standings()
-    ctx = build_context(cfg, data, league, standings, int(time.time() * 1000))
-    if not ctx["mine"]:
-        sys.exit("Couldn't find your team. Check LEAGUE_ID and TEAM_ID.")
-    Path("site").mkdir(exist_ok=True)
-    Path("site/index.html").write_text(render(ctx), encoding="utf-8")
-    m = ctx["matchup"]
-    if m:
-        print(f"Matchup vs {m['opp_name']}: {m['me_now']:.1f}-{m['opp_now']:.1f}, "
-              f"win chance {m['p_win']*100:.0f}%")
-    for gd in ctx["goalies"]:
-        for r in gd["rows"]:
-            print(f"  {gd['p']['name']}: {r['day']} {'vs' if r['home'] else '@'} {r['opp']} "
-                  f"win {r['p']*100:.0f}% exp {r['e']:+.1f} -> {r['verdict']}")
-    print("Saved site/index.html")
-
-
-if __name__ == "__main__":
-    main()

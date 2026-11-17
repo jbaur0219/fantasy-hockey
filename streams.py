@@ -1,38 +1,59 @@
 #!/usr/bin/env python3
 """
-STREAMS tab (READ-ONLY): the best use of your weekly adds, plus the best skater streams for each day.
+STREAMS + PLAYER VALUES (READ-ONLY). Everything about what a player is worth this week, who may be dropped, and the
+Streams / Swap lab cards. (This file replaces the old streams.py, streams2.py, streams3.py and streams4.py, which
+patched each other in layers; the behaviour is the same, written once.)
 
-How it values a player on a given day
-  - He only scores on days his team plays (and only while that day is still open: once the first game of the day starts, nobody can be added for it).
-  - Points per game = his outlook, nudged up against weak opponents / strong teams and down against strong
-    opponents (a modest +/- 15% at most), plus a small home-ice bump.
+How a player is valued on a given day
+  - He only scores on days his team plays, and only while that day is still open (once the first game of the day
+    starts, nobody can be added for it).
+  - Points per game = his outlook blended with recent form (season + last 15 days), nudged up against weak opponents
+    and down against strong ones (at most +/- 15%), plus a small home-ice bump. Watch-listed players count at 85%.
   - Day-to-day players count at 75%, players ruled out at 0.
   - Goalies: expected points for the start x his chance to start (confirmed starters count 100% / 0% today).
 
-The move plan
-  Looks at every free agent, every remaining day of the matchup, and every player you could drop, and picks
-  moves one at a time (each add uses one of your weekly moves) that add the most points to your best daily
-  lineups (9 F, 5 D, 1 UTIL, 2 G). It stops when a move isn't worth the roster churn.
+Who can be dropped (drop_rule)
+  - Never: stars (projected 2.5+), anyone producing for you (1.9+ pts/game this season or 2.2+ over 15 days).
+  - Fair drops for a normal gain (1+ point): injured, watch-listed, underperforming for his role, losing his role,
+    or a light schedule this week. Other healthy top-role players need a bigger gain (2+), depth players 1.5.
+  - Adds must be on a top-six line, top-four pair or first power-play unit (add_ok).
+
+The move plan itself is in core.py.
 """
-from datetime import datetime, timedelta
+from pathlib import Path
 
 import analyze as A
 import dashboard as D
+import enrich as E
 import planner as PL
+import roles as R
+import site_builder as SB
 import starters as S
 
-MIN_GAIN = 1.5          # a move must add at least this many points, net of what it gives up
-FUTURE_GAMES = 3.0      # roughly how many games of future value a dropped player represents
-REPLACEMENT = {"F": 1.45, "D": 1.5, "G": 1.0}   # what a typical free agent gives you per game
-SKATER_POOL = 60        # free-agent skaters considered by the optimizer
-GOALIE_POOL = 15
-DTD = 0.75              # day-to-day players count at 75%
 INF = 99
+REPLACEMENT = {"F": 1.45, "D": 1.5, "G": 1.0}   # what a typical free agent gives you per game
+DTD = 0.75              # day-to-day players count at 75%
 ROWS_F, ROWS_D = 8, 6   # rows kept per day in the stream lists
-PROTECT_SKATER = 1.9    # skaters this good are never suggested as drops (they matter beyond this week)
-PROTECT_GOALIE = 2.0
+PROTECT_GOALIE = 2.0    # goalies this good are never suggested as drops
+MIN_GAIN = 1.0          # a normal move must add this many points, net of what you give up
+CORE_GAIN = 2.0         # dropping a healthy top-role player that is not clearly underperforming needs this much
+DEPTH_GAIN = 1.5        # dropping a depth player (3rd line, 3rd pair, etc.)
+STAR_OUT = 2.5          # outlook at or above this is never dropped (unless watch-listed or injured)
+FORM_WEIGHT = 0.40      # how much recent form (season + last 15 days) is blended into this week's value
+MIN_GP = 6              # games needed before anyone is called an underperformer
+UNDER_RATIO = 0.88      # underperforming = scoring under 88% of what his role usually gives
+LIGHT_GAP = 2           # light week = this many games fewer than the busiest team
+WATCH_HAIRCUT = 0.85    # watch-listed players are valued at 85% (less ice time / PP time expected)
+OPTIONS_PER_PLAYER = 3
+WEEK_ADDS_F, WEEK_ADDS_D = 6, 4
+
+WATCHLIST_FILE = Path(__file__).with_name("watchlist.txt")
+STATE = {"watch": {}, "ref": 0}
 
 
+# ---------------------------------------------------------------------------
+# Schedule, opponents and per-day values
+# ---------------------------------------------------------------------------
 def _mult(me, opp, home, standings):
     s_me, s_opp = D.team_strength(me, standings), D.team_strength(opp, standings)
     m = 1 + 0.6 * (0.5 - s_opp) + 0.4 * (s_me - 0.5) + (0.02 if home else -0.02)
@@ -65,8 +86,8 @@ def make_game_fn(abbr, games, sp, now_ms):
     return game
 
 
-def values(p, game, ndays, standings, starters, lineup_goalie=False):
-    """Expected fantasy points for player p on each of the next ndays days."""
+def _base_values(p, game, ndays, standings, starters, lineup_goalie=False):
+    """Expected fantasy points for player p on each of the next ndays days (before the form blend)."""
     v = [0.0] * ndays
     if p["inj"] in A.BAD_INJURY:
         return v
@@ -88,11 +109,22 @@ def values(p, game, ndays, standings, starters, lineup_goalie=False):
                 st = max(st, 0.5)
             s = starters.get(p["tm"]) if i == 0 else None
             if s:
-                st = 1.0 if S.E.norm(s["name"]) == S.E.norm(p["n"]) else 0.0
+                st = 1.0 if E.norm(s["name"]) == E.norm(p["n"]) else 0.0
             v[i] = max(0.0, e * st * fac)
         else:
             m, _ = _mult(p["tm"], opp, home, standings)
             v[i] = (p["out"] or 0) * m * fac
+    return v
+
+
+def values(p, game, ndays, standings, starters, lineup_goalie=False):
+    """Per-day expected points, with recent form blended in. Also notes his games left (used by the drop rules)."""
+    v = _base_values(_with_eff(p), game, ndays, standings, starters, lineup_goalie=lineup_goalie)
+    if p.get("grp") != "G":
+        n = sum(1 for x in v if x > 0)
+        p["_gl"] = n                                       # games left this week (used by the drop rules)
+        if n > STATE["ref"]:
+            STATE["ref"] = n                               # the busiest team's games left so far
     return v
 
 
@@ -109,71 +141,213 @@ def _active(entries, d, skip=None):
     return [(e["grp"], e["v"][d]) for e in entries if e["join"] <= d < e["leave"] and e is not skip]
 
 
-def _droppable(entries, t, x_group):
-    cur = [e for e in entries if e["leave"] == INF and e["join"] <= t
-           and (e["p"]["inj"] in A.BAD_INJURY or (e["p"]["out"] or 0) < (PROTECT_GOALIE if e["grp"] == "G" else PROTECT_SKATER))]
-    picks = (("G", 3), ("F", 2)) if x_group == "G" else (("F", 6), ("D", 4))
-    out = []
-    for g, k in picks:
-        out += sorted((e for e in cur if e["grp"] == g), key=lambda e: sum(e["v"][t:]))[:k]
-    return out
-
-
 def _brief(p):
     return {"id": p["id"], "n": p["n"], "pos": p["pos"], "tm": p["tm"]}
 
 
-def plan_moves(mine, fas, game, ndays, days, standings, starters, moves_left):
-    entries = [{"p": p, "v": values(p, game, ndays, standings, starters, lineup_goalie=(p["grp"] == "G" and p["slot"] == "G")),
-                "grp": p["grp"], "join": 0, "leave": INF}
-               for p in mine if p["slot"] != "IR"]
-    sk = [{"p": p, "v": values(p, game, ndays, standings, starters), "grp": p["grp"], "used": False,
-           "waiver": p.get("st") == "WAIVERS"} for p in fas if p["grp"] != "G"]
-    gk = [{"p": p, "v": values(p, game, ndays, standings, starters), "grp": "G", "used": False,
-           "waiver": p.get("st") == "WAIVERS"} for p in fas if p["grp"] == "G" and (p.get("sp") or 0) >= 0.3]
-    pool = sorted(sk, key=lambda x: -sum(x["v"]))[:SKATER_POOL] + sorted(gk, key=lambda x: -sum(x["v"]))[:GOALIE_POOL]
-    pool = [x for x in pool if sum(x["v"]) > 0]
+# ---------------------------------------------------------------------------
+# Watch list, form, and the drop / add rules
+# ---------------------------------------------------------------------------
+def _norm(name):
+    try:
+        return E.norm(name)
+    except Exception:
+        return " ".join(str(name or "").lower().split())
 
-    base_days = [day_value(_active(entries, d)) for d in range(ndays)]
-    start_total = sum(base_days)
-    moves = []
-    for _ in range(moves_left):
-        best = None
-        for x in pool:
-            if x["used"]:
+
+def load_watchlist():
+    """watchlist.txt: one player per line, 'Name | note'. Lines starting with # are ignored."""
+    out = {}
+    try:
+        for line in WATCHLIST_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
                 continue
-            for t in range(ndays):
-                if x["v"][t] <= 0 or (x["waiver"] and t == 0):
-                    continue
-                for y in _droppable(entries, t, x["grp"]):
-                    gain = 0.0
-                    for d in range(t, ndays):
-                        act = _active(entries, d, skip=y)
-                        act.append((x["grp"], x["v"][d]))
-                        gain += day_value(act) - base_days[d]
-                    net = gain - (0.0 if y["p"]["inj"] in A.BAD_INJURY else
-                                  max(0.0, (y["p"]["out"] or 0) - REPLACEMENT[y["grp"]]) * FUTURE_GAMES)
-                    if best is None or net > best[0]:
-                        best = (net, x, t, y, gain)
-        if best is None or best[0] < MIN_GAIN:
-            break
-        net, x, t, y, gain = best
-        y["leave"] = t
-        entries.append({"p": x["p"], "v": x["v"], "grp": x["grp"], "join": t, "leave": INF})
-        x["used"] = True
-        base_days = [day_value(_active(entries, d)) for d in range(ndays)]
-        moves.append({"t": t, "day": days[t], "add": _brief(x["p"]), "drop": _brief(y["p"]),
-                      "gain": round(gain, 2), "net": round(net, 2), "games": sum(1 for i in range(t, ndays) if x["v"][i] > 0),
-                      "waiver": x["waiver"]})
-    return {"base": round(start_total, 1), "total": round(sum(base_days), 1),
-            "gain": round(sum(base_days) - start_total, 1), "moves": moves}
+            name, _, note = line.partition("|")
+            if name.strip():
+                out[_norm(name)] = note.strip() or "On your watch list."
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"  watchlist.txt could not be read ({type(e).__name__}: {e})")
+    return out
 
 
-def stream_rows(fas, game, ndays, standings, abbr_games_left):
+def _watch(p):
+    return STATE["watch"].get(_norm(p.get("n")))
+
+
+def _form(p):
+    """Recent scoring per game: average of season and last-15-days when both exist."""
+    s, r = p.get("ppg"), p.get("rec")
+    if s is not None and r is not None:
+        return 0.5 * s + 0.5 * r
+    return s if s is not None else r
+
+
+def eff_out(p):
+    """This week's outlook: the normal outlook nudged toward recent form, trimmed for watch-listed players."""
+    out = p.get("out") or 0.0
+    if p.get("grp") == "G":
+        return out
+    form = _form(p)
+    if form is not None and (p.get("gp") or 0) >= MIN_GP:
+        out = (1 - FORM_WEIGHT) * out + FORM_WEIGHT * form
+    if _watch(p):
+        out *= WATCH_HAIRCUT
+    return out
+
+
+def _with_eff(p):
+    if p.get("grp") == "G":
+        return p
+    q = dict(p)
+    q["out"] = eff_out(p)
+    return q
+
+
+def producing(p):
+    return (p.get("ppg") or 0) >= R.KEEP_PPG or (p.get("rec") or 0) >= R.KEEP_REC
+
+
+def underperforming(p):
+    """Scoring well under what his role normally gives (or at free-agent level while holding a top role)."""
+    if p.get("grp") == "G" or (p.get("gp") or 0) < MIN_GP:
+        return False
+    form = _form(p)
+    if form is None:
+        return False
+    exp = p.get("rp")
+    if exp and form <= UNDER_RATIO * exp:
+        return True
+    return p.get("cls") == "core" and form <= REPLACEMENT[p["grp"]] + 0.10
+
+
+def role_risk(p):
+    return (p.get("cls") == "watch" or p.get("rl") == "Off lines"
+            or (p.get("tr") is not None and p["tr"] <= -2.0))
+
+
+def light_week(gl, ref):
+    return gl <= ref - LIGHT_GAP
+
+
+def drop_rule(p, gl, ref):
+    """(can he be dropped?, net points a move must clear)."""
+    if p["inj"] in A.BAD_INJURY:
+        return True, MIN_GAIN
+    if p["grp"] == "G":
+        return (p["slot"] == "BN" and (p["out"] or 0) < PROTECT_GOALIE), MIN_GAIN
+    if _watch(p):
+        return True, MIN_GAIN
+    if (p.get("out") or 0) >= STAR_OUT:
+        return False, 0.0
+    under = underperforming(p)
+    if producing(p) and not under:
+        return False, 0.0
+    if under or role_risk(p) or light_week(gl, ref):
+        return True, MIN_GAIN
+    cls = p.get("cls")
+    if cls == "streamer":
+        return True, MIN_GAIN
+    if cls == "core":
+        return True, CORE_GAIN
+    return True, DEPTH_GAIN
+
+
+def add_ok(p):
+    if p["inj"] in A.BAD_INJURY:
+        return False
+    if p["grp"] == "G":
+        return (p.get("sp") or 0) >= 0.3
+    if not R.STATE["teams"]:
+        return True                                        # no line data at all (not even a saved copy): don't block everything
+    if p.get("rl") in (None, "Off lines", "Not listed"):
+        return False
+    return R.is_top(p["grp"], p.get("ev"), p.get("ppu") or 0)
+
+
+# ---------------------------------------------------------------------------
+# Reasons (plain English)
+# ---------------------------------------------------------------------------
+def _role_text(p):
+    if p["grp"] == "G":
+        return {"G1": "starting goalie", "G2": "backup goalie"}.get(p.get("rl"), "goalie")
+    if p.get("rl") == "Off lines":
+        return "not on his team's current lines"
+    return R.phrase(p.get("ev"), p.get("ppu") or 0)
+
+
+def _opps(p, t, ndays, days, game, standings):
+    parts = []
+    for i in range(t, ndays):
+        g = game(p["tm"], i)
+        if g:
+            opp, home = g
+            _, tag = _mult(p["tm"], opp, home, standings)
+            parts.append(f"{days[i].split()[0]} {'vs' if home else '@'} {opp} ({tag})")
+    return ", ".join(parts)
+
+
+def _fill(entries, x, y, t, ndays):
+    slots = {"F": 9, "D": 5, "G": 2}[x["grp"]]
+    play = fill = 0
+    for d in range(t, ndays):
+        if x["v"][d] <= 0:
+            continue
+        play += 1
+        n = sum(1 for e in entries if e["join"] <= d < e["leave"] and e["grp"] == x["grp"] and e["v"][d] > 0)
+        if y["grp"] == x["grp"] and y["v"][d] > 0:
+            n -= 1                                          # y is leaving
+        if n < slots:
+            fill += 1
+    return play, fill
+
+
+def _why_add(x, entries, y, t, ndays, days, game, standings):
+    p = x["p"]
+    games = sum(1 for i in range(t, ndays) if x["v"][i] > 0)
+    if p["grp"] == "G":
+        out = [f"{p['n']} ({p['tm']}) starts about {int(round((p.get('sp') or 0) * 100))}% of his team's games."]
+    else:
+        out = [f"{p['n']} is on the {_role_text(p)} for {p['tm']} ({p.get('rl') or 'role unknown'})."]
+        if y["p"]["inj"] not in A.BAD_INJURY and y["p"].get("rl"):
+            out.append(f"Role change: {y['p']['rl']} out, {p.get('rl') or 'role unknown'} in.")
+    out.append(f"{games} game{'s' if games != 1 else ''} left this week: {_opps(p, t, ndays, days, game, standings)}.")
+    if p.get("tr") is not None and p.get("toi5") is not None:
+        out.append(f"Ice time is {p['toi5']:.1f} min over his last 5 games ({p['tr']:+.1f} vs his season average).")
+    play, fill = _fill(entries, x, y, t, ndays)
+    if fill:
+        out.append(f"Fills an empty {x['grp']} lineup slot on {fill} of the {play} days he plays.")
+    else:
+        out.append(f"Upgrades a {x['grp']} lineup spot you already fill (no empty slot).")
+    return out
+
+
+def _drop_reasons(p, gl, ref):
+    out = []
+    note = _watch(p)
+    if note:
+        out.append(f"On your watch list: {note}")
+    if underperforming(p):
+        form, exp = _form(p), p.get("rp")
+        txt = f"Producing {form:.2f} pts/game recently"
+        if exp:
+            txt += f" against about {exp:.2f} for a typical {p.get('rl') or 'player in his role'}"
+        out.append(txt + ", so the role is not turning into points.")
+    if p["inj"] not in A.BAD_INJURY and light_week(gl, ref):
+        out.append(f"Light week: {gl} game{'s' if gl != 1 else ''} left while the busiest teams have {ref}.")
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Streams tab data: daily streams, roster audit, best weekly adds, swap tester
+# ---------------------------------------------------------------------------
+def stream_rows(fas, game, ndays, standings, games_left):
     """Best free-agent forwards and defensemen for each day."""
+    fas = [_with_eff(p) for p in fas]
     rows = []
-    pool = [p for p in fas if p["grp"] != "G" and p["inj"] not in A.BAD_INJURY]
-    pool = sorted(pool, key=lambda p: -(p["out"] or 0))[:80]
+    pool = sorted((p for p in fas if p["grp"] != "G" and add_ok(p)), key=lambda p: -(p["out"] or 0))[:80]
     for i in range(ndays):
         day = []
         for p in pool:
@@ -185,10 +359,115 @@ def stream_rows(fas, game, ndays, standings, abbr_games_left):
             fac = 1.0 if p["inj"] in ("ACTIVE", None) else DTD
             day.append({"i": i, "id": p["id"], "n": p["n"], "pos": p["pos"], "grp": p["grp"], "tm": p["tm"],
                         "o": opp, "h": 1 if home else 0, "tag": tag, "e": round((p["out"] or 0) * m * fac, 2),
-                        "gl": abbr_games_left(p["tm"], i), "w": 1 if p.get("st") == "WAIVERS" else 0})
+                        "gl": games_left(p["tm"], i), "w": 1 if p.get("st") == "WAIVERS" else 0, "rl": p.get("rl")})
         for grp, k in (("F", ROWS_F), ("D", ROWS_D)):
             rows += sorted((r for r in day if r["grp"] == grp), key=lambda r: -r["e"])[:k]
     return rows
+
+
+def _week_total(p, game, ndays, standings, starters):
+    v = values(p, game, ndays, standings, starters)
+    return sum(v), sum(1 for x in v if x > 0)
+
+
+def audit(site_data, game, ndays, days, standings, starters):
+    mine = [p for p in site_data["mine"] if p["grp"] != "G" and p["slot"] != "IR" and p["inj"] not in A.BAD_INJURY]
+    fas = [p for p in site_data["fas"] if p["grp"] != "G" and add_ok(p)]
+    tot = {}
+    for p in mine + fas:
+        tot[p["id"]] = _week_total(p, game, ndays, standings, starters)
+    ref = max([g for _, g in tot.values()] or [0])
+    options = {g: sorted((p for p in fas if p["grp"] == g), key=lambda p: -tot[p["id"]][0]) for g in ("F", "D")}
+
+    out = []
+    for p in mine:
+        e, gl = tot[p["id"]]
+        tags, why, sev = [], [], 0
+        note = _watch(p)
+        under = underperforming(p)
+        stars = (p.get("out") or 0) >= STAR_OUT
+        if note:
+            tags.append({"k": "role", "t": "Watch list"})
+            why.append(note)
+            sev += 3
+        if under and not stars:
+            tags.append({"k": "under", "t": "Underperforming"})
+            form, exp = _form(p), p.get("rp")
+            txt = f"Scoring {form:.2f} pts/game"
+            if p.get("ppg") is not None and p.get("rec") is not None:
+                txt += f" (season {p['ppg']:.2f}, last 15 days {p['rec']:.2f})"
+            if exp:
+                txt += f" against about {exp:.2f} for a typical {p.get('rl') or 'player in his role'}"
+            why.append(txt + ".")
+            sev += 3
+        if role_risk(p) and not note:
+            tags.append({"k": "role", "t": "Role at risk"})
+            if p.get("rl") == "Off lines":
+                why.append("Not on his team's current line combinations (scratched, injured or demoted).")
+            elif p.get("tr") is not None and p.get("toi5") is not None:
+                why.append(f"Ice time {p['toi5']:.1f} min over his last 5 games ({p['tr']:+.1f} vs his season average).")
+            sev += 2
+        if light_week(gl, ref) and not stars and not (producing(p) and not under):
+            tags.append({"k": "light", "t": f"{gl} game{'s' if gl != 1 else ''} left"})
+            opps = _opps(p, 0, ndays, days, game, standings)
+            why.append(f"Light week: {gl} game{'s' if gl != 1 else ''} left{(' (' + opps + ')') if opps else ''}; the busiest teams have {ref}.")
+            sev += 2
+        if p.get("cls") == "streamer" and not tags:
+            tags.append({"k": "streamer", "t": "Replaceable role"})
+            why.append(f"{p.get('rl')}: {_role_text(p)}.")
+            sev += 1
+        if not tags:
+            continue
+        if p.get("rl") and not any(p.get("rl") in w for w in why):
+            why.insert(0, f"{p.get('rl')}: {_role_text(p)}.")
+        repl = []
+        for q in options[p["grp"]]:
+            if len(repl) >= OPTIONS_PER_PLAYER:
+                break
+            qe, qg = tot[q["id"]]
+            if qe > e + 0.5 and q["tm"] != p["tm"]:
+                repl.append({"id": q["id"], "n": q["n"], "rl": q.get("rl"), "tm": q["tm"], "gl": qg, "e": round(qe, 1)})
+        out.append({"id": p["id"], "n": p["n"], "pos": p["pos"], "tm": p["tm"], "slot": p["slot"], "rl": p.get("rl"),
+                    "tags": tags, "why": why, "repl": repl, "sev": sev, "e": round(e, 1), "gl": gl})
+    out.sort(key=lambda a: (-a["sev"], a["e"]))
+    return out[:10]
+
+
+def week_adds(site_data, game, ndays, days, standings, starters):
+    fas = [p for p in site_data["fas"] if p["grp"] != "G" and add_ok(p)]
+    rows = []
+    for g, k in (("F", WEEK_ADDS_F), ("D", WEEK_ADDS_D)):
+        scored = []
+        for p in fas:
+            if p["grp"] != g:
+                continue
+            e, gl = _week_total(p, game, ndays, standings, starters)
+            if gl:
+                scored.append((e, gl, p))
+        for e, gl, p in sorted(scored, key=lambda s: -s[0])[:k]:
+            rows.append({"id": p["id"], "n": p["n"], "pos": p["pos"], "grp": g, "tm": p["tm"], "rl": p.get("rl"),
+                         "e": round(e, 1), "gl": gl, "w": 1 if p.get("st") == "WAIVERS" else 0,
+                         "opps": _opps(p, 0, ndays, days, game, standings)})
+    return rows
+
+
+def whatif_data(site_data, game, ndays, days, standings, starters):
+    """Everything the page needs to try 'add this free agent, drop that player' and re-score your daily lineups."""
+    def rec(p, mine):
+        v = values(p, game, ndays, standings, starters, lineup_goalie=(mine and p["grp"] == "G" and p["slot"] == "G"))
+        d = {"id": p["id"], "n": p["n"], "pos": p["pos"], "tm": p["tm"], "grp": p["grp"], "slot": p["slot"],
+             "rl": p.get("rl"), "cls": p.get("cls"), "out": round(eff_out(p), 2), "ppg": p.get("ppg"), "rec": p.get("rec"),
+             "rp": p.get("rp"), "tr": p.get("tr"), "gp": p.get("gp"), "st": p.get("st"),
+             "gl": sum(1 for x in v if x > 0), "e": round(sum(v), 1), "v": [round(x, 2) for x in v],
+             "inj": p.get("inj")}
+        d["o"] = _opps(p, 0, ndays, days, game, standings)
+        return d
+    mine = [rec(p, True) for p in site_data["mine"] if p["slot"] != "IR"]
+    fa_sk = sorted((p for p in site_data["fas"] if p["grp"] != "G" and p["inj"] not in A.BAD_INJURY),
+                   key=lambda p: -(p.get("out") or 0))[:250]
+    fa_g = sorted((p for p in site_data["fas"] if p["grp"] == "G" and p["inj"] not in A.BAD_INJURY),
+                  key=lambda p: -(p.get("sp") or 0))[:20]
+    return {"days": [x.split()[0] for x in days], "mine": mine, "fas": [rec(p, False) for p in fa_sk + fa_g]}
 
 
 def build(cfg, data, league, standings, now_ms, site_data):
@@ -205,76 +484,33 @@ def build(cfg, data, league, standings, now_ms, site_data):
     def games_left(tm, i):
         return sum(1 for j in range(i, ndays) if game(tm, j))
 
-    plan = plan_moves(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left)
-    plan["moves_left"] = moves_left
-    plan["used_known"] = used is not None
-    return {"days": days, "rows": stream_rows(site_data["fas"], game, ndays, standings, games_left), "plan": plan}
+    # the move plan lives in core.py (Game plan); this empty one keeps the page's older Streams card quiet
+    plan = {"base": 0, "total": 0, "gain": 0, "moves": [], "marginal": [], "moves_left": moves_left,
+            "used_known": used is not None}
+    d = {"days": days, "rows": stream_rows(site_data["fas"], game, ndays, standings, games_left), "plan": plan}
+    try:
+        cdays = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
+        d["audit"] = audit(site_data, game, ndays, cdays, standings, starters)
+        d["week"] = week_adds(site_data, game, ndays, cdays, standings, starters)
+        d["whatif"] = whatif_data(site_data, game, ndays, cdays, standings, starters)
+    except Exception as e:
+        print(f"  streams cards failed ({type(e).__name__}: {e})")
+    return d
 
 
-# ---------------------------------------------------------------------------
-# Website patches (exact-match, all-or-nothing)
-# ---------------------------------------------------------------------------
-STREAMS_JS = r"""
-var ST={pos:'All'};
-function streamsRender(){
-  var S=D.streams,h='';
-  if(!S){$('#t-streams').innerHTML='<div class="card">Streaming data is not available right now.</div>';return;}
-  var pl=lkPlan(S.plan);
-  h+='<div class="card"><h2>Best use of your moves this week</h2>'+lkNote(pl);
-  if(!pl.moves.length)h+='<div class="muted">No add is worth a move right now ('+pl.moves_left+' moves left). Your lineup already beats everything available.</div>';
-  else{
-    h+='<div><span class="big">+'+f(pl.gain,1)+'</span> <span class="muted">projected points from '+pl.moves.length+' of your '+pl.moves_left+' remaining moves (about '+f(pl.base,0)+' to '+f(pl.total,0)+' for the rest of the matchup)</span></div>';
-    pl.moves.forEach(function(m,i){
-      h+='<div class="step"><div class="num">'+(i+1)+'</div><div><div><b>'+esc(m.day)+'</b>: add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' game'+(m.games===1?'':'s')+' left)</span>'+(m.waiver?' <span class="warn">on waivers, claim the day before</span>':'')+'</div>'
-      +'<div>drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span></div></div></div>';});
-  }
-  h+='<div class="muted" style="margin-top:8px">The plan checks every free agent on every remaining day against every player you could drop, then picks moves one at a time that add the most points to your best daily lineup. It accounts for how many games each team plays and how tough the opponents are, and stops when a move is not worth it. Your best players (outlook 1.9 or higher) are never suggested as drops, and a move must add at least 1.5 points after allowing for what you give up. '+(pl.used_known?'':'ESPN did not report your adds used, so it assumes none. ')+'Later steps assume the earlier ones were made.</div></div>';
-  h+='<div class="card"><h2>Best skater streams by day</h2><div class="controls"><span id="stPos"></span></div><div class="chips">';
-  S.days.forEach(function(d,i){
-    if(LK.closed(i))return;
-    var list=S.rows.filter(function(r){return r.i===i&&(ST.pos==='All'||r.grp===ST.pos);}).sort(function(a,b){return b.e-a.e;}).slice(0,ST.pos==='All'?8:6);
-    h+='<div class="chip" style="min-width:270px"><div class="d">'+esc(d)+'</div>';
-    if(!list.length)h+='<div class="m muted">No games</div>';
-    list.forEach(function(r){
-      h+='<div class="m"><a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> <span class="muted">'+esc(r.pos)+' '+esc(r.tm)+'</span> '+(r.h?'vs':'@')+' '+esc(r.o)+' <span class="'+(r.tag==='weak'?'good':(r.tag==='strong'?'warn':'muted'))+'">'+(r.tag==='weak'?'soft':(r.tag==='strong'?'tough':'avg'))+'</span> &middot; <b>'+f(r.e,1)+'</b> &middot; '+r.gl+' gm left'+(r.w?' <span class="warn">(waivers)</span>':'')+'</div>';});
-    h+='</div>';});
-  if(LK.first()>=S.days.length)h+='<div class="muted">Every game day left in this matchup week has started, so there is nothing left to add for. Next week\'s streams appear after the next refresh.</div>';
-  h+='</div><div class="muted" style="margin-top:8px">Expected points for that day (outlook adjusted for opponent strength and home ice). Players whose teams play more games this week score higher in the move plan above.</div></div>';
-  $('#t-streams').innerHTML=h;
-  chips('#stPos',['All','F','D'],ST.pos,function(v){ST.pos=v;streamsRender();});
-}
-
-/* ---------- tabs + startup ---------- */"""
-
-JS_PATCHES = [
-    (",'league'];", ",'streams','league'];"),
-    ("/* ---------- tabs + startup ---------- */", STREAMS_JS.lstrip("\n")),
-    ("\nshowTab((location.hash||'').slice(1));", "\nstreamsRender();\nshowTab((location.hash||'').slice(1));"),
-]
-PAGE_PATCHES = [
-    ('<button id="nav-league">League</button>', '<button id="nav-streams">Streams</button><button id="nav-league">League</button>'),
-    ('<section id="t-league" style="display:none">', '<section id="t-streams" style="display:none"></section>\n<section id="t-league" style="display:none">'),
-]
-CSS_PATCHES = [
-    (".me td{font-weight:700}",
-     ".me td{font-weight:700}.step{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line)}"
-     ".step .num{background:var(--accent);color:#fff;border-radius:50%;width:26px;height:26px;display:flex;"
-     "align-items:center;justify-content:center;font-weight:700;flex:none}"),
-]
+def slim_roles(d, p):
+    """Adds role fields to a player's page data (line / PP role, class, ice-time trend, typical points for his role)."""
+    for k in ("rl", "cls", "ev"):
+        if p.get(k) is not None:
+            d[k] = p[k]
+    for k in ("ppu", "tr", "toi5"):
+        if p.get(k) is not None:
+            d[k] = SB.r3(p[k])
+    if p.get("role_prior") is not None:
+        d["rp"] = SB.r3(p["role_prior"])
+    return d
 
 
-def patch_all(js, page, css):
-    """Apply the script, page and style patches together, or none of them."""
-    def one(text, pairs, label):
-        for old, new in pairs:
-            if text.count(old) != 1:
-                print(f"  (streams patch skipped in {label}: '{old[:40]}...' not found once)")
-                return text
-        for old, new in pairs:
-            text = text.replace(old, new)
-        return text
-    nj, npg, nc = one(js, JS_PATCHES, "page script"), one(page, PAGE_PATCHES, "page layout"), one(css, CSS_PATCHES, "styles")
-    if nj != js and npg != page and nc != css:
-        return nj, npg, nc, True
-    print("  streams tab skipped (page code changed)")
-    return js, page, css, False
+def install():
+    STATE["watch"] = load_watchlist()
+    print(f"  streams: this-week-first drops on, {len(STATE['watch'])} on the watch list")

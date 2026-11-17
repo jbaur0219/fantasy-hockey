@@ -19,7 +19,6 @@ import dashboard as D
 import planner as PL
 import starters as S
 import streams as STR
-import streams4 as S4
 
 STATE_FILE = Path(__file__).with_name("plan_state.json")
 LOG_FILE = Path(__file__).with_name("history") / "moves.jsonl"     # every planned move that was made or missed
@@ -133,7 +132,7 @@ def next_week(cfg, data, league, standings, now_ms, site_data):
     ndays = 7
     game = STR.make_game_fn(abbr, games, sp, now_ms)
     days = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
-    S4.STATE["ref"] = 0
+    STR.STATE["ref"] = 0
     nxt = C.team_games(games, abbr, sp + ndays, 7)
     plan = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, {}, PL.MOVE_LIMIT, nxt)
     return {"base": plan["base"], "total": plan["total"], "gain": plan["gain"],

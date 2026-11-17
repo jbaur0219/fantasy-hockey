@@ -10,7 +10,6 @@ Never fails the build: any problem just skips the card.
 import analyze as A
 import dashboard as D
 import streams as STR
-import streams2 as S2
 
 
 def _window(data, standings, sp, ndays, fas, label, first_day):
@@ -20,7 +19,7 @@ def _window(data, standings, sp, ndays, fas, label, first_day):
     clock = D.day_clock_games(games, sp, ndays, 0)
     best = {}
     for p in fas:
-        if p["grp"] == "G" or not S2.add_ok(p):
+        if p["grp"] == "G" or not STR.add_ok(p):
             continue
         best.setdefault(p["tm"], []).append(p)
     rows = []

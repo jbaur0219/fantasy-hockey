@@ -1,25 +1,12 @@
 #!/usr/bin/env python3
 """
-Fantasy Hockey Assistant  (READ-ONLY)
-
-Run:  python3 analyze.py
-
-What it does
-  1. Reads your ESPN league (roster, free agents, NHL schedule) using your login cookies.
-  2. Scores every player in YOUR league's points system.
-  3. Estimates how "lucky" each player has been (shooting % luck) and blends that with
-     ESPN's own projection to get an "outlook" in points per game.
-  4. Flags underperformers / overperformers on your roster.
-  5. Suggests add/drop moves and ranks the best free agents.
-  6. Writes report.html (open it in your browser) and prints a summary.
-
-It NEVER adds, drops, trades or changes your lineup. It only reads.
+ESPN READER + PLAYER BASICS (READ-ONLY): reads your ESPN league (rosters, free agents, NHL schedule) with your login
+cookies, scores every player in your league's points system, and gives each one an "outlook" (expected points per
+game: his luck-adjusted results blended with ESPN's projection). It NEVER adds, drops, trades or changes anything.
 """
-import html
 import json
 import os
 import sys
-from datetime import date
 from pathlib import Path
 
 import requests
@@ -31,9 +18,6 @@ LEAGUE_SHOOTING_PCT = 0.10   # typical NHL shooting percentage
 SHOT_PRIOR = 80              # "how many shots before I trust a player's own shooting %"
 GAMES_PRIOR_SKATER = 15      # how much weight ESPN's projection gets (in games)
 GAMES_PRIOR_GOALIE = 8
-MIN_GAIN_SKATER = 0.20       # only suggest a swap if it gains >= this many pts/game
-MIN_GAIN_GOALIE = 0.60
-MAX_SUGGESTIONS = 5
 FREE_AGENT_LIMIT = 300       # how many free agents/waiver players to look at
 DAYS_AHEAD = 7               # "games in the next N days"
 
@@ -252,161 +236,5 @@ def build_players(data, cfg):
     return mine, fas
 
 
-# ----------------------------------------------------------------------------
-# Recommendations
-# ----------------------------------------------------------------------------
 def slot_name(s):
     return SLOT_NAMES.get(s, "IR")
-
-
-def recommend(mine, fas):
-    moves = []
-    for group, min_gain in (("G", MIN_GAIN_GOALIE), ("D", MIN_GAIN_SKATER), ("F", MIN_GAIN_SKATER)):
-        # Drop candidates: your active (non-IR) players in this group, weakest first.
-        # Only the bottom 3 are considered, so we never suggest dropping a core player.
-        drops = sorted([p for p in mine if p["group"] == group and slot_name(p["slot"]) != "IR"],
-                       key=lambda p: p["outlook"])[:3]
-        adds = sorted([p for p in fas
-                       if p["group"] == group and p["injury"] not in BAD_INJURY and p["g7"] > 0],
-                      key=lambda p: p["outlook"], reverse=True)
-        for add, drop in zip(adds, drops):
-            gain = add["outlook"] - drop["outlook"]
-            if gain >= min_gain:
-                moves.append({"add": add, "drop": drop, "gain": gain,
-                              "week_gain": add["week_pts"] - drop["week_pts"]})
-    moves.sort(key=lambda m: m["week_gain"], reverse=True)
-    return moves[:MAX_SUGGESTIONS]
-
-
-# ----------------------------------------------------------------------------
-# Output
-# ----------------------------------------------------------------------------
-def f(x, d=2):
-    return "-" if x is None else f"{x:.{d}f}"
-
-
-def player_line(p):
-    return f"{p['name']} ({p['pos']}, {p['team']})"
-
-
-def console_report(mine, fas, moves):
-    print(f"\nFANTASY HOCKEY REPORT - {date.today():%b %d, %Y}  (read-only, no changes made)\n")
-    print("YOUR ROSTER (outlook = expected points per game going forward)")
-    print(f"{'Player':<30}{'Slot':<6}{'GP':>4}{'PPG':>6}{'Exp':>6}{'Proj':>6}{'Outlk':>7}{'G7':>4}  Flags")
-    for p in sorted(mine, key=lambda x: (x["group"], -x["outlook"])):
-        print(f"{player_line(p):<30}{slot_name(p['slot']):<6}{int(p['gp']):>4}{f(p['ppg']):>6}"
-              f"{f(p['exp_ppg']):>6}{f(p['proj_ppg']):>6}{f(p['outlook']):>7}{p['g7']:>4}  "
-              f"{'; '.join(p['flags'])}")
-    print("\nSUGGESTED MOVES")
-    if not moves:
-        print("  None - nothing available clearly beats your weakest players.")
-    for m in moves:
-        a, d = m["add"], m["drop"]
-        print(f"  ADD {player_line(a)}  outlook {f(a['outlook'])}, {a['g7']} games   |   "
-              f"DROP {player_line(d)}  outlook {f(d['outlook'])}   "
-              f"=> +{m['gain']:.2f}/game, +{m['week_gain']:.1f} pts next {DAYS_AHEAD} days")
-    print("\nTOP FREE AGENTS BY POSITION")
-    for group in ("G", "D", "F"):
-        top = sorted([p for p in fas if p["group"] == group and p["injury"] not in BAD_INJURY],
-                     key=lambda p: p["outlook"], reverse=True)[:8]
-        print(f"  {group}:")
-        for p in top:
-            print(f"    {player_line(p):<30} outlook {f(p['outlook'])}  games {p['g7']}  "
-                  f"owned {f(p['own'], 0)}%  {p['status'] or ''}")
-
-
-def table(headers, rows):
-    h = "".join(f"<th>{html.escape(x)}</th>" for x in headers)
-    body = "".join("<tr>" + "".join(f"<td>{html.escape(str(c))}</td>" for c in r) + "</tr>" for r in rows)
-    return f"<table><tr>{h}</tr>{body}</table>"
-
-
-def html_report(mine, fas, moves, path="report.html"):
-    css = ("body{font-family:system-ui,sans-serif;margin:24px;color:#222}"
-           "h1{margin-bottom:0}h2{margin-top:32px}table{border-collapse:collapse;margin:8px 0}"
-           "th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;font-size:14px}"
-           "th{background:#f3f3f3}.note{color:#666;font-size:13px}")
-    roster_rows = [[player_line(p), slot_name(p["slot"]), int(p["gp"]), f(p["ppg"]), f(p["exp_ppg"]),
-                    f(p["proj_ppg"]), f(p["outlook"]), p["g7"], "; ".join(p["flags"])]
-                   for p in sorted(mine, key=lambda x: (x["group"], -x["outlook"]))]
-    move_rows = [[player_line(m["add"]), f(m["add"]["outlook"]), m["add"]["g7"],
-                  player_line(m["drop"]), f(m["drop"]["outlook"]),
-                  f"+{m['gain']:.2f}", f"+{m['week_gain']:.1f}"] for m in moves]
-    parts = [f"<html><head><meta charset='utf-8'><title>Fantasy Hockey Report</title>"
-             f"<style>{css}</style></head><body>",
-             f"<h1>Fantasy Hockey Report</h1><p class='note'>{date.today():%A, %B %d, %Y} - "
-             "read-only: nothing has been changed in ESPN.</p>",
-             "<h2>Suggested moves</h2>",
-             table(["Add", "Outlook", f"Games ({DAYS_AHEAD}d)", "Drop", "Outlook", "Gain/game",
-                    f"Gain ({DAYS_AHEAD}d)"], move_rows) if move_rows
-             else "<p>None - nothing available clearly beats your weakest players.</p>",
-             "<h2>Your roster</h2>",
-             "<p class='note'>PPG = actual points/game. Exp = luck-adjusted (shooting % regressed to "
-             "average). Proj = ESPN projection. Outlook = blend, what to expect going forward. "
-             "G7 = games in the next 7 days.</p>",
-             table(["Player", "Slot", "GP", "PPG", "Exp", "Proj", "Outlook", "G7", "Flags"], roster_rows)]
-    for group, label in (("G", "Goalies"), ("D", "Defense"), ("F", "Forwards")):
-        top = sorted([p for p in fas if p["group"] == group and p["injury"] not in BAD_INJURY],
-                     key=lambda p: p["outlook"], reverse=True)[:12]
-        rows = [[player_line(p), f(p["outlook"]), f(p["ppg"]), f(p["proj_ppg"]), int(p["gp"]),
-                 p["g7"], f(p["own"], 0) + "%", p["status"] or "", "; ".join(p["flags"])] for p in top]
-        parts += [f"<h2>Best free agents - {label}</h2>",
-                  table(["Player", "Outlook", "PPG", "Proj", "GP", "G7", "Owned", "Status", "Flags"], rows)]
-    parts.append("</body></html>")
-    Path(path).write_text("".join(parts), encoding="utf-8")
-    return path
-
-
-def markdown_report(mine, fas, moves):
-    """Plain-text-friendly version of the report (shown on GitHub's run page)."""
-    def row(cells):
-        return "| " + " | ".join(str(c) for c in cells) + " |"
-    L = [f"# Fantasy Hockey Report - {date.today():%A, %B %d, %Y}",
-         "_Read-only: nothing was changed in ESPN._", "", "## Suggested moves"]
-    if moves:
-        L += [row(["Add", "Outlook", "Games", "Drop", "Outlook", "Gain/game", f"Gain ({DAYS_AHEAD}d)"]),
-              row(["---"] * 7)]
-        for m in moves:
-            a, d = m["add"], m["drop"]
-            L.append(row([player_line(a), f(a["outlook"]), a["g7"], player_line(d), f(d["outlook"]),
-                          f"+{m['gain']:.2f}", f"+{m['week_gain']:.1f}"]))
-    else:
-        L.append("None - nothing available clearly beats your weakest players.")
-    L += ["", "## Your roster",
-          row(["Player", "Slot", "GP", "PPG", "Exp", "Proj", "Outlook", "G7", "Flags"]), row(["---"] * 9)]
-    for p in sorted(mine, key=lambda x: (x["group"], -x["outlook"])):
-        L.append(row([player_line(p), slot_name(p["slot"]), int(p["gp"]), f(p["ppg"]), f(p["exp_ppg"]),
-                      f(p["proj_ppg"]), f(p["outlook"]), p["g7"], "; ".join(p["flags"])]))
-    for group, label in (("G", "Goalies"), ("D", "Defense"), ("F", "Forwards")):
-        top = sorted([p for p in fas if p["group"] == group and p["injury"] not in BAD_INJURY],
-                     key=lambda p: p["outlook"], reverse=True)[:10]
-        L += ["", f"## Best free agents - {label}",
-              row(["Player", "Outlook", "PPG", "Proj", "GP", "G7", "Owned", "Status", "Flags"]), row(["---"] * 9)]
-        for p in top:
-            L.append(row([player_line(p), f(p["outlook"]), f(p["ppg"]), f(p["proj_ppg"]), int(p["gp"]),
-                          p["g7"], f(p["own"], 0) + "%", p["status"] or "", "; ".join(p["flags"])]))
-    return "\n".join(L) + "\n"
-
-
-def main():
-    cfg = get_config()
-    print("Reading your ESPN league...")
-    data = fetch_all(cfg)
-    mine, fas = build_players(data, cfg)
-    if not mine:
-        sys.exit("Couldn't find your team. Check LEAGUE_ID and TEAM_ID in .env.")
-    moves = recommend(mine, fas)
-    console_report(mine, fas, moves)
-    path = html_report(mine, fas, moves)
-    summary = markdown_report(mine, fas, moves)
-    Path("report.md").write_text(summary, encoding="utf-8")
-    # When running on GitHub, this puts the report right on the run's page.
-    gh = os.environ.get("GITHUB_STEP_SUMMARY")
-    if gh:
-        with open(gh, "a", encoding="utf-8") as fh:
-            fh.write(summary)
-    print(f"\nSaved {path} (and report.md) - open report.html in your browser for the full report.")
-
-
-if __name__ == "__main__":
-    main()

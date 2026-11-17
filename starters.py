@@ -27,7 +27,6 @@ import enrich as E
 URL = "https://www.dailyfaceoff.com/starting-goalies"
 REV = {v: k for k, v in D.NHL_ABBR.items()}          # NHL-style abbreviation -> ESPN-style
 STATE = {"by_team": {}}
-_orig_goalie_decisions = D.goalie_decisions
 _orig_alerts = D.lineup_alerts
 PREV = {}
 CACHE_FILE = Path(__file__).with_name("cache") / "df_starters.json"
@@ -102,24 +101,6 @@ def _is_starter(p):
     return None if not s else E.norm(s["name"]) == E.norm(p["name"])
 
 
-def _goalie_decisions(mine, sp, games, abbr, standings, now_ms):
-    out = _orig_goalie_decisions(mine, sp, games, abbr, standings, now_ms)
-    today = D.fmt_game(now_ms)[0]
-    for gd in out:
-        p = gd["p"]
-        s = STATE["by_team"].get(p["team"])
-        if not s:
-            continue
-        for r in gd["rows"]:
-            if r["day"] != today or r["cls"] == "done":
-                continue
-            if _is_starter(p):
-                r["verdict"] = f"{r['verdict']} - {s['status'].upper()}"
-            else:
-                r["verdict"], r["cls"], r["e"] = f"NOT STARTING ({s['name'].split()[-1]} in net)", "done", 0.0
-    return out
-
-
 def _start_prob(p, standings):
     base = PREV["sp"](p, standings)
     return max(base, 0.6) if _is_starter(p) else base
@@ -146,6 +127,5 @@ def install(by_team):
     if not by_team:
         return
     PREV["sp"] = D.start_prob                          # keep the NHL games-started version if it is installed
-    D.goalie_decisions = _goalie_decisions
     D.start_prob = _start_prob
     D.lineup_alerts = _alerts

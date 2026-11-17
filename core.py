@@ -24,8 +24,6 @@ import time
 import analyze as A
 import dashboard as D
 import streams as STR
-import streams2 as S2
-import streams4 as S4
 
 INF = STR.INF
 NEXT_WEEK_SHARE = 0.7     # you could still fix things next week with a move, so next week counts at 70%
@@ -46,7 +44,7 @@ def per_game(p):
     """Expected points per game going forward (goalies: per team game, so start chance is included)."""
     if p["grp"] == "G":
         return (p.get("out") or 0.0) * (p.get("sp") or 0.5)
-    return S4.eff_out(p)
+    return STR.eff_out(p)
 
 
 def next_week_pts(p, nxt_games):
@@ -221,16 +219,16 @@ def build_inputs(mine, fas, game, ndays, standings, starters):
                                         lineup_goalie=(p["grp"] == "G" and p["slot"] == "G")),
                 "grp": p["grp"], "join": 0, "leave": INF} for p in mine if p["slot"] != "IR"]
     cand = [{"p": p, "v": STR.values(p, game, ndays, standings, starters), "grp": p["grp"],
-             "waiver": p.get("st") == "WAIVERS"} for p in fas if S2.add_ok(p)]
+             "waiver": p.get("st") == "WAIVERS"} for p in fas if STR.add_ok(p)]
     sk = sorted((x for x in cand if x["grp"] != "G"), key=lambda x: -sum(x["v"]))[:POOL_SK]
     gk = sorted((x for x in cand if x["grp"] == "G"), key=lambda x: -sum(x["v"]))[:POOL_G]
     pool = [x for x in sk + gk if sum(x["v"]) > 0]
-    ref = max([S4.STATE["ref"]] + [sum(1 for v in e["v"] if v > 0) for e in entries + pool if e["grp"] != "G"])
+    ref = max([STR.STATE["ref"]] + [sum(1 for v in e["v"] if v > 0) for e in entries + pool if e["grp"] != "G"])
     base = []
     for e in entries:
         gl = sum(1 for v in e["v"] if v > 0)
-        ok, bar = S4.drop_rule(e["p"], gl, ref)
-        base.append({"g": e["grp"], "v": e["v"], "ok": ok, "bar": bar or S4.MIN_GAIN, "p": e["p"], "e": e})
+        ok, bar = STR.drop_rule(e["p"], gl, ref)
+        base.append({"g": e["grp"], "v": e["v"], "ok": ok, "bar": bar or STR.MIN_GAIN, "p": e["p"], "e": e})
     return entries, base, [{"g": x["grp"], "v": x["v"], "waiver": x["waiver"], "p": x["p"], "x": x} for x in pool]
 
 
@@ -284,7 +282,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
               "games": sum(1 for i in range(t, ndays) if x["v"][i] > 0), "waiver": x["waiver"], "tier": tier,
               "kept": (xi, t, yi) in keep}
         if reasons:
-            mv["why_add"] = S2._why_add(x, ents, y, t, ndays, days, game, standings)
+            mv["why_add"] = STR._why_add(x, ents, y, t, ndays, days, game, standings)
             mv["why_drop"] = why_drop(y, t, ndays, c, nxt_games, x["p"])
         out.append(mv)
         y["leave"] = t
@@ -302,14 +300,14 @@ def why_drop(y, t, ndays, c, nxt_games, xp):
         out.append(f"{p['n']} is listed {p['inj'].replace('_', ' ').lower()}, so he is not scoring for you.")
     else:
         where = "on your bench" if p["slot"] == "BN" else f"in your {p['slot']} slot"
-        role = S2._role_text(p)
+        role = STR._role_text(p)
         out.append(f"{p['n']} ({role}), currently {where}.")
         if p.get("ppg") is not None:
             out.append(f"Scoring {p['ppg']:.2f} pts/game this season"
                        + (f" ({p['rec']:.2f} over the last 15 days)" if p.get("rec") is not None else "") + ".")
         out.append("No games left this week from that day on." if gl == 0 else
                    (f"Only {gl} game{'s' if gl != 1 else ''} left this week." if gl <= 2 else f"{gl} games left this week."))
-        out += [r for r in S4._drop_reasons(p, gl, S4.STATE["ref"]) if not r.startswith("Light week")][:2]
+        out += [r for r in STR._drop_reasons(p, gl, STR.STATE["ref"]) if not r.startswith("Light week")][:2]
         ny, nx = nxt_games.get(p["tm"], 0), nxt_games.get(xp["tm"], 0)
         if c >= 0.05:
             out.append(f"Long-term cost already counted: about {c:.1f} pts (next week he has {ny} game{'s' if ny != 1 else ''}, "
