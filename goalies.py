@@ -19,7 +19,9 @@ def _status(p, i, sp_chance):
     if s:
         if E.norm(s["name"]) == E.norm(p["name"]):
             st = s.get("status") or "Unconfirmed"
-            return 1.0, ("confirmed starter" if st == "Confirmed" else f"expected to start ({st.lower()}, not confirmed yet)"), True
+            if st == "Confirmed":
+                return 1.0, "confirmed starter", True
+            return 1.0, ("likely starter, not confirmed yet" if st == "Likely" else "expected starter, not confirmed yet"), True
         return 0.0, f"not starting ({s['name'].split()[-1]} in net)", True
     if sp_chance >= 0.6:
         return sp_chance, "usual starter", False
