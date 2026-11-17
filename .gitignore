@@ -1,4 +1,4 @@
 __pycache__/
-site/
-snapshot.json.gz
-notify_payload.json
+/site/
+/snapshot.json.gz
+/notify_payload.json
