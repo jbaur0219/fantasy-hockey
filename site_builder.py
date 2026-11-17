@@ -328,30 +328,64 @@ function blockRender(){
 var BC={};
 function lineupBase(key,players){if(BC[key]==null)BC[key]=lineup(players);return BC[key];}
 function okP(p){return p.slot!=='IR'&&!isInj(p);}
+function topFA(){
+  if(BC.fa)return BC.fa;var o={};
+  ['F','D','G'].forEach(function(g){o[g]=D.fas.filter(function(p){return p.grp===g&&!isInj(p);}).sort(function(a,b){return val(b)-val(a);})[0];});
+  return BC.fa=o;
+}
+/* best lineup after also picking up the best free agent for each spot a trade frees up */
+function lineupWithFA(ps,spots){
+  var best=lineup(ps);
+  if(spots<=0)return best;
+  var fa=topFA();
+  ['F','D','G'].forEach(function(g){if(fa[g]){var v=lineup(ps.concat([fa[g]]));if(v>best)best=v;}});
+  return best;
+}
 function swapEval(give,thTeam,get){
   var mine=D.mine,theirs=thTeam.players;
-  var myAfter=mine.filter(function(p){return p.id!==give.id;}).concat([get]);
-  var thAfter=theirs.filter(function(p){return p.id!==get.id;}).concat([give]);
+  var gi=give.map(function(p){return p.id;}),ge=get.map(function(p){return p.id;});
+  var myAfter=mine.filter(function(p){return gi.indexOf(p.id)<0;}).concat(get);
+  var thAfter=theirs.filter(function(p){return ge.indexOf(p.id)<0;}).concat(give);
   return {give:give,get:get,team:thTeam,
-    d1:lineup(myAfter)-lineupBase('me',mine),d2:lineup(thAfter)-lineupBase('t'+thTeam.id,theirs)};
+    d1:lineupWithFA(myAfter,give.length-get.length)-lineupBase('me',mine),
+    d2:lineupWithFA(thAfter,get.length-give.length)-lineupBase('t'+thTeam.id,theirs)};
 }
+function topN(ps,n){return ps.filter(okP).sort(function(a,b){return val(b)-val(a);}).slice(0,n);}
+function pairs(ps){var o=[];for(var i=0;i<ps.length;i++)for(var j=i+1;j<ps.length;j++)o.push([ps[i],ps[j]]);return o;}
 function suggestFor(p){
   var ot=ownerTeam(p.id);if(!ot)return null;
-  var rows=[];
+  var rows=[],myOk=D.mine.filter(okP);
   if(ot.me){
-    D.teams.forEach(function(t){if(t.me)return;t.players.forEach(function(q){if(okP(q))rows.push(swapEval(p,t,q));});});
+    D.teams.forEach(function(t){
+      if(t.me)return;
+      var cand=topN(t.players,10);
+      t.players.forEach(function(q){if(okP(q))rows.push(swapEval([p],t,[q]));});            /* 1-for-1 */
+      cand.forEach(function(q){myOk.forEach(function(m){if(m.id!==p.id)rows.push(swapEval([p,m],t,[q]));});});   /* you give 2, get 1 */
+      pairs(cand).forEach(function(c){rows.push(swapEval([p],t,c));});                       /* you give 1, get 2 */
+    });
   }else{
-    D.mine.forEach(function(m){if(okP(m))rows.push(swapEval(m,ot,p));});
+    var cand=topN(ot.players,10).filter(function(q){return q.id!==p.id;}),mo=topN(D.mine,12);
+    myOk.forEach(function(m){rows.push(swapEval([m],ot,[p]));});
+    pairs(mo).forEach(function(c){rows.push(swapEval(c,ot,[p]));});
+    mo.forEach(function(m){cand.forEach(function(q){rows.push(swapEval([m],ot,[p,q]));});});
   }
-  rows.forEach(function(r){r.blk=onBlock(r.get)||onBlock(r.give);r.sc=r.d1+(r.blk?1:0);});
-  var wins=rows.filter(function(r){return r.d1>=0.5&&r.d2>=0.5;}).sort(function(a,b){return b.sc-a.sc;});
-  var tilt=rows.filter(function(r){return r.d1>=0.5&&r.d2<0.5&&r.d2>-1.5;}).sort(function(a,b){return b.sc-a.sc;});
-  return {mine:!!ot.me,owner:ot,wins:wins.slice(0,6),tilt:tilt.slice(0,4)};
+  rows.forEach(function(r){
+    r.blk=r.give.concat(r.get).some(onBlock);r.sc=r.d1+(r.blk?1:0)-(r.give.length+r.get.length>2?0.3:0);
+    r.kind=r.give.length+'-for-'+r.get.length;
+  });
+  function pick(list,n){   /* best few, at most 3 of the same kind so 1-for-1 and 2-for-1 both show up */
+    var cnt={},o=[];list.sort(function(a,b){return b.sc-a.sc;}).forEach(function(r){
+      if(o.length>=n||(cnt[r.kind]||0)>=3)return;cnt[r.kind]=(cnt[r.kind]||0)+1;o.push(r);});return o;}
+  var wins=pick(rows.filter(function(r){return r.d1>=0.5&&r.d2>=0.5;}),7);
+  var tilt=pick(rows.filter(function(r){return r.d1>=0.5&&r.d2<0.5&&r.d2>-1.5;}),5);
+  return {mine:!!ot.me,owner:ot,wins:wins,tilt:tilt};
 }
+function plist(ps){return ps.map(pl2).join(' + ');}
 function sugRow(r){
-  return '<div class="tfr"><div class="sm"><b>Give</b> '+pl2(r.give)+' <b>for</b> '+pl2(r.get)+'<div class="muted">'+esc(r.team.name)+(r.blk?' &middot; <span class="tag">on block</span>':'')+'</div></div>'
+  var net=r.get.length-r.give.length,note=net>0?' &middot; <span class="muted">you would need to drop '+net+'</span>':(net<0?' &middot; <span class="muted">frees a roster spot (counts your best free agent)</span>':'');
+  return '<div class="tfr"><div class="sm"><span class="tag" style="background:var(--accent)">'+r.kind+'</span> <b>Give</b> '+plist(r.give)+' <b>for</b> '+plist(r.get)+'<div class="muted">'+esc(r.team.name)+(r.blk?' &middot; <span class="tag">on block</span>':'')+note+'</div></div>'
     +'<div class="sr"><span>You '+delta(r.d1)+' <span class="muted">/ them</span> '+delta(r.d2)+' <span class="muted">pts/wk</span></span>'
-    +'<button type="button" class="chip-btn" data-open="'+r.give.id+','+r.get.id+','+r.team.id+'">Open in lab</button></div></div>';
+    +'<button type="button" class="chip-btn" data-open="'+r.give.map(function(p){return p.id;}).join('+')+','+r.get.map(function(p){return p.id;}).join('+')+','+r.team.id+'">Open in lab</button></div></div>';
 }
 function finderRender(){
   var res=$('#finderRes'),out=$('#finderOut'),q=TF.q.trim().toLowerCase(),h='';
@@ -367,15 +401,16 @@ function finderRender(){
   var S=suggestFor(p),t='';
   t+='<div class="verdict">'+(S.mine?'Where could you move ':'What could you offer for ')+esc(p.n)+'?'+(onBlock(p)?' <span class="tag">on '+esc(S.owner.name)+'\'s block</span>':'')+'</div>';
   if(S.wins.length){t+='<div class="tfh">Win-win swaps (help both lineups)</div>'+S.wins.map(sugRow).join('');}
-  else t+='<div class="muted" style="margin-top:8px">No one-for-one swap helps both lineups right now.</div>';
+  else t+='<div class="muted" style="margin-top:8px">No trade I tried helps both lineups right now.</div>';
   if(S.tilt.length)t+='<div class="tfh">Helps you more (they may want a sweetener)</div>'+S.tilt.map(sugRow).join('');
-  t+='<div class="muted" style="margin-top:8px">One-for-one swaps only, using the same weekly-points estimate as the Trade lab below. Players on a manager\'s block are ranked higher. Open in lab to tweak a deal.</div>';
+  t+='<div class="muted" style="margin-top:8px">Includes 1-for-1, 2-for-1 and 1-for-2 deals, using the same weekly-points estimate as the Trade lab below (a freed roster spot is filled with the best free agent). Players on a manager\'s block are ranked higher. Open in lab to tweak a deal.</div>';
   out.innerHTML=t;
 }
 function openInLab(give,get,tid){
+  give=[].concat(give);get=[].concat(get);
   $('#tradeTeam').value=String(tid);tradeTeam();
-  $$('#giveList input').forEach(function(c){c.checked=(+c.value===give);});
-  $$('#getList input').forEach(function(c){c.checked=(+c.value===get);});
+  $$('#giveList input').forEach(function(c){c.checked=give.indexOf(+c.value)>=0;});
+  $$('#getList input').forEach(function(c){c.checked=get.indexOf(+c.value)>=0;});
   runTrade();
   var el=$('#tradeOut');if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'center'});
 }
@@ -392,7 +427,7 @@ function tradeInit(){
     var b=e.target.closest?e.target.closest('[data-tf],[data-open]'):null;if(!b)return;
     if(b.hasAttribute('data-tf')){TF.id=+b.getAttribute('data-tf');TF.q='';$('#finderQ').value='';finderRender();
       var c=$('#finderOut');if(c&&c.scrollIntoView)c.scrollIntoView({behavior:'smooth',block:'start'});}
-    else{var a=b.getAttribute('data-open').split(',').map(Number);openInLab(a[0],a[1],a[2]);}
+    else{var pr=b.getAttribute('data-open').split(',');openInLab(pr[0].split('+').map(Number),pr[1].split('+').map(Number),+pr[2]);}
   });
 }
 
