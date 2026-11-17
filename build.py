@@ -32,6 +32,7 @@ import playercard as PC
 import streams as STR
 import site_builder as SB
 import starters as S
+import netcache as NC
 
 _base_slim = SB.slim
 EXTRA = ("toi", "pp", "ixg", "gx", "xgf", "gs", "qs", "gsax", "h60", "b60", "own_chg")
@@ -251,6 +252,14 @@ def write_notify_payload(site_data, now_ms):
 
 
 def main():
+    NC.install()
+    try:
+        _main()
+    finally:
+        NC.save()
+
+
+def _main():
     cfg = A.get_config()
     print("Reading your ESPN league...")
     data = A.fetch_all(cfg)
@@ -306,7 +315,7 @@ def main():
     SB.JS, SB.PAGE, SB.CSS, _ui_ok = UI.apply(SB.JS, SB.PAGE, SB.CSS)      # grouped tabs, photos, contrast (cosmetic only)
     SB.JS, SB.CSS, _pc_ok = PC.apply(SB.JS, SB.CSS)                         # cleaner player card popup (cosmetic only)
 
-    now_ms = int(time.time() * 1000)
+    now_ms = NC.now_ms()
     site_data = SB.build_site_data(cfg, data, league, standings, now_ms)
     try:
         _m = site_data.get("matchup")

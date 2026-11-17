@@ -10,6 +10,10 @@ on:
         description: "Why this run was started (the checker fills this in)"
         required: false
         default: "manual"
+      mode:
+        description: "live = build and publish; preview = build only and save it to the branch for review"
+        required: false
+        default: "live"
 
 permissions:
   contents: write
@@ -17,8 +21,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: ${{ github.event.inputs.mode == 'preview' && 'preview' || 'pages' }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -32,12 +36,26 @@ jobs:
       - name: Let final stats settle after the last game
         if: startsWith(github.event.inputs.reason, 'post-game')
         run: sleep 600
+      - name: Use the live locked plan (preview builds only)
+        if: github.event.inputs.mode == 'preview'
+        run: git fetch --depth=1 origin main && git show origin/main:plan_state.json > plan_state.json || true
       - name: Interactive site with deeper stats
         run: python build.py
         env:
+          FH_RECORD: snapshot.json.gz
           ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
+      - name: Save the preview to the branch
+        if: github.event.inputs.mode == 'preview'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -- plan_state.json || true
+          rm -rf preview && mkdir preview && cp -r site/. preview/ && cp snapshot.json.gz preview/
+          git add preview
+          git commit -m "Preview build" && git push origin HEAD:${{ github.ref_name }}
       - name: Save the locked weekly plan
+        if: github.event.inputs.mode != 'preview'
         continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
@@ -54,13 +72,17 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dashboard
-          path: site/
+          path: |
+            site/
+            snapshot.json.gz
       - uses: actions/upload-pages-artifact@v3
+        if: github.event.inputs.mode != 'preview'
         with:
           path: site/
 
   deploy:
     needs: build
+    if: github.event.inputs.mode != 'preview'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
