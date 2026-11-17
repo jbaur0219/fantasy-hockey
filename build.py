@@ -28,6 +28,7 @@ import gameplan as GP
 import weekplan as WK
 import optimizer as OPT
 import edge as EDG
+import playercard as PC
 import streams as STR
 import site_builder as SB
 import starters as S
@@ -303,6 +304,7 @@ def main():
     SB.PAGE = patch_text(SB.PAGE, _pp, "phone app layout")
     SB.JS = patch_text(SB.JS, _pj, "phone app script")
     SB.JS, SB.PAGE, SB.CSS, _ui_ok = UI.apply(SB.JS, SB.PAGE, SB.CSS)      # grouped tabs, photos, contrast (cosmetic only)
+    SB.JS, SB.CSS, _pc_ok = PC.apply(SB.JS, SB.CSS)                         # cleaner player card popup (cosmetic only)
 
     now_ms = int(time.time() * 1000)
     site_data = SB.build_site_data(cfg, data, league, standings, now_ms)
