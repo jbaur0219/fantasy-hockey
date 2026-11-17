@@ -63,9 +63,9 @@
     "pos": "RW",
     "tm": "WSH"
    },
-   "gain": 2.49,
+   "gain": 2.45,
    "games": 4,
-   "net": 2.49,
+   "net": 2.45,
    "t": 0,
    "tier": "make",
    "waiver": false
@@ -94,6 +94,50 @@
   },
   {
    "add": {
+    "id": 5291952,
+    "n": "Victor Eklund",
+    "pos": "LW",
+    "tm": "NYI"
+   },
+   "cost": 0.0,
+   "day": "Tue Nov 17",
+   "drop": {
+    "id": 5149155,
+    "n": "Will Smith",
+    "pos": "RW",
+    "tm": "SJ"
+   },
+   "gain": 1.29,
+   "games": 3,
+   "net": 1.29,
+   "t": 0,
+   "tier": "make",
+   "waiver": false
+  },
+  {
+   "add": {
+    "id": 4697399,
+    "n": "Kaiden Guhle",
+    "pos": "D",
+    "tm": "MTL"
+   },
+   "cost": 0.0,
+   "day": "Wed Nov 18",
+   "drop": {
+    "id": 5149186,
+    "n": "Zach Benson",
+    "pos": "LW",
+    "tm": "BUF"
+   },
+   "gain": 0.59,
+   "games": 3,
+   "net": 0.59,
+   "t": 1,
+   "tier": "optional",
+   "waiver": false
+  },
+  {
+   "add": {
     "id": 4233643,
     "n": "Filip Chytil",
     "pos": "C",
@@ -107,9 +151,9 @@
     "pos": "C",
     "tm": "PHI"
    },
-   "gain": 2.2,
+   "gain": 2.1,
    "games": 3,
-   "net": 2.2,
+   "net": 2.1,
    "t": 2,
    "tier": "make",
    "waiver": false
@@ -121,7 +165,7 @@
     "pos": "RW",
     "tm": "VAN"
    },
-   "cost": 0.414,
+   "cost": 0.362,
    "day": "Sun Nov 22",
    "drop": {
     "id": 4697387,
@@ -129,14 +173,14 @@
     "pos": "D",
     "tm": "PHI"
    },
-   "gain": 1.74,
+   "gain": 1.75,
    "games": 1,
-   "net": 1.33,
+   "net": 1.39,
    "t": 5,
    "tier": "make",
    "waiver": false
   }
  ],
  "mp": 8,
- "updated": 1794936231350
+ "updated": 1794945896533
 }
