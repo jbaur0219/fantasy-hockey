@@ -97,7 +97,8 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
     if healthy:
         new = [("done", m) for k, m in done.items() if k not in {(x["add"]["id"], x["drop"]["id"]) for x in state.get("done", [])}]
         new += [("missed", m) for k, m in missed.items() if k not in {(x["add"]["id"], x["drop"]["id"]) for x in state.get("missed", [])}]
-        if new:
+        import netcache
+        if new and netcache.STATE["mode"] != "replay":            # test replays never write the log
             LOG_FILE.parent.mkdir(exist_ok=True)
             with LOG_FILE.open("a", encoding="utf-8") as f:
                 for kind, m in new:
