@@ -58,8 +58,10 @@ def build_site_data(cfg, data, league, standings, now_ms):
             p["g7"] = g7map.get(p["team_id"], 0)
         m = meta.get(tid, {})
         w, l, ti, pf = D.record_of(m)
+        tb = (t.get("tradeBlock") or m.get("tradeBlock") or {}).get("players") or {}
+        block = [int(k) for k, v in tb.items() if v == "ON_THE_BLOCK"]      # NORMAL = not actually offered
         teams.append({"id": tid, "name": D.team_label(m) if m else f"Team {tid}", "rec": f"{w}-{l}-{ti}",
-                      "w": w, "pf": r3(pf), "me": tid == cfg["team"],
+                      "w": w, "pf": r3(pf), "me": tid == cfg["team"], "block": block,
                       "players": [slim(p, standings) for p in players]})
 
     return {
@@ -127,6 +129,10 @@ input[type=text],select{background:var(--card);color:var(--text);border:1px soli
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
 .cell{border:1px solid var(--line);border-radius:8px;padding:8px}.cell .k{font-size:11px;color:var(--muted)}.cell .v{font-weight:700;font-size:16px}
 .me td{font-weight:700}
+.tfr{display:flex;gap:10px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding:9px 0;flex-wrap:wrap}
+.tfr:first-of-type{border-top:0}.tfr .sm{flex:1;min-width:200px}.tfr .sr{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.tfh{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:12px 0 2px}
+.tfres{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.tag{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;background:var(--amber);color:#fff}
 """
 
 JS = r"""
@@ -270,9 +276,11 @@ function faRender(){
 }
 
 /* ---------- trade lab ---------- */
+function ownerTeam(id){return D.teams.filter(function(t){return t.players.some(function(x){return x.id===id;});})[0];}
+function onBlock(p){var t=ownerTeam(p.id);return !!(t&&!t.me&&t.block&&t.block.indexOf(p.id)>=0);}
 function listHtml(ps){
   return ps.slice().sort(function(a,b){return b.out-a.out;}).map(function(p){
-    return '<label class="opt"><input type="checkbox" value="'+p.id+'"> '+esc(p.n)+' <span class="muted">'+esc(p.pos)+' &middot; '+f(p.out)+(p.slot==='IR'?' &middot; IR':'')+'</span></label>';}).join('');
+    return '<label class="opt"><input type="checkbox" value="'+p.id+'"> '+esc(p.n)+' <span class="muted">'+esc(p.pos)+' &middot; '+f(p.out)+(p.slot==='IR'?' &middot; IR':'')+'</span>'+(onBlock(p)?' <span class="tag">on block</span>':'')+'</label>';}).join('');
 }
 function theTeam(){var id=$('#tradeTeam').value;return D.teams.filter(function(t){return String(t.id)===id;})[0];}
 function checked(sel){return $$(sel+' input:checked').map(function(c){return +c.value;});}
@@ -298,6 +306,79 @@ function runTrade(){
   out.innerHTML='<div class="res">'+box('You: weekly points',f(b1,1)+' to '+f(a1,1)+' '+delta(d1))+box(esc(t.name)+': weekly points',f(b2,1)+' to '+f(a2,1)+' '+delta(d2))+'</div><div class="verdict">'+esc(v)+'</div>'+note
   +'<div class="muted" style="margin-top:8px">Approximate: best lineup using each player outlook times games in the next 7 days. Does not account for positional scarcity or what they actually need.</div>';
 }
+/* ---------- trading block + trade finder ---------- */
+var TF={id:null,q:''};
+function pl2(p){return '<a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">'+esc(p.pos)+'</span>';}
+function blockRender(){
+  var h='',n=0;
+  D.teams.forEach(function(t){
+    if(t.me||!t.block||!t.block.length)return;
+    var ps=t.players.filter(function(p){return t.block.indexOf(p.id)>=0;});
+    if(!ps.length)return;
+    n+=ps.length;
+    h+='<div class="tfh">'+esc(t.name)+'</div>';
+    ps.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
+      h+='<div class="tfr"><div class="sm">'+pl2(p)+' <span class="muted">'+esc(p.tm)+'</span><div class="muted">'+f(p.out)+' pts/game outlook &middot; '+p.g7+' games next 7 days</div></div>'
+        +'<div class="sr"><button type="button" class="chip-btn" data-tf="'+p.id+'">Find offers</button></div></div>';});
+  });
+  if(!n)h='<div class="muted">Nobody in your league has players on the trading block right now.</div>';
+  else h+='<div class="muted" style="margin-top:8px">These are the players other managers have marked as available in ESPN. Tap Find offers to see trades that would help you without hurting them.</div>';
+  $('#blockOut').innerHTML=h;
+}
+var BC={};
+function lineupBase(key,players){if(BC[key]==null)BC[key]=lineup(players);return BC[key];}
+function okP(p){return p.slot!=='IR'&&!isInj(p);}
+function swapEval(give,thTeam,get){
+  var mine=D.mine,theirs=thTeam.players;
+  var myAfter=mine.filter(function(p){return p.id!==give.id;}).concat([get]);
+  var thAfter=theirs.filter(function(p){return p.id!==get.id;}).concat([give]);
+  return {give:give,get:get,team:thTeam,
+    d1:lineup(myAfter)-lineupBase('me',mine),d2:lineup(thAfter)-lineupBase('t'+thTeam.id,theirs)};
+}
+function suggestFor(p){
+  var ot=ownerTeam(p.id);if(!ot)return null;
+  var rows=[];
+  if(ot.me){
+    D.teams.forEach(function(t){if(t.me)return;t.players.forEach(function(q){if(okP(q))rows.push(swapEval(p,t,q));});});
+  }else{
+    D.mine.forEach(function(m){if(okP(m))rows.push(swapEval(m,ot,p));});
+  }
+  rows.forEach(function(r){r.blk=onBlock(r.get)||onBlock(r.give);r.sc=r.d1+(r.blk?1:0);});
+  var wins=rows.filter(function(r){return r.d1>=0.5&&r.d2>=0.5;}).sort(function(a,b){return b.sc-a.sc;});
+  var tilt=rows.filter(function(r){return r.d1>=0.5&&r.d2<0.5&&r.d2>-1.5;}).sort(function(a,b){return b.sc-a.sc;});
+  return {mine:!!ot.me,owner:ot,wins:wins.slice(0,6),tilt:tilt.slice(0,4)};
+}
+function sugRow(r){
+  return '<div class="tfr"><div class="sm"><b>Give</b> '+pl2(r.give)+' <b>for</b> '+pl2(r.get)+'<div class="muted">'+esc(r.team.name)+(r.blk?' &middot; <span class="tag">on block</span>':'')+'</div></div>'
+    +'<div class="sr"><span>You '+delta(r.d1)+' <span class="muted">/ them</span> '+delta(r.d2)+' <span class="muted">pts/wk</span></span>'
+    +'<button type="button" class="chip-btn" data-open="'+r.give.id+','+r.get.id+','+r.team.id+'">Open in lab</button></div></div>';
+}
+function finderRender(){
+  var res=$('#finderRes'),out=$('#finderOut'),q=TF.q.trim().toLowerCase(),h='';
+  if(q.length>=2){
+    var hits=[];
+    D.teams.forEach(function(t){t.players.forEach(function(p){if(p.n.toLowerCase().indexOf(q)>=0)hits.push({p:p,t:t});});});
+    hits=hits.slice(0,8);
+    h=hits.length?hits.map(function(x){return '<button type="button" class="chip-btn" data-tf="'+x.p.id+'">'+esc(x.p.n)+' <span class="muted">'+esc(x.p.pos)+' &middot; '+(x.t.me?'your team':esc(x.t.name))+'</span></button>';}).join(''):'<span class="muted">No players found.</span>';
+  }
+  res.innerHTML=h;
+  var p=TF.id?ALL[TF.id]:null;
+  if(!p||!ownerTeam(p.id)){out.innerHTML='<div class="muted">Search for a player on your team (to see who could take him and what you could ask for) or on another team (to see what you could offer for him).</div>';return;}
+  var S=suggestFor(p),t='';
+  t+='<div class="verdict">'+(S.mine?'Where could you move ':'What could you offer for ')+esc(p.n)+'?'+(onBlock(p)?' <span class="tag">on '+esc(S.owner.name)+'\'s block</span>':'')+'</div>';
+  if(S.wins.length){t+='<div class="tfh">Win-win swaps (help both lineups)</div>'+S.wins.map(sugRow).join('');}
+  else t+='<div class="muted" style="margin-top:8px">No one-for-one swap helps both lineups right now.</div>';
+  if(S.tilt.length)t+='<div class="tfh">Helps you more (they may want a sweetener)</div>'+S.tilt.map(sugRow).join('');
+  t+='<div class="muted" style="margin-top:8px">One-for-one swaps only, using the same weekly-points estimate as the Trade lab below. Players on a manager\'s block are ranked higher. Open in lab to tweak a deal.</div>';
+  out.innerHTML=t;
+}
+function openInLab(give,get,tid){
+  $('#tradeTeam').value=String(tid);tradeTeam();
+  $$('#giveList input').forEach(function(c){c.checked=(+c.value===give);});
+  $$('#getList input').forEach(function(c){c.checked=(+c.value===get);});
+  runTrade();
+  var el=$('#tradeOut');if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'center'});
+}
 function tradeInit(){
   var sel=$('#tradeTeam');
   sel.innerHTML=D.teams.filter(function(t){return !t.me;}).map(function(t){return '<option value="'+t.id+'">'+esc(t.name)+'</option>';}).join('');
@@ -305,6 +386,14 @@ function tradeInit(){
   sel.addEventListener('change',tradeTeam);
   $('#giveList').addEventListener('change',runTrade);$('#getList').addEventListener('change',runTrade);
   tradeTeam();
+  blockRender();finderRender();
+  $('#finderQ').addEventListener('input',function(){TF.q=this.value;finderRender();});
+  document.addEventListener('click',function(e){
+    var b=e.target.closest?e.target.closest('[data-tf],[data-open]'):null;if(!b)return;
+    if(b.hasAttribute('data-tf')){TF.id=+b.getAttribute('data-tf');TF.q='';$('#finderQ').value='';finderRender();
+      var c=$('#finderOut');if(c&&c.scrollIntoView)c.scrollIntoView({behavior:'smooth',block:'start'});}
+    else{var a=b.getAttribute('data-open').split(',').map(Number);openInLab(a[0],a[1],a[2]);}
+  });
 }
 
 /* ---------- league ---------- */
@@ -380,7 +469,11 @@ PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="robots" 
 <label><input type="checkbox" id="faGames"> only with games this week</label>
 <select id="faN"><option value="25">Top 25</option><option value="50" selected>Top 50</option><option value="100">Top 100</option><option value="300">All</option></select></div>
 <div id="faTbl"></div></div></section>
-<section id="t-trade" style="display:none"><div class="card"><h2>Trade lab</h2>
+<section id="t-trade" style="display:none"><div class="card"><h2>On the trading block</h2><div id="blockOut"></div></div>
+<div class="card"><h2>Trade finder</h2>
+<div class="controls"><input type="text" id="finderQ" placeholder="Search any player in the league (e.g. Podkolzin)"></div>
+<div class="tfres" id="finderRes"></div><div id="finderOut"></div></div>
+<div class="card"><h2>Trade lab</h2>
 <div class="controls"><label>Trade partner: <select id="tradeTeam"></select></label></div>
 <div class="two"><div><h3>You give</h3><div class="listbox" id="giveList"></div></div><div><h3>You get</h3><div class="listbox" id="getList"></div></div></div>
 <div id="tradeOut" style="margin-top:12px"></div></div></section>

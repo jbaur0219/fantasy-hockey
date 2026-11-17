@@ -166,7 +166,7 @@ var VIEWS=[
  {id:'players',label:'Players',subs:[{id:'main',label:'Players',cards:[['Free agents and waivers']]}]},
  {id:'league',label:'League',subs:[
    {id:'table',label:'Standings',cards:[['Standings and power rankings']]},
-   {id:'trade',label:'Trade lab',cards:[['Trade lab']]}]}
+   {id:'trade',label:'Trade lab',cards:[['On the trading block'],['Trade finder'],['Trade lab']]}]}
 ];
 var VMAP={},SPEC={};
 VIEWS.forEach(function(v){VMAP[v.id]=v;v.sm={};v.subs.forEach(function(s){v.sm[s.id]=s;s.cards.forEach(function(c){SPEC[c[0]]={v:v.id,s:s.id,c:c[1]||0};});});});
