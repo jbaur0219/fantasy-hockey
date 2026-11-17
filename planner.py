@@ -91,7 +91,7 @@ def build(cfg, data, league, standings, now_ms, site_data):
     sp = data["roster"].get("scoringPeriodId", 1)
     abbr, games = D.schedule_maps(data["schedules"])
     m = site_data.get("matchup")
-    ndays = max(1, min(int(m["days_left"]) if m else 7, 7))       # only the rest of THIS matchup week (through Sunday)
+    ndays = max(1, min(int(m["days_left"]) if m else 7, D.MAX_DAYS))       # only the rest of THIS matchup week (through Sunday)
     days = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
     return {"days": days, "teams": _grid(data["schedules"], sp, abbr, games, now_ms, ndays),
             "stream": _stream(site_data, sp, abbr, games, standings, now_ms, ndays),

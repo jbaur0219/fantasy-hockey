@@ -32,7 +32,9 @@ HOME_ICE = 0.03          # home-ice edge in win probability
 SKATER_SD = 2.3          # typical game-to-game swing for a skater (fantasy points)
 GOALIE_SD = 6.0          # typical swing for a goalie start
 DEFAULT_TEAM_GP = 19     # used if NHL standings can't be loaded
-GOALIE_DAYS = 3          # how many days ahead to show goalie calls
+GOALIE_DAYS = 3          # how many days ahead to show goalie calls (build_context uses the whole matchup)
+CUR_DAYS = GOALIE_DAYS   # days left in the current matchup (set by build_context)
+MAX_DAYS = 14            # longest matchup the planner handles (ESPN can merge two weeks, e.g. around a break)
 NHL_ABBR = {"NJ": "NJD", "TB": "TBL", "SJ": "SJS", "LA": "LAK"}   # ESPN -> NHL names
 
 
@@ -192,10 +194,31 @@ def find_matchup(league, team_id):
     return mp, None, None, None
 
 
-def matchup_periods(m, mp):
+def matchup_length(league, mp):
+    """Days in matchup mp: 7 per NHL week ESPN maps to it (usually one week, sometimes two around a break)."""
+    try:
+        weeks = ((league.get("settings") or {}).get("scheduleSettings") or {}).get("matchupPeriods", {}).get(str(mp))
+        return 7 * max(1, len(weeks or [1]))
+    except Exception:
+        return 7
+
+
+def move_limit(league, days):
+    """Adds allowed this matchup, from the league's settings (this league: 7 per 7-day matchup)."""
+    try:
+        acq = (league.get("settings") or {}).get("acquisitionSettings") or {}
+        lim = int(acq.get("matchupAcquisitionLimit", 7))
+        if lim < 0:
+            return 99
+        return lim * days if acq.get("matchupLimitPerScoringPeriod") else lim
+    except Exception:
+        return 7
+
+
+def matchup_periods(m, mp, length=7):
     keys = [int(k) for side in (m["home"], m["away"]) for k in (side.get("pointsByScoringPeriod") or {})]
     start = min(keys) if keys else 7 * (mp - 1)
-    return start, start + 6          # weekly matchups run 7 scoring periods
+    return start, start + length - 1
 
 
 def side_points(side):
@@ -459,8 +482,11 @@ def build_context(cfg, data, league, standings, now_ms):
     if m:
         opp_id = opp_side.get("teamId")
         opp_json = next((t for t in data["roster"].get("teams", []) if t.get("id") == opp_id), None)
-        start, end = matchup_periods(m, mp)
+        length = matchup_length(league, mp)
+        global CUR_DAYS
+        start, end = matchup_periods(m, mp, length)
         periods = list(range(max(sp, start), end + 1))
+        CUR_DAYS = max(1, len(periods))
         mu_me, var_me = expected_remaining(mine, periods, games, now_ms, standings)
         opp_players = roster_players(opp_json, season, abbr) if opp_json else []
         mu_opp, var_opp = expected_remaining(opp_players, periods, games, now_ms, standings)
@@ -470,7 +496,8 @@ def build_context(cfg, data, league, standings, now_ms):
         ow, ol, ot, _ = record_of(teams.get(opp_id, {}))
         matchup = {"me_now": me_now, "opp_now": opp_now, "proj_me": me_now + mu_me, "proj_opp": opp_now + mu_opp,
                    "p_win": clamp(norm_cdf(z), 0.01, 0.99), "days_left": len(periods),
-                   "opp_name": team_label(teams.get(opp_id, {})), "opp_rec": f"{ow}-{ol}-{ot}"}
+                   "days_total": length, "move_limit": move_limit(league, length),
+                   "opp_name": team_label(teams.get(opp_id, {})), "opp_rec": f"{ow}-{ol}-{ot}", "opp_id": opp_id}
 
     standings_rows = []
     for tid, t in teams.items():

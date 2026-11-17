@@ -258,7 +258,7 @@ def _build(cfg, data, league, standings, now_ms, site_data):
         sp = data["roster"].get("scoringPeriodId", 1)
         abbr, games = D.schedule_maps(data["schedules"])
         m = site_data.get("matchup")
-        ndays = max(1, min(int(m["days_left"]) if m else 7, 7))
+        ndays = max(1, min(int(m["days_left"]) if m else 7, D.MAX_DAYS))
         game = STR.make_game_fn(abbr, games, sp, now_ms)
         gl = lambda tm, i: sum(1 for j in range(i, ndays) if game(tm, j))
         d["audit"] = audit(site_data, game, ndays, standings, STR.S.STATE["by_team"], gl)

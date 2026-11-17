@@ -33,6 +33,8 @@ import streams as STR
 import site_builder as SB
 import starters as S
 import netcache as NC
+import goalies as GL
+import core as C
 
 _base_slim = SB.slim
 EXTRA = ("toi", "pp", "ixg", "gx", "xgf", "gs", "qs", "gsax", "h60", "b60", "own_chg")
@@ -220,6 +222,45 @@ def add_refresh_button(html_text):
     return html_text[:end] + "<script>" + REFRESH_JS + "</script>" + html_text[end:]
 
 
+REQUIRED = ("function gameplanRender", "function streamsRender", "function plannerRender", "function uiStart",
+            "LK.start();", "function pcTag", "function wiResult", "function suggestFor", "uiToday")
+
+
+def health_report(site_data, nhl_counts):
+    """What data this build had, in plain English, for the badge at the top of the page and the alerts."""
+    items, level = [], "ok"
+    lines = R.health()
+    if lines["state"] == "missing":
+        level = "bad"
+        items.append(lines["note"])
+    elif lines["state"] != "live":
+        level = "warn" if (R.STATE["cache_age_h"] or 0) > 24 or lines["state"] == "partial" else level
+        items.append(lines["note"])
+    if S.HEALTH["state"] in ("missing", "cached") and S.HEALTH["note"]:
+        level = "warn" if level == "ok" and S.HEALTH["state"] == "missing" else level
+        items.append(S.HEALTH["note"])
+    sk, xg = nhl_counts
+    if not sk:
+        level = "bad"
+        items.append("NHL.com stats could not be loaded, so projections are rougher than usual.")
+    elif not xg:
+        level = "warn" if level == "ok" else level
+        items.append("MoneyPuck expected goals could not be loaded.")
+    if not site_data.get("matchup"):
+        items.append("This week's matchup was not found.")
+    return {"level": level, "items": items,
+            "lines": lines["state"], "starters": S.HEALTH["state"],
+            "healthy_plan": lines["state"] == "live" or (lines["state"] == "cached" and (R.STATE["cache_age_h"] or 0) <= 24)}
+
+
+def _no_streams_plan(*a, **k):
+    return {"base": 0, "total": 0, "gain": 0, "moves": [], "marginal": []}
+
+
+def _goalies(mine, sp, games, abbr, standings, now_ms):
+    return GL.build(mine, sp, games, abbr, standings, now_ms, D.CUR_DAYS)
+
+
 def write_notify_payload(site_data, now_ms):
     """The text of the morning push notification, for notify.py."""
     clock = site_data.get("clock")
@@ -271,9 +312,11 @@ def _main():
     abbr, _ = D.schedule_maps(data["schedules"])
 
     planner_on = streams_on = v3_ok = gp_on = False
+    nhl_counts = (0, 0)
     print("Loading deeper stats...")
     try:
         nhl = E.load(cfg["season"])
+        nhl_counts = (len(nhl["sk"]), sum(1 for d in nhl["sk"].values() if "ixg" in d))
         if nhl["sk"] or nhl["gk"]:
             E.install(nhl, abbr)
             SB.slim = slim_plus
@@ -297,10 +340,9 @@ def _main():
                 SB.JS, v3_ok = S3.patch_all(SB.JS)
                 S4.install()
                 SB.JS, v4_ok = S4.patch_all(SB.JS)
+                STR.plan_moves = _no_streams_plan          # one plan for the whole site: core.py (Game plan)
                 if v3_ok:
                     SB.JS, SB.PAGE, gp_on = GP.patch_all(SB.JS, SB.PAGE)
-                    if gp_on:
-                        OPT.install()                      # week optimizer: improves the greedy game plan (never worse on its score)
         else:
             print("  no deeper stats available, building the basic version")
     except Exception as e:
@@ -314,12 +356,17 @@ def _main():
     SB.JS = patch_text(SB.JS, _pj, "phone app script")
     SB.JS, SB.PAGE, SB.CSS, _ui_ok = UI.apply(SB.JS, SB.PAGE, SB.CSS)      # grouped tabs, photos, contrast (cosmetic only)
     SB.JS, SB.CSS, _pc_ok = PC.apply(SB.JS, SB.CSS)                         # cleaner player card popup (cosmetic only)
+    D.goalie_decisions = _goalies                                           # start/bench calls for the whole matchup
 
     now_ms = NC.now_ms()
     site_data = SB.build_site_data(cfg, data, league, standings, now_ms)
+    _ab, _gm = D.schedule_maps(data["schedules"])
+    site_data["g28"] = C.team_games(_gm, _ab, data["roster"].get("scoringPeriodId", 1), 28)   # trade values: next 4 weeks
+    if site_data.get("matchup"):
+        PL.MOVE_LIMIT = site_data["matchup"].get("move_limit", PL.MOVE_LIMIT)
     try:
         _m = site_data.get("matchup")
-        _nd = max(1, min(int(_m["days_left"]) if _m else 7, 7))
+        _nd = max(1, min(int(_m["days_left"]) if _m else 7, D.MAX_DAYS))
         site_data["clock"] = D.day_clock(data["schedules"], data["roster"].get("scoringPeriodId", 1), _nd, now_ms)
         lk = [i for i in range(_nd) if D.day_locked(site_data["clock"], i, now_ms)]
         first = site_data["clock"]["lock"][0]
@@ -348,16 +395,19 @@ def _main():
             print(f"  streams data failed ({type(e).__name__}: {e})")
     if gp_on:
         try:
-            site_data["gameplan"] = GP.build(cfg, data, league, standings, now_ms, site_data)
+            mp = (league.get("status") or {}).get("currentMatchupPeriod")
+            site_data["gameplan"] = GP.build(cfg, data, league, standings, now_ms, site_data, prev=WK.previous(mp))
             gp = site_data["gameplan"]
             print(f"  game plan: {len(gp['moves'])} of {gp['moves_left']} moves, +{gp['gain']} pts")
             for mv in gp["moves"]:
-                print(f"     {mv['day']} [{mv['tier']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, net {mv['net']})")
+                print(f"     {mv['day']} [{mv['tier']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, cost {mv['cost']}, net {mv['net']}){' kept' if mv.get('kept') else ''}")
         except Exception as e:
             print(f"  game plan data failed ({type(e).__name__}: {e})")
+    site_data["health"] = health_report(site_data, nhl_counts)
     if gp_on:
         try:
-            site_data["weekplan"] = WK.build(cfg, data, league, standings, now_ms, site_data)
+            site_data["weekplan"] = WK.build(cfg, data, league, standings, now_ms, site_data,
+                                             healthy=site_data["health"]["healthy_plan"])
         except Exception as e:                              # the locked plan is an extra: never fail the build over it
             print(f"  weekly plan skipped ({type(e).__name__}: {e})")
     try:
@@ -375,6 +425,9 @@ def _main():
     Path("site").mkdir(exist_ok=True)
     html_text = SB.render_site(site_data)
     html_text = add_refresh_button(html_text)
+    missing = [k for k in REQUIRED if k not in html_text]
+    if missing:                                            # never publish a page with a section silently missing
+        sys.exit("Page is incomplete, not publishing it. Missing: " + ", ".join(missing))
     Path("site/index.html").write_text(html_text, encoding="utf-8")
     try:
         pwa.write_files("site")

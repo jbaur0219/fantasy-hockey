@@ -150,26 +150,54 @@ def _plan_full(mine, fas, game, ndays, days, standings, starters, moves_left, ad
             "moves": moves, "before": before_rows, "after": after_rows, "targets": targets}
 
 
-def build(cfg, data, league, standings, now_ms, site_data):
+def build(cfg, data, league, standings, now_ms, site_data, prev=None):
+    """The one plan (core.py), plus the before/after day table, stream targets and the matchup it leads to."""
+    import core as C
     sp = data["roster"].get("scoringPeriodId", 1)
     abbr, games = D.schedule_maps(data["schedules"])
     m = site_data.get("matchup")
-    ndays = max(1, min(int(m["days_left"]) if m else 7, 7))
+    ndays = max(1, min(int(m["days_left"]) if m else 7, D.MAX_DAYS))
     game = STR.make_game_fn(abbr, games, sp, now_ms)
     starters = S.STATE["by_team"]
     days = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
     used = PL._moves_used(league, cfg["team"])
     moves_left = max(0, PL.MOVE_LIMIT - (used or 0))
+    nxt = C.team_games(games, abbr, sp + ndays, 7)
 
-    plan = plan_full(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left)
-    plan["moves_left"] = moves_left
-    plan["limit"] = PL.MOVE_LIMIT
-    plan["used_known"] = used is not None
+    res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, nxt, prev=prev)
+    entries, _, pool = C.build_inputs(site_data["mine"], site_data["fas"], game, ndays, standings, starters)
+    before_rows = _day_rows(entries, ndays, days, game)
+    after_rows = _day_rows(res["ents"], ndays, days, game)
+    taken = {mv["add"]["id"] for mv in res["moves"]}
+
+    def target(x):
+        p = x["p"]
+        first = next((i for i in range(ndays) if x["v"][i] > 0), None)
+        return {"id": p["id"], "n": p["n"], "pos": p["pos"], "tm": p["tm"], "grp": x["g"],
+                "role": S2._role_text(p), "total": round(sum(x["v"]), 1),
+                "games": sum(1 for i in range(ndays) if x["v"][i] > 0),
+                "first": days[first] if first is not None else "", "waiver": x["waiver"], "taken": p["id"] in taken}
+
+    ranked = sorted(pool, key=lambda x: -sum(x["v"]))
+    plan = {"base": res["base"], "total": res["total"], "gain": res["gain"], "moves": res["moves"],
+            "before": before_rows, "after": after_rows,
+            "targets": {g: [target(x) for x in ranked if x["g"] == g][:k]
+                        for g, k in (("F", TARGETS_F), ("D", TARGETS_D), ("G", TARGETS_G))},
+            "moves_left": moves_left, "limit": PL.MOVE_LIMIT, "used_known": used is not None,
+            "next_games": nxt}
     plan["unused"] = max(0, moves_left - len(plan["moves"]))
     if m:
+        # one projection model for the whole site: same daily-lineup values as the plan, for both teams
+        opp = next((t for t in site_data.get("teams", []) if t["id"] == m.get("opp_id")), None)
+        try:
+            pr = C.matchup_projection(site_data["mine"], opp["players"] if opp else [], game, ndays, standings, starters,
+                                      m["me_now"], m["opp_now"])
+            m.update({"proj_me": pr["proj_me"], "proj_opp": pr["proj_opp"], "p_win": pr["p_win"], "sd": pr["sd"]})
+        except Exception as e:
+            print(f"  matchup projection kept the old model ({type(e).__name__}: {e})")
         plan["matchup"] = {"opp": m.get("opp_name"), "me_now": round(m["me_now"], 1), "opp_now": round(m["opp_now"], 1),
                            "proj_me": round(m["proj_me"], 1), "proj_opp": round(m["proj_opp"], 1),
-                           "p_win": round(m["p_win"], 3), "p_win_after": _win_prob(m, plan["gain"]),
+                           "p_win": round(m["p_win"], 3), "p_win_after": C.win_after(m, plan["gain"]),
                            "days_left": m["days_left"]}
     return plan
 
@@ -179,11 +207,11 @@ def build(cfg, data, league, standings, now_ms, site_data):
 # ---------------------------------------------------------------------------
 GAMEPLAN_JS = r"""
 function gpMoveHtml(m,i){
-  var tag=m.tier==='make'?'<span class="good">make this move</span>':'<span class="warn">spare move</span>';
+  var tag=m.tier==='make'?'<span class="good">make this move</span>':'<span class="warn">optional move</span>';
   var h='<div class="step"><div class="num"'+(m.tier==='make'?'':' style="background:var(--gray)"')+'>'+(i+1)+'</div><div>'
   +'<div><b>'+esc(m.day)+'</b> &middot; '+tag+(m.waiver?' <span class="warn">on waivers, put the claim in the day before</span>':'')+'</div>'
   +'<div>add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' game'+(m.games===1?'':'s')+' left)</span></div>'
-  +'<div>drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts this week</span> <span class="muted">('+sgn(m.net,1)+' after what you give up)</span></div>'
+  +'<div>drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts this week</span> <span class="muted">('+sgn(m.net,1)+' after the long-term cost)</span></div>'
   +reasonsHtml(m)+'</div></div>';
   return h;
 }
@@ -206,15 +234,15 @@ function gameplanRender(){
     +'<div style="margin-top:10px"><span class="big">'+Math.round(M.p_win*100)+'%</span> <span class="muted">win chance now</span>'
     +(pa!=null&&n?' &nbsp;&rarr;&nbsp; <span class="big good">'+Math.round(pa*100)+'%</span> <span class="muted">if you make the plan</span>':'')+'</div>';
   }
-  h+='<div style="margin-top:12px"><span class="big">+'+f(P.gain,1)+'</span> <span class="muted">projected points from '+n+' of your '+P.moves_left+' remaining moves ('+f(P.base,0)+' &rarr; '+f(P.total,0)+' for the rest of the matchup). Unused moves expire at the end of the week, so a move that adds points is free value.</span></div>';
+  h+='<div style="margin-top:12px"><span class="big">+'+f(P.gain,1)+'</span> <span class="muted">projected points from '+n+' of your '+P.moves_left+' remaining moves ('+f(P.base,0)+' &rarr; '+f(P.total,0)+' for the rest of the matchup). Each move\'s gain already has its long-term cost taken off (what you lose next week and later by not keeping the player you drop).</span></div>';
   if(!n)h+='<div class="verdict">No move adds points after what you would give up. Keep your lineup and use the day-by-day check below to set it each morning.</div>';
   else{
     var mk=P.moves.filter(function(m){return m.tier==='make';}).length;
-    h+='<div class="verdict">'+(mk?mk+' move'+(mk===1?'':'s')+' clear the normal bar. ':'No move clears the normal bar. ')+(n-mk?(n-mk)+' spare move'+(n-mk===1?'':'s')+' add smaller gains and are optional. ':'')+(P.unused?P.unused+' move'+(P.unused===1?'':'s')+' stay unused because nothing else adds points.':'')+'</div>';
+    h+='<div class="verdict">'+(mk?mk+' move'+(mk===1?'':'s')+' clear the normal bar. ':'No move clears the normal bar. ')+(n-mk?(n-mk)+' optional move'+(n-mk===1?'':'s')+' add smaller gains. ':'')+(P.unused?P.unused+' move'+(P.unused===1?'':'s')+' stay unused because nothing else adds points.':'')+'</div>';
   }
   h+='</div>';
   if(n){h+='<div class="card"><h2>The moves, in the order to make them</h2>';P.moves.forEach(function(m,i){h+=gpMoveHtml(m,i);});
-    h+='<div class="muted" style="margin-top:8px">Each step assumes the earlier ones were made. First power-play players, players producing for you and your best players are never suggested as drops. Every add is on a top-six line, top-four pair or first power-play unit.</div></div>';}
+    h+='<div class="muted" style="margin-top:8px">Each step assumes the earlier ones were made. Never suggested as drops: players producing for you (1.9+ pts/game this season or 2.2+ over the last 15 days) and stars (projected 2.5+). Top-line and power-play players can be suggested when they are scoring well under what their role usually gives, have a light week, or are on your watch list, but only when the add clearly pays off after the long-term cost. Every add is on a top-six line, top-four pair or first power-play unit.</div></div>';}
   h+='<div class="card"><h2>Day-by-day lineup check</h2><div class="scroll"><table><thead><tr><th>Day</th><th>Pts now</th><th>Pts with plan</th><th>F</th><th>D</th><th>G</th><th>Empty slots</th></tr></thead><tbody>';
   P.after.forEach(function(a,i){
     if(LK.closed(i))return;

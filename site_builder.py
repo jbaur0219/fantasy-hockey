@@ -149,7 +149,8 @@ D.mine.concat(D.fas).forEach(function(p){ALL[p.id]=p;});
 D.teams.forEach(function(t){t.players.forEach(function(p){if(!ALL[p.id])ALL[p.id]=p;});});
 function plink(p){return '<a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">('+esc(p.pos)+', '+esc(p.tm)+')</span>';}
 function isInj(p){return BAD.indexOf(p.inj)>=0;}
-function val(p){return p.grp==='G'?(p.out||0)*p.g7*(p.sp||0.5):(p.out||0)*p.g7;}
+/* weekly value over the next 4 weeks (per-game outlook x team games / 4), so one week's schedule never decides a trade */
+function val(p){var g=(D.g28&&D.g28[p.tm]!=null)?D.g28[p.tm]/4:p.g7;return p.grp==='G'?(p.out||0)*g*(p.sp||0.5):(p.out||0)*g;}
 function lineup(players){
   var a=players.filter(function(p){return p.slot!=='IR'&&!isInj(p);});
   function by(g){return a.filter(function(p){return p.grp===g;}).sort(function(x,y){return val(y)-val(x);});}
@@ -209,10 +210,10 @@ var cPPG={h:'PPG',v:function(p){return p.ppg;},num:1,fmt:f};
 var cProj={h:'Proj',v:function(p){return p.proj;},num:1,fmt:f};
 var cOut={h:'Outlook',v:function(p){return p.out;},num:1,fmt:f};
 var cGP={h:'GP',v:function(p){return p.gp;},num:1};
-var cG7={h:'G7',v:function(p){return p.g7;},num:1};
+var cG7={h:'Games left',v:function(p){return p.gl!=null?p.gl:p.g7;},num:1};
 var cFlags={h:'Flags',v:function(p){return (p.fl||[]).join('; ');},r:flagsHtml};
 var rosterCols=[cName,{h:'Slot',v:function(p){return p.slot;}},cGP,cPPG,{h:'Exp',v:function(p){return p.exp;},num:1,fmt:f},cProj,cOut,cG7,cFlags];
-var faCols=[cName,cOut,{h:'vs weakest',v:function(p){return up(p);},num:1,r:function(p){var u=up(p);return '<span class="'+(u>=0.2?'good':(u<0?'bad':''))+'">'+sgn(u)+'</span>';}},
+var faCols=[cName,cOut,{h:'vs your worst',v:function(p){return up(p);},num:1,r:function(p){var u=up(p);return '<span class="'+(u>=0.2?'good':(u<0?'bad':''))+'">'+sgn(u)+'</span>';}},
   cPPG,cProj,cGP,cG7,{h:'Owned',v:function(p){return p.own;},num:1,r:function(p){return p.own==null?'-':f(p.own,0)+'%';}},
   {h:'Status',v:function(p){return p.st||'';}},cFlags];
 
@@ -237,7 +238,7 @@ function overview(){
         +'<div style="margin-top:6px"><span class="pill '+r.cls+'">'+esc(r.verdict)+'</span></div></div>';});
       h+='</div>';}
     h+='</div>';});
-  h+='<div class="muted" style="margin-top:8px">BENCH = expected points below zero. START (RISKY) = slightly positive but a big swing either way. NHL single games are close to coin flips, so treat win chances as leans. Confirmed starters are not included yet.</div></div>';
+  h+='<div class="muted" style="margin-top:8px">BENCH = expected points below zero. START (RISKY) = slightly positive but a big swing either way. NHL single games are close to coin flips, so treat win chances as leans. Confirmed starters come from DailyFaceoff.com for today only.</div></div>';
   h+='<div class="card"><h2>Suggested moves</h2>';
   if(D.moves.length){
     h+=mkTable([{h:'Add',v:function(m){return m.add.n;},r:function(m){return plink(m.add);}},
@@ -257,21 +258,37 @@ function overview(){
 }
 
 /* ---------- roster ---------- */
-var R={pos:'All',q:''};
+var R={pos:'All',q:'',view:'list'};
+var SLOTN={F:'Forward slot',D:'Defense slot',G:'Goalie slot',UTIL:'UTIL slot',BN:'Bench',IR:'Injured reserve'};
+function rosterList(rows){
+  var ord={F:0,D:1,G:2},inl=function(p){return p.slot==='BN'||p.slot==='IR'?1:0;};
+  rows=rows.slice().sort(function(a,b){return (ord[a.grp]-ord[b.grp])||(b.out-a.out);});
+  return rows.map(function(p){
+    var bits=[esc(p.pos)+' '+esc(p.tm),esc(SLOTN[p.slot]||p.slot)];
+    if(p.rl&&p.rl!=='Not listed')bits.push(esc(p.rl.replace(/^F(\d)/,'Line $1').replace(/^D(\d)/,'Pair $1')));
+    if(p.gl!=null)bits.push(p.gl+' game'+(p.gl===1?'':'s')+' left this week');
+    var trend=(p.rec!=null&&p.ppg!=null&&p.gp>=6)?(p.rec-p.ppg>=0.4?' <span class="good">hot</span>':(p.rec-p.ppg<=-0.4?' <span class="warn">cold</span>':'')):'';
+    var inj=(p.inj&&p.inj!=='ACTIVE')?' <span class="bad">'+esc(p.inj.replace(/_/g,' ').toLowerCase())+'</span>':'';
+    return '<div class="srow"><div class="sm"><a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a>'+inj+trend+'<div class="muted">'+bits.join(' &middot; ')+'</div></div>'
+      +'<div class="sr"><span><b>'+f(p.out,1)+'</b> <span class="muted">'+(p.grp==='G'?'pts/start':'pts/game')+'</span></span></div></div>';}).join('');
+}
 function rosterRender(){
   chips('#rosterPos',['All','F','D','G'],R.pos,function(v){R.pos=v;rosterRender();});
   var rows=D.mine.filter(function(p){return (R.pos==='All'||p.grp===R.pos)&&(!R.q||p.n.toLowerCase().indexOf(R.q)>=0);});
-  $('#rosterTbl').innerHTML=mkTable(rosterCols,rows);wireSort($('#rosterTbl'));
+  var tg='<div class="controls"><button type="button" class="chip-btn'+(R.view==='list'?' on':'')+'" data-rv="list">Simple</button><button type="button" class="chip-btn'+(R.view==='table'?' on':'')+'" data-rv="table">All stats</button></div>';
+  if(R.view==='list'){$('#rosterTbl').innerHTML=tg+rosterList(rows)+'<div class="muted" style="margin-top:8px">Projected points per game going forward (per start for goalies). Tap a name for the full card.</div>';return;}
+  $('#rosterTbl').innerHTML=tg+mkTable(rosterCols,rows);wireSort($('#rosterTbl'));
 }
+document.addEventListener('click',function(e){var b=e.target.closest?e.target.closest('[data-rv]'):null;if(b){R.view=b.getAttribute('data-rv');rosterRender();}});
 
 /* ---------- free agents ---------- */
-var FA={pos:'All',q:'',hide:true,games:false,n:50};
+var FA={pos:'Skaters',q:'',hide:true,games:false,n:50};
 function faRender(){
-  chips('#faPos',['All','F','D','G'],FA.pos,function(v){FA.pos=v;faRender();});
-  var rows=D.fas.filter(function(p){return (FA.pos==='All'||p.grp===FA.pos)&&(!FA.q||p.n.toLowerCase().indexOf(FA.q)>=0)&&(!FA.hide||!isInj(p))&&(!FA.games||p.g7>0);});
+  chips('#faPos',['Skaters','F','D','G'],FA.pos,function(v){FA.pos=v;faRender();});
+  var rows=D.fas.filter(function(p){return (FA.pos==='Skaters'?p.grp!=='G':p.grp===FA.pos)&&(!FA.q||p.n.toLowerCase().indexOf(FA.q)>=0)&&(!FA.hide||!isInj(p))&&(!FA.games||(p.gl!=null?p.gl:p.g7)>0);});
   rows.sort(function(a,b){return b.out-a.out;});
   var total=rows.length;rows=rows.slice(0,FA.n);
-  $('#faTbl').innerHTML=mkTable(faCols,rows)+'<div class="muted">Showing '+rows.length+' of '+total+'. vs weakest = outlook minus your weakest active player at that position.</div>';
+  $('#faTbl').innerHTML=mkTable(faCols,rows)+'<div class="muted">Showing '+rows.length+' of '+total+'. Proj/gm = projected points per game (per start for goalies). vs your worst = that minus your weakest active player at the same position. Goalies are listed separately because a start is not comparable to a skater\'s game.</div>';
   wireSort($('#faTbl'));
 }
 
@@ -294,7 +311,7 @@ function runTrade(){
   var mine=D.mine,theirs=t.players;
   var myAfter=mine.filter(function(p){return give.indexOf(p.id)<0;}).concat(theirs.filter(function(p){return get.indexOf(p.id)>=0;}));
   var thAfter=theirs.filter(function(p){return get.indexOf(p.id)<0;}).concat(mine.filter(function(p){return give.indexOf(p.id)>=0;}));
-  var b1=lineup(mine),a1=lineup(myAfter),b2=lineup(theirs),a2=lineup(thAfter);
+  var b1=lineupWithFA(mine,1),a1=lineupWithFA(myAfter,1+Math.max(0,give.length-get.length)),b2=lineupWithFA(theirs,1),a2=lineupWithFA(thAfter,1+Math.max(0,get.length-give.length));
   var d1=a1-b1,d2=a2-b2,v;
   if(d1>0.5&&d2>0.5)v='Win-win: it helps both lineups, so they might accept.';
   else if(d1>0.5&&d2<=0.5)v='Helps you but costs them about '+f(-d2,1)+' pts/week, so they may decline.';
@@ -304,7 +321,7 @@ function runTrade(){
   if(size>22)note='<div class="warn">You would have '+size+' players and need to drop '+(size-22)+'.</div>';
   else if(size<22)note='<div class="muted">You would have '+(22-size)+' open roster spot(s).</div>';
   out.innerHTML='<div class="res">'+box('You: weekly points',f(b1,1)+' to '+f(a1,1)+' '+delta(d1))+box(esc(t.name)+': weekly points',f(b2,1)+' to '+f(a2,1)+' '+delta(d2))+'</div><div class="verdict">'+esc(v)+'</div>'+note
-  +'<div class="muted" style="margin-top:8px">Approximate: best lineup using each player outlook times games in the next 7 days. Does not account for positional scarcity or what they actually need.</div>';
+  +'<div class="muted" style="margin-top:8px">Points per week over the next 4 weeks: each player\'s projected points per game times his team\'s games, using each team\'s best lineup (9 F, 5 D, 1 UTIL, 2 G). It does not know what a manager actually needs, so treat it as a starting point.</div>';
 }
 /* ---------- trading block + trade finder ---------- */
 var TF={id:null,q:''};
@@ -318,7 +335,7 @@ function blockRender(){
     n+=ps.length;
     h+='<div class="tfh">'+esc(t.name)+'</div>';
     ps.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
-      h+='<div class="tfr"><div class="sm">'+pl2(p)+' <span class="muted">'+esc(p.tm)+'</span><div class="muted">'+f(p.out)+' pts/game outlook &middot; '+p.g7+' games next 7 days</div></div>'
+      h+='<div class="tfr"><div class="sm">'+pl2(p)+' <span class="muted">'+esc(p.tm)+'</span><div class="muted">'+f(p.out)+' projected pts/game &middot; '+((D.g28&&D.g28[p.tm]!=null)?D.g28[p.tm]+' games next 4 weeks':p.g7+' games next 7 days')+'</div></div>'
         +'<div class="sr"><button type="button" class="chip-btn" data-tf="'+p.id+'">Find offers</button></div></div>';});
   });
   if(!n)h='<div class="muted">Nobody in your league has players on the trading block right now.</div>';
@@ -326,19 +343,22 @@ function blockRender(){
   $('#blockOut').innerHTML=h;
 }
 var BC={};
-function lineupBase(key,players){if(BC[key]==null)BC[key]=lineup(players);return BC[key];}
+function lineupBase(key,players){if(BC[key]==null)BC[key]=lineupWithFA(players,1);return BC[key];}
 function okP(p){return p.slot!=='IR'&&!isInj(p);}
 function topFA(){
-  if(BC.fa)return BC.fa;var o={};
-  ['F','D','G'].forEach(function(g){o[g]=D.fas.filter(function(p){return p.grp===g&&!isInj(p);}).sort(function(a,b){return val(b)-val(a);})[0];});
+  if(BC.fa)return BC.fa;var o=[];
+  ['F','D','G'].forEach(function(g){o=o.concat(D.fas.filter(function(p){return p.grp===g&&!isInj(p);}).sort(function(a,b){return val(b)-val(a);}).slice(0,4));});
   return BC.fa=o;
 }
-/* best lineup after also picking up the best free agent for each spot a trade frees up */
-function lineupWithFA(ps,spots){
-  var best=lineup(ps);
-  if(spots<=0)return best;
-  var fa=topFA();
-  ['F','D','G'].forEach(function(g){if(fa[g]){var v=lineup(ps.concat([fa[g]]));if(v>best)best=v;}});
+/* best lineup after picking up to k free agents (one for a normal add/drop, more when a trade frees roster spots).
+   Both sides of every comparison get the same chance, so a trade never gets credit for a pickup you could make anyway. */
+function lineupWithFA(ps,k){
+  var cur=ps.slice(),best=lineup(cur),used={};
+  for(var n=0;n<k;n++){
+    var top=null,tv=best;
+    topFA().forEach(function(f){if(used[f.id])return;var v=lineup(cur.concat([f]));if(v>tv+0.01){tv=v;top=f;}});
+    if(!top)break;used[top.id]=1;cur.push(top);best=tv;
+  }
   return best;
 }
 function swapEval(give,thTeam,get){
@@ -347,8 +367,8 @@ function swapEval(give,thTeam,get){
   var myAfter=mine.filter(function(p){return gi.indexOf(p.id)<0;}).concat(get);
   var thAfter=theirs.filter(function(p){return ge.indexOf(p.id)<0;}).concat(give);
   return {give:give,get:get,team:thTeam,
-    d1:lineupWithFA(myAfter,give.length-get.length)-lineupBase('me',mine),
-    d2:lineupWithFA(thAfter,get.length-give.length)-lineupBase('t'+thTeam.id,theirs)};
+    d1:lineupWithFA(myAfter,1+Math.max(0,give.length-get.length))-lineupBase('me',mine),
+    d2:lineupWithFA(thAfter,1+Math.max(0,get.length-give.length))-lineupBase('t'+thTeam.id,theirs)};
 }
 function topN(ps,n){return ps.filter(okP).sort(function(a,b){return val(b)-val(a);}).slice(0,n);}
 function pairs(ps){var o=[];for(var i=0;i<ps.length;i++)for(var j=i+1;j<ps.length;j++)o.push([ps[i],ps[j]]);return o;}
@@ -376,13 +396,14 @@ function suggestFor(p){
   function pick(list,n){   /* best few, at most 3 of the same kind so 1-for-1 and 2-for-1 both show up */
     var cnt={},o=[];list.sort(function(a,b){return b.sc-a.sc;}).forEach(function(r){
       if(o.length>=n||(cnt[r.kind]||0)>=3)return;cnt[r.kind]=(cnt[r.kind]||0)+1;o.push(r);});return o;}
-  var wins=pick(rows.filter(function(r){return r.d1>=0.5&&r.d2>=0.5;}),7);
-  var tilt=pick(rows.filter(function(r){return r.d1>=0.5&&r.d2<0.5&&r.d2>-1.5;}),5);
+  function need(r){return r.give.length+r.get.length>2?1.0:0.5;}   /* uneven deals must clearly help you */
+  var wins=pick(rows.filter(function(r){return r.d1>=need(r)&&r.d2>=0.5;}),7);
+  var tilt=pick(rows.filter(function(r){return r.d1>=need(r)&&r.d2<0.5&&r.d2>-1.5;}),5);
   return {mine:!!ot.me,owner:ot,wins:wins,tilt:tilt};
 }
 function plist(ps){return ps.map(pl2).join(' + ');}
 function sugRow(r){
-  var net=r.get.length-r.give.length,note=net>0?' &middot; <span class="muted">you would need to drop '+net+'</span>':(net<0?' &middot; <span class="muted">frees a roster spot (counts your best free agent)</span>':'');
+  var net=r.get.length-r.give.length,note=net>0?' &middot; <span class="muted">you would need to drop '+net+'</span>':(net<0?' &middot; <span class="muted">frees a roster spot (filled with the best free agent)</span>':'');
   return '<div class="tfr"><div class="sm"><span class="tag" style="background:var(--accent)">'+r.kind+'</span> <b>Give</b> '+plist(r.give)+' <b>for</b> '+plist(r.get)+'<div class="muted">'+esc(r.team.name)+(r.blk?' &middot; <span class="tag">on block</span>':'')+note+'</div></div>'
     +'<div class="sr"><span>You '+delta(r.d1)+' <span class="muted">/ them</span> '+delta(r.d2)+' <span class="muted">pts/wk</span></span>'
     +'<button type="button" class="chip-btn" data-open="'+r.give.map(function(p){return p.id;}).join('+')+','+r.get.map(function(p){return p.id;}).join('+')+','+r.team.id+'">Open in lab</button></div></div>';
@@ -403,7 +424,7 @@ function finderRender(){
   if(S.wins.length){t+='<div class="tfh">Win-win swaps (help both lineups)</div>'+S.wins.map(sugRow).join('');}
   else t+='<div class="muted" style="margin-top:8px">No trade I tried helps both lineups right now.</div>';
   if(S.tilt.length)t+='<div class="tfh">Helps you more (they may want a sweetener)</div>'+S.tilt.map(sugRow).join('');
-  t+='<div class="muted" style="margin-top:8px">Includes 1-for-1, 2-for-1 and 1-for-2 deals, using the same weekly-points estimate as the Trade lab below (a freed roster spot is filled with the best free agent). Players on a manager\'s block are ranked higher. Open in lab to tweak a deal.</div>';
+  t+='<div class="muted" style="margin-top:8px">Includes 1-for-1, 2-for-1 and 1-for-2 deals, using the same estimate as the Trade lab below: points per week over the next 4 weeks, not just this week (a freed roster spot is filled with the best free agent; a 2-for-1 must help you by at least 1 point a week). Players on a manager\'s block are ranked higher. Open in lab to tweak a deal.</div>';
   out.innerHTML=t;
 }
 function openInLab(give,get,tid){
@@ -438,8 +459,8 @@ function leagueRender(){
   rows.sort(function(a,b){return (b.w-a.w)||(b.pf-a.pf);});
   $('#leagueTbl').innerHTML=mkTable([{h:'Team',v:function(r){return r.name;}},{h:'W-L-T',v:function(r){return r.w;},num:1,r:function(r){return esc(r.rec);}},
     {h:'Points for',v:function(r){return r.pf;},num:1,fmt:function(x){return f(x,1);}},
-    {h:'Power (weekly pts)',v:function(r){return r.power;},num:1,fmt:function(x){return f(x,0);}},
-    {h:'Power rank',v:function(r){return r.pr;},num:1}],rows);
+    {h:'Strength (pts/wk)',v:function(r){return r.power;},num:1,fmt:function(x){return f(x,0);}},
+    {h:'Strength rank',v:function(r){return r.pr;},num:1}],rows);
   wireSort($('#leagueTbl'));
 }
 
@@ -497,7 +518,7 @@ PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="robots" 
 <section id="t-roster" style="display:none"><div class="card"><h2>My roster</h2>
 <div class="controls"><span id="rosterPos"></span><input type="text" id="rosterQ" placeholder="Search players"></div>
 <div id="rosterTbl"></div>
-<div class="muted">PPG = actual points per game. Exp = luck-adjusted. Proj = ESPN projection. Outlook = blend used for ranking. G7 = games in the next 7 days. Click a column to sort, a name for a stat card.</div></div></section>
+<div class="muted">In All stats: PPG = points per game so far. Exp = what he would average if puck luck evened out. Proj = ESPN's projection. Proj/gm = our projection, used for every suggestion. Games left = games left in this matchup week.</div></div></section>
 <section id="t-free" style="display:none"><div class="card"><h2>Free agents and waivers</h2>
 <div class="controls"><span id="faPos"></span><input type="text" id="faQ" placeholder="Search players">
 <label><input type="checkbox" id="faHide" checked> hide injured</label>
@@ -514,7 +535,7 @@ PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="robots" 
 <div id="tradeOut" style="margin-top:12px"></div></div></section>
 <section id="t-league" style="display:none"><div class="card"><h2>Standings and power rankings</h2>
 <div id="leagueTbl"></div>
-<div class="muted">Power = approximate points each team's best lineup should score in the next 7 days, from outlook and schedule.</div></div></section>
+<div class="muted">Strength = points per week each team's best lineup should score over the next 4 weeks, from projections and schedule.</div></div></section>
 </div><div id="modal"></div>
 <script type="application/json" id="data">__DATA__</script><script>__JS__</script></body></html>"""
 

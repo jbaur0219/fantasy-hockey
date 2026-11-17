@@ -17,6 +17,7 @@ If a team's page can't be read, those players keep their normal outlook and no t
 import json
 import re
 import time
+from pathlib import Path
 
 import requests
 
@@ -44,7 +45,11 @@ W_BASE, W_SMALL = 0.35, 0.30          # weight on the role average: 35%, rising 
 TREND_PER_MIN, TREND_CAP = 0.025, 0.10
 KEEP_PPG, KEEP_REC = 1.9, 2.2         # a player producing like this for you is never tagged a streamer
 
-STATE = {"teams": {}, "prior": {"cell": {}, "tier": {}}, "abbr": {}, "ok": [], "failed": [], "errors": 0}
+STATE = {"teams": {}, "prior": {"cell": {}, "tier": {}}, "abbr": {}, "ok": [], "failed": [], "errors": 0,
+         "cached": [], "cache_age_h": None}
+CACHE_FILE = Path(__file__).with_name("cache") / "df_lines.json"
+CACHE_MAX_H = 72              # line combinations older than this are not used
+STAT_KEYS = ("gamesPlayed", "goals", "assists", "powerplayPoints", "blocks", "shots", "toiMinutes", "toiSeconds")
 PREV = {}
 
 
@@ -90,6 +95,9 @@ def parse_team(comb):
             d["toi"] = _toi(pl.get("season") or {})
         if d["toi5"] is None:
             d["toi5"] = _toi(pl.get("last5") or {})
+    for d in out.values():                                   # keep only what the model uses (small cache file)
+        if d["stats"]:
+            d["stats"] = {k: d["stats"].get(k) for k in STAT_KEYS}
     return out
 
 
@@ -109,25 +117,102 @@ def build_priors(teams):
             "tier": {k: mean(v) for k, v in tiers.items()}}
 
 
+def _now_ms():
+    try:
+        import netcache
+        return netcache.now_ms()
+    except Exception:
+        return int(time.time() * 1000)
+
+
+def _read_cache():
+    try:
+        return json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _write_cache(cache):
+    try:
+        import netcache
+        if netcache.STATE["mode"] == "replay":
+            return                                           # test replays never touch the saved cache
+    except Exception:
+        pass
+    CACHE_FILE.parent.mkdir(exist_ok=True)
+    CACHE_FILE.write_text(json.dumps(cache, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+
+
+def _fetch(slug):
+    url = f"https://www.dailyfaceoff.com/teams/{slug}/line-combinations"
+    last = None
+    for attempt in range(2):
+        try:
+            r = requests.get(url, headers=E.UA, timeout=30)
+            r.raise_for_status()
+            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.S)
+            return parse_team(json.loads(m.group(1))["props"]["pageProps"]["combinations"]), None
+        except Exception as e:
+            last = e
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if attempt == 0 and code in (403, 429, 500, 502, 503, 504):
+                time.sleep(6)
+                continue
+            break
+    return None, last
+
+
 def load(abbrs):
-    """Reads each team's page. Returns {ESPN abbreviation: {name: role info}}."""
-    teams = {}
+    """Reads each team's page. Returns {ESPN abbreviation: {name: role info}}.
+
+    If Daily Faceoff blocks the request (it sometimes refuses GitHub's servers), each team falls back to its last good
+    copy from cache/df_lines.json when that copy is under CACHE_MAX_H hours old. After two teams in a row are refused,
+    the rest are not requested (they would be refused too) and come from the cache.
+    """
+    teams, cache, now = {}, _read_cache(), _now_ms()
+    blocked = 0
     for ab in sorted(set(abbrs)):
         slug = SLUGS.get(ab)
         if not slug:
             continue
-        try:
-            r = requests.get(f"https://www.dailyfaceoff.com/teams/{slug}/line-combinations", headers=E.UA, timeout=30)
-            r.raise_for_status()
-            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.S)
-            teams[ab] = parse_team(json.loads(m.group(1))["props"]["pageProps"]["combinations"])
+        got, err = (None, "skipped after repeated refusals") if blocked >= 2 else _fetch(slug)
+        if got:
+            teams[ab] = got
+            cache[ab] = {"at": now, "players": got}
             STATE["ok"].append(ab)
-        except Exception as e:
-            STATE["failed"].append(f"{ab} ({type(e).__name__})")
+            blocked = 0
+        else:
+            code = getattr(getattr(err, "response", None), "status_code", None) if not isinstance(err, str) else None
+            blocked = blocked + 1 if (code in (403, 429) or isinstance(err, str)) else blocked
+            c = cache.get(ab)
+            if c and (now - c.get("at", 0)) <= CACHE_MAX_H * 3600 * 1000:
+                teams[ab] = c["players"]
+                STATE["cached"].append(ab)
+                age = (now - c["at"]) / 3600000
+                STATE["cache_age_h"] = max(STATE["cache_age_h"] or 0, age)
+            else:
+                STATE["failed"].append(f"{ab} ({type(err).__name__ if not isinstance(err, str) else 'blocked'})")
         time.sleep(0.35)
+    if STATE["ok"]:
+        _write_cache(cache)
     print(f"  Daily Faceoff lines: {len(STATE['ok'])} teams read"
-          + (f", failed: {', '.join(STATE['failed'])}" if STATE["failed"] else ""))
+          + (f", {len(STATE['cached'])} from the saved copy (up to {STATE['cache_age_h']:.0f} h old)" if STATE["cached"] else "")
+          + (f", missing: {', '.join(STATE['failed'])}" if STATE["failed"] else ""))
     return teams
+
+
+def health():
+    """'live', 'cached' or 'missing', plus a short plain-English note for the page."""
+    n_ok, n_c, n_f = len(STATE["ok"]), len(STATE["cached"]), len(STATE["failed"])
+    if n_ok + n_c == 0:
+        return {"state": "missing", "note": "Line and power-play data could not be loaded, so moves ignore roles."}
+    if n_c or n_f:
+        age = STATE["cache_age_h"] or 0
+        note = f"Line data: {n_ok} teams fresh, {n_c} from a saved copy up to {age:.0f} h old"
+        if n_f:
+            note += f", {n_f} missing"
+        return {"state": "cached" if not n_f else "partial", "note": note + "."}
+    return {"state": "live", "note": "Line data fresh."}
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,9 @@ Plugs into dashboard.py by wrapping a few functions. If the page can't be read, 
 """
 import json
 import re
+import time
 from datetime import datetime
+from pathlib import Path
 
 import requests
 
@@ -28,6 +30,8 @@ STATE = {"by_team": {}}
 _orig_goalie_decisions = D.goalie_decisions
 _orig_alerts = D.lineup_alerts
 PREV = {}
+CACHE_FILE = Path(__file__).with_name("cache") / "df_starters.json"
+HEALTH = {"state": "missing", "note": ""}
 
 
 def parse_page(page, today):
@@ -43,23 +47,54 @@ def parse_page(page, today):
     return out
 
 
+def _fetch():
+    last = None
+    for attempt in range(2):
+        try:
+            r = requests.get(URL, headers=E.UA, timeout=30)
+            r.raise_for_status()
+            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.S)
+            return json.loads(m.group(1))["props"]["pageProps"], None
+        except Exception as e:
+            last = e
+            if attempt == 0:
+                time.sleep(6)
+    return None, last
+
+
 def load():
-    try:
-        r = requests.get(URL, headers=E.UA, timeout=30)
-        r.raise_for_status()
-        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.S)
-        page = json.loads(m.group(1))["props"]["pageProps"]
-    except Exception as e:
-        print(f"  (Daily Faceoff starters unavailable: {type(e).__name__}: {e})")
-        return {}
+    """Today's starters. If Daily Faceoff refuses the request, uses the last copy saved today (cache/df_starters.json)."""
     today = datetime.now(D.et_zone()).strftime("%Y-%m-%d")
-    out = parse_page(page, today)
-    if not out:
-        print(f"  (Daily Faceoff page is for {page.get('date')}, not {today}; ignoring)")
-    else:
+    page, err = _fetch()
+    out = parse_page(page, today) if page else {}
+    if page and out:
         conf = sum(1 for v in out.values() if v["status"] == "Confirmed")
         print(f"  Daily Faceoff: starters listed for {len(out)} teams ({conf} confirmed)")
-    return out
+        HEALTH.update(state="live", note="")
+        try:
+            import netcache
+            if netcache.STATE["mode"] != "replay":
+                CACHE_FILE.parent.mkdir(exist_ok=True)
+                CACHE_FILE.write_text(json.dumps({"date": today, "by_team": out}, sort_keys=True), encoding="utf-8")
+        except Exception:
+            pass
+        return out
+    if page is not None:
+        print(f"  (Daily Faceoff page is for {page.get('date')}, not {today}; ignoring)")
+        HEALTH.update(state="none", note="")
+        return {}
+    else:
+        print(f"  (Daily Faceoff starters unavailable: {type(err).__name__}: {err})")
+    try:
+        c = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        if c.get("date") == today and c.get("by_team"):
+            print(f"  Daily Faceoff starters: using today's saved copy ({len(c['by_team'])} teams)")
+            HEALTH.update(state="cached", note="Starting goalies are from an earlier check today.")
+            return c["by_team"]
+    except Exception:
+        pass
+    HEALTH.update(state="missing", note="Starting goalies could not be checked; calls use each goalie's usual share of starts.")
+    return {}
 
 
 def _is_starter(p):

@@ -50,7 +50,7 @@ def build(cfg, data, league, standings, now_ms, site_data):
     if not m:
         return None
     sp = data["roster"].get("scoringPeriodId", 1)
-    left = max(1, min(int(m["days_left"]), 7))
+    left = max(1, min(int(m["days_left"]), D.MAX_DAYS))
     out = []
     w1 = _window(data, standings, sp, left, site_data["fas"], "Rest of this week", "")
     if w1:

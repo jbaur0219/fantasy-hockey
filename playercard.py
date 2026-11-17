@@ -170,7 +170,7 @@ def annotate(site_data, data, now_ms):
     tid_of = {ab: tid for tid, ab in abbr.items()}
     sp = data["roster"].get("scoringPeriodId", 1)
     m = site_data.get("matchup")
-    nd = max(1, min(int(m["days_left"]) if m else 7, 7))
+    nd = max(1, min(int(m["days_left"]) if m else 7, D.MAX_DAYS))
     cache = {}
 
     def left(tm):
@@ -199,7 +199,7 @@ def annotate(site_data, data, now_ms):
 LIST_PATCHES = [
     # small up/down arrow next to Outlook in every list (likely to improve / running hot)
     ("var cOut={h:'Outlook',v:function(p){return p.out;},num:1,fmt:f};",
-     "var cOut={h:'Outlook',v:function(p){return p.out;},num:1,r:function(p){return f(p.out)+pcTag(p);}};"),
+     "var cOut={h:'Proj/gm',v:function(p){return p.out;},num:1,r:function(p){return f(p.out)+pcTag(p);}};"),
     # trending column: change in ownership today (click the header to sort)
     ("{h:'Owned',v:function(p){return p.own;},num:1,r:function(p){return p.own==null?'-':f(p.own,0)+'%';}}",
      "{h:'Owned',v:function(p){return p.own;},num:1,r:function(p){return p.own==null?'-':f(p.own,0)+'%';}},"

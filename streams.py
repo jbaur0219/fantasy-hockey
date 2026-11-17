@@ -195,7 +195,7 @@ def build(cfg, data, league, standings, now_ms, site_data):
     sp = data["roster"].get("scoringPeriodId", 1)
     abbr, games = D.schedule_maps(data["schedules"])
     m = site_data.get("matchup")
-    ndays = max(1, min(int(m["days_left"]) if m else 7, 7))
+    ndays = max(1, min(int(m["days_left"]) if m else 7, D.MAX_DAYS))
     game = make_game_fn(abbr, games, sp, now_ms)
     starters = S.STATE["by_team"]
     days = D.day_clock(data["schedules"], sp, ndays, now_ms)["labels"]
