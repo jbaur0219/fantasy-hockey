@@ -34,7 +34,7 @@ import site_builder as SB
 import starters as S
 
 _base_slim = SB.slim
-EXTRA = ("toi", "pp", "ixg", "gx", "xgf", "gs", "qs", "gsax", "h60", "b60")
+EXTRA = ("toi", "pp", "ixg", "gx", "xgf", "gs", "qs", "gsax", "h60", "b60", "own_chg")
 
 
 def slim_plus(p, standings):
