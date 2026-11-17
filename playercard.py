@@ -70,7 +70,7 @@ function modal(p){
 
   /* quick tiles */
   var t='';
-  if(p.g7!=null)t+=tile(p.g7,'Games, next 7 days');
+  if(p.gl!=null)t+=tile(p.gl,'Games left this week');else if(p.g7!=null)t+=tile(p.g7,'Games, next 7 days');
   if(p.rl&&p.rl!=='Not listed')t+=tile(esc(p.rl),'Line / power play');
   if(isG){if(p.sp!=null)t+=tile(Math.round(p.sp*100)+'%','Start chance');}
   else if(p.toi!=null)t+=tile(f(p.toi,1)+' min','Ice time / game');
@@ -110,6 +110,30 @@ function modal(p){
 }
 
 """
+
+
+def annotate(site_data, data, now_ms):
+    """Adds p['gl'] = games each player's team has left in the current Monday-Sunday matchup (not-yet-started games only)."""
+    import dashboard as D
+    abbr, games = D.schedule_maps(data["schedules"])
+    tid_of = {ab: tid for tid, ab in abbr.items()}
+    sp = data["roster"].get("scoringPeriodId", 1)
+    m = site_data.get("matchup")
+    nd = max(1, min(int(m["days_left"]) if m else 7, 7))
+    cache = {}
+
+    def left(tm):
+        if tm not in cache:
+            tid = tid_of.get(tm)
+            cache[tm] = None if tid is None else sum(len(D.games_on(games, tid, sp + i, now_ms)) for i in range(nd))
+        return cache[tm]
+
+    lists = [site_data.get("mine", []), site_data.get("fas", [])] + [t.get("players", []) for t in site_data.get("teams", [])]
+    for lst in lists:
+        for p in lst:
+            g = left(p.get("tm"))
+            if g is not None:
+                p["gl"] = g
 
 
 def apply(js, css):

@@ -319,6 +319,10 @@ def main():
               f"{len(lk)} day(s) already locked")
     except Exception as e:                                  # the page copes without it; never fail the build over this
         print(f"  day lock clock skipped ({type(e).__name__}: {e})")
+    try:
+        PC.annotate(site_data, data, now_ms)                # games left in this matchup, for the player card
+    except Exception as e:
+        print(f"  games-left skipped ({type(e).__name__}: {e})")
     if planner_on:
         try:
             site_data["planner"] = PL.build(cfg, data, league, standings, now_ms, site_data)
