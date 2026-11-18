@@ -885,6 +885,13 @@ function uiBuild(){
   ui.innerHTML='<div id="snav"></div>'+VIEWS.map(function(v){
     return '<div class="uview" id="v-'+v.id+'">'+v.subs.map(function(s){return '<div class="usub" id="s-'+v.id+'-'+s.id+'"></div>';}).join('')+'</div>';}).join('');
   wrap.insertBefore(ui,last.nextSibling);
+  /* large-title header (Apple style): date, view title, team, round refresh button */
+  var lh=document.createElement('div');lh.id='lhead';
+  var eye='';try{eye=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'long',month:'long',day:'numeric'}).format(new Date());}catch(e){}
+  lh.innerHTML='<div class="lh-eye">'+esc(eye)+'</div><div class="lh-row"><h1 class="lh-t" id="lhT">Today</h1></div><div class="lh-sub">'+esc(D.me)+' &middot; '+esc(D.rec)+'</div>';
+  wrap.insertBefore(lh,wrap.firstChild);
+  var rb=document.getElementById('rfbtn');
+  if(rb){rb.innerHTML='<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>';rb.setAttribute('aria-label','Refresh data');lh.querySelector('.lh-row').appendChild(rb);}
   var ft=document.createElement('div');ft.className='ufoot';
   ft.innerHTML='<button type="button" class="chip-btn" id="phBtn"></button><span class="muted">Read-only: nothing here changes anything in ESPN.</span>';
   wrap.insertBefore(ft,ui.nextSibling);
@@ -947,6 +954,7 @@ function showTab(n){
   UI.sub[v]=s;
   var moved=UI.booted&&(UI.view!==v||UI.sub[v]!==s);
   UI.view=v;
+  var lt=document.getElementById('lhT');if(lt)lt.textContent=V.label;
   VIEWS.forEach(function(x){
     document.getElementById('v-'+x.id).classList.toggle('on',x.id===v);
     document.getElementById('bn-'+x.id).classList.toggle('on',x.id===v);
@@ -1104,11 +1112,13 @@ function uiToday(){
   var age=C.built?(Date.now()-C.built)/3600000:0,H=D.health||{},M=D.matchup;
   /* the strip: win chance, moves left, data health */
   var hl=age>12?['bad','Data is '+Math.round(age)+' h old']:(H.level==='bad'?['bad','Data missing']:(H.level==='warn'?['warn','Some data missing']:['good','Data up to date']));
-  h+='<div class="tstrip">';
-  if(M)h+='<div class="ts"><div class="ts-v">'+Math.round(M.p_win*100)+'%</div><div class="ts-k">win chance</div><div class="ts-s">'+f(M.me_now,1)+' to '+f(M.opp_now,1)+'</div></div>';
-  if(P&&P.moves_left!=null)h+='<div class="ts"><div class="ts-v">'+P.moves_left+'</div><div class="ts-k">moves left</div><div class="ts-s">of '+(P.limit||7)+' this week</div></div>';
-  h+='<button type="button" class="ts ts-h" data-go="league/help"><div class="ts-v '+hl[0]+'">&#9679;</div><div class="ts-k">'+hl[1]+'</div><div class="ts-s">'+esc(String(D.updated||'').replace(/^.*?,\s*/,''))+'</div></button>';
-  h+='</div>';
+  var gw=M?M.p_win:0,ml=(P&&P.moves_left!=null)?P.moves_left:null,lim=(P&&P.limit)||7;
+  var hp=hl[0]==='good'?1:(hl[0]==='warn'?0.6:0.25);
+  h+='<div class="rings">'+ringsSvg([[gw,'var(--green)'],[ml==null?0:ml/lim,'var(--accent)'],[hp,'var(--teal)']])+'<div class="rleg">'
+    +(M?'<div class="rl"><span class="rl-k" style="color:var(--green)">Win chance</span><span class="rl-v">'+Math.round(gw*100)+'<small>%</small></span><span class="muted" style="font-size:13px">'+f(M.me_now,1)+' to '+f(M.opp_now,1)+'</span></div>':'')
+    +(ml!=null?'<div class="rl"><span class="rl-k" style="color:var(--accent)">Moves left</span><span class="rl-v">'+ml+'<small>/'+lim+'</small></span></div>':'')
+    +'<button type="button" class="rl" data-go="league/help"><span class="rl-k" style="color:var(--teal)">Data</span><span class="rl-v" style="font-size:17px">'+hl[1].replace(/^Data /,'').replace(/^up/,'Up')+'</span></button>'
+    +'</div></div>';
   if(age>12)h+='<div class="why bad" style="margin-bottom:8px">The automatic update may have failed. Tap Refresh data, or check ESPN before making moves.</div>';
   else if(H.level&&H.level!=='ok'&&H.items&&H.items.length)h+='<div class="why warn" style="margin-bottom:8px">&#9888; '+esc(H.items[0])+(H.level==='bad'?' Nothing is marked Strong until it is back.':'')+'</div>';
   if(fi>=n){
@@ -1130,7 +1140,7 @@ function uiToday(){
     h+=strong.map(function(m){return mvCard(m);}).join('');
     h+=cl.map(function(m){return '<div class="mv mv-'+cfOf(m)+'"><div class="mv-top">'+cfPill(m)+' <span class="muted">waiver claim</span></div><div class="mv-sw">Put in a claim for <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">to add him '+esc(dayShort(m.day))+', dropping '+esc(m.drop.n)+'</span></div><div class="mv-why">'+esc(m.why1||'')+'</div></div>';}).join('');
   }else{
-    h+='<div class="tbig ok">&#10003; Nothing you need to do '+when+'</div>';
+    h+='<div class="tbig ok"><span class="ck"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Nothing to do '+when+'</div>';
     var nx=P?P.moves.filter(function(m){return m.t>fi&&cfOf(m)==='strong';})[0]:null;
     h+='<div class="muted">'+(nx?'Next Strong move: <b>'+esc(dayShort(nx.day))+'</b>, add '+esc(nx.add.n)+' for '+esc(nx.drop.n)+'.':'No Strong move left this week. Your roster is in good shape.')+'</div>';
   }
@@ -1155,6 +1165,15 @@ function uiToday(){
   uiPut('Today',h,{v:'today',s:'main',c:0});
 }
 
+function ringsSvg(rs){
+  var w=13,gap=3,out='<svg viewBox="0 0 132 132" aria-hidden="true">';
+  rs.forEach(function(r,i){
+    var rad=66-w/2-i*(w+gap),c=2*Math.PI*rad,v=Math.max(0.001,Math.min(1,r[0]||0));
+    out+='<circle class="tr" cx="66" cy="66" r="'+rad+'" stroke="'+r[1]+'" stroke-width="'+w+'"/>'
+      +'<circle class="pr" cx="66" cy="66" r="'+rad+'" stroke="'+r[1]+'" stroke-width="'+w+'" style="--c:'+c.toFixed(1)+';--o:'+(c*(1-v)).toFixed(1)+';animation-delay:'+(i*0.12)+'s"/>';
+  });
+  return out+'</svg>';
+}
 /* ---------- Confidence, move cards and the "Keep him" list ---------- */
 var CONF={strong:['Strong','Do it'],lean:['Lean','Worth it if you have moves to spare'],optional:['Optional','Small edge, fine to skip']};
 function cfOf(m){return m.conf||(m.tier==='make'?'lean':'optional');}
