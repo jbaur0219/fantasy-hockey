@@ -121,7 +121,19 @@
     "pos": "RW",
     "tm": "NJ"
    },
-   "cost": 0.071,
+   "base": {
+    "a": [
+     22.2,
+     13
+    ],
+    "at": 1795023640950,
+    "d": [
+     40.4,
+     24
+    ]
+   },
+   "conf": "lean",
+   "cost": 0.038,
    "day": "Wed Nov 18",
    "drop": {
     "id": 5149155,
@@ -129,12 +141,13 @@
     "pos": "RW",
     "tm": "SJ"
    },
-   "gain": 1.77,
+   "gain": 1.79,
    "games": 2,
-   "net": 1.7,
+   "net": 1.75,
    "t": 0,
    "tier": "make",
-   "waiver": false
+   "waiver": false,
+   "why1": "Brown plays 2 games the rest of this week, Smith plays 1. Brown is on NJ's third line and first power-play unit. About +1.8 pts this week."
   },
   {
    "add": {
@@ -143,6 +156,18 @@
     "pos": "D",
     "tm": "MTL"
    },
+   "base": {
+    "a": [
+     30.8,
+     17
+    ],
+    "at": 1795023640950,
+    "d": [
+     33.4,
+     21
+    ]
+   },
+   "conf": "optional",
    "cost": 0.0,
    "day": "Wed Nov 18",
    "drop": {
@@ -151,12 +176,13 @@
     "pos": "LW",
     "tm": "BUF"
    },
-   "gain": 0.46,
+   "gain": 0.47,
    "games": 3,
-   "net": 0.46,
+   "net": 0.47,
    "t": 0,
    "tier": "optional",
-   "waiver": false
+   "waiver": false,
+   "why1": "Both play 3; Guhle projects 1.7 pts a game to Benson's 1.6. Guhle is on MTL's second pair. About +0.5 pts this week."
   },
   {
    "add": {
@@ -165,6 +191,18 @@
     "pos": "C",
     "tm": "CHI"
    },
+   "base": {
+    "a": [
+     33.8,
+     19
+    ],
+    "at": 1795023640950,
+    "d": [
+     26.4,
+     19
+    ]
+   },
+   "conf": "strong",
    "cost": 0.0,
    "day": "Thu Nov 19",
    "drop": {
@@ -173,34 +211,13 @@
     "pos": "RW",
     "tm": "WSH"
    },
-   "gain": 2.71,
+   "gain": 2.84,
    "games": 3,
-   "net": 2.71,
+   "net": 2.84,
    "t": 1,
    "tier": "make",
-   "waiver": false
-  },
-  {
-   "add": {
-    "id": 4233643,
-    "n": "Filip Chytil",
-    "pos": "C",
-    "tm": "VAN"
-   },
-   "cost": 0.0,
-   "day": "Thu Nov 19",
-   "drop": {
-    "id": 4565230,
-    "n": "Trevor Zegras",
-    "pos": "C",
-    "tm": "PHI"
-   },
-   "gain": 2.31,
-   "games": 3,
-   "net": 2.31,
-   "t": 1,
-   "tier": "make",
-   "waiver": false
+   "waiver": false,
+   "why1": "Nazar plays 3 games the rest of this week, Wilson plays 2. Nazar is on CHI's second line and first power-play unit. About +2.8 pts this week."
   },
   {
    "add": {
@@ -209,6 +226,18 @@
     "pos": "D",
     "tm": "CHI"
    },
+   "base": {
+    "a": [
+     27.8,
+     20
+    ],
+    "at": 1795023640950,
+    "d": [
+     33.9,
+     23
+    ]
+   },
+   "conf": "strong",
    "cost": 0.0,
    "day": "Thu Nov 19",
    "drop": {
@@ -217,12 +246,48 @@
     "pos": "D",
     "tm": "VGK"
    },
-   "gain": 1.94,
+   "gain": 2.47,
    "games": 3,
-   "net": 1.94,
+   "net": 2.47,
    "t": 1,
    "tier": "make",
-   "waiver": false
+   "waiver": false,
+   "why1": "Rinzel plays 3 games the rest of this week, Andersson plays 2. Rinzel is on CHI's top pair and first power-play unit. About +2.5 pts this week."
+  },
+  {
+   "add": {
+    "id": 4233643,
+    "n": "Filip Chytil",
+    "pos": "C",
+    "tm": "VAN"
+   },
+   "base": {
+    "a": [
+     16.1,
+     10
+    ],
+    "at": 1795023640950,
+    "d": [
+     36.9,
+     24
+    ]
+   },
+   "conf": "strong",
+   "cost": 0.0,
+   "day": "Thu Nov 19",
+   "drop": {
+    "id": 4565230,
+    "n": "Trevor Zegras",
+    "pos": "C",
+    "tm": "PHI"
+   },
+   "gain": 2.3,
+   "games": 3,
+   "net": 2.3,
+   "t": 1,
+   "tier": "make",
+   "waiver": false,
+   "why1": "Chytil plays 3 games the rest of this week, Zegras plays 2. Chytil is on VAN's second line and second power-play unit. About +2.3 pts this week."
   },
   {
    "add": {
@@ -231,6 +296,18 @@
     "pos": "D",
     "tm": "MIN"
    },
+   "base": {
+    "a": [
+     28.3,
+     14
+    ],
+    "at": 1795023640950,
+    "d": [
+     29.6,
+     18
+    ]
+   },
+   "conf": "optional",
    "cost": 0.0,
    "day": "Thu Nov 19",
    "drop": {
@@ -244,9 +321,10 @@
    "net": 0.98,
    "t": 1,
    "tier": "optional",
-   "waiver": false
+   "waiver": false,
+   "why1": "Both play 2; Spurgeon projects 1.8 pts a game to Mintyukov's 1.7. Spurgeon is on MIN's top pair. About +1.0 pts this week."
   }
  ],
  "mp": 8,
- "updated": 1795010419303
+ "updated": 1795023640950
 }
