@@ -1119,7 +1119,12 @@ function uiToday(){
   var all=P?P.moves.filter(function(m){return m.t===fi;}):[];
   var strong=all.filter(function(m){return cfOf(m)==='strong';}),small=all.filter(function(m){return cfOf(m)!=='strong';});
   var cl=P?P.moves.filter(function(m){return m.waiver&&m.t-1===fi;}):[];
-  var lc=isToday?lsChanges(fi):null,lineTodo=lc?lc.into.length+lc.out.length:0;
+  var lc=isToday?lsChanges(fi):null;
+  if(lc){  /* benching a player with no game changes nothing: only list the benches that free a spot for someone who plays */
+    var ng=function(p){return p.gl===0||!p.v||!(p.v[fi]>0);};
+    lc={into:lc.into,playing:lc.playing,out:lc.out.slice().sort(function(a,b){return ng(b)-ng(a);}).slice(0,lc.into.length)};
+  }
+  var lineTodo=lc?lc.into.length+lc.out.length:0;
   if(strong.length||cl.length){
     h+='<div class="tbig">'+(strong.length?'Do '+(strong.length===1?'this':'these')+' '+when:'One thing to do '+when)+(lk?' <span class="tlock">before '+etTime(lk)+' ET</span>':'')+'</div>';
     h+=strong.map(function(m){return mvCard(m);}).join('');
