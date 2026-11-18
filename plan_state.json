@@ -121,7 +121,7 @@
     "pos": "RW",
     "tm": "NJ"
    },
-   "cost": 0.0,
+   "cost": 0.071,
    "day": "Wed Nov 18",
    "drop": {
     "id": 5149155,
@@ -129,10 +129,10 @@
     "pos": "RW",
     "tm": "SJ"
    },
-   "gain": 1.83,
+   "gain": 1.77,
    "games": 2,
-   "net": 1.83,
-   "t": 1,
+   "net": 1.7,
+   "t": 0,
    "tier": "make",
    "waiver": false
   },
@@ -151,10 +151,10 @@
     "pos": "LW",
     "tm": "BUF"
    },
-   "gain": 0.51,
+   "gain": 0.46,
    "games": 3,
-   "net": 0.51,
-   "t": 1,
+   "net": 0.46,
+   "t": 0,
    "tier": "optional",
    "waiver": false
   },
@@ -173,32 +173,10 @@
     "pos": "RW",
     "tm": "WSH"
    },
-   "gain": 2.5,
+   "gain": 2.71,
    "games": 3,
-   "net": 2.5,
-   "t": 2,
-   "tier": "make",
-   "waiver": false
-  },
-  {
-   "add": {
-    "id": 5080173,
-    "n": "Sam Rinzel",
-    "pos": "D",
-    "tm": "CHI"
-   },
-   "cost": 0.0,
-   "day": "Thu Nov 19",
-   "drop": {
-    "id": 3904186,
-    "n": "Rasmus Andersson",
-    "pos": "D",
-    "tm": "VGK"
-   },
-   "gain": 2.45,
-   "games": 3,
-   "net": 2.45,
-   "t": 2,
+   "net": 2.71,
+   "t": 1,
    "tier": "make",
    "waiver": false
   },
@@ -217,14 +195,58 @@
     "pos": "C",
     "tm": "PHI"
    },
-   "gain": 2.28,
+   "gain": 2.31,
    "games": 3,
-   "net": 2.28,
-   "t": 2,
+   "net": 2.31,
+   "t": 1,
    "tier": "make",
+   "waiver": false
+  },
+  {
+   "add": {
+    "id": 5080173,
+    "n": "Sam Rinzel",
+    "pos": "D",
+    "tm": "CHI"
+   },
+   "cost": 0.0,
+   "day": "Thu Nov 19",
+   "drop": {
+    "id": 3904186,
+    "n": "Rasmus Andersson",
+    "pos": "D",
+    "tm": "VGK"
+   },
+   "gain": 1.94,
+   "games": 3,
+   "net": 1.94,
+   "t": 1,
+   "tier": "make",
+   "waiver": false
+  },
+  {
+   "add": {
+    "id": 5079,
+    "n": "Jared Spurgeon",
+    "pos": "D",
+    "tm": "MIN"
+   },
+   "cost": 0.0,
+   "day": "Thu Nov 19",
+   "drop": {
+    "id": 5080154,
+    "n": "Pavel Mintyukov",
+    "pos": "D",
+    "tm": "ANA"
+   },
+   "gain": 0.98,
+   "games": 2,
+   "net": 0.98,
+   "t": 1,
+   "tier": "optional",
    "waiver": false
   }
  ],
  "mp": 8,
- "updated": 1794982067508
+ "updated": 1795010419303
 }
