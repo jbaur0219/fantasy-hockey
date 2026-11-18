@@ -22,7 +22,7 @@ import streams as STR
 
 STATE_FILE = Path(__file__).with_name("plan_state.json")
 LOG_FILE = Path(__file__).with_name("history") / "moves.jsonl"     # every planned move that was made or missed
-KEEP = ("t", "day", "add", "drop", "gain", "cost", "net", "games", "waiver", "tier")
+KEEP = ("t", "day", "add", "drop", "gain", "cost", "net", "games", "waiver", "tier", "conf", "why1", "base")
 
 
 def _load():
@@ -104,9 +104,20 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
                 for kind, m in new:
                     f.write(json.dumps({"mp": mp, "logged": now_ms, "result": kind, "day": m.get("day"),
                                         "add": m["add"], "drop": m["drop"], "expected_gain": m.get("gain"),
-                                        "net": m.get("net")}) + "\n")
-        _save({"mp": mp, "updated": now_ms, "moves": [{k: m.get(k) for k in KEEP} for m in fresh["moves"]],
-               "done": out["done"], "missed": out["missed"]})
+                                        "net": m.get("net"), "conf": m.get("conf"), "why1": m.get("why1"),
+                                        "base": m.get("base")}) + "\n")
+        # starting line for the track record: both players' season points, refreshed until the move's day locks
+        import record as RC
+        old_base = {(m["add"]["id"], m["day"], m["drop"]["id"]): m.get("base") for m in state.get("moves", [])}
+        saved = []
+        for m in fresh["moves"]:
+            sm = {k: m.get(k) for k in KEEP if k != "base"}
+            key = (m["add"]["id"], m["day"], m["drop"]["id"])
+            idx = labels.index(m["day"]) if m["day"] in labels else None
+            open_day = idx is not None and not D.day_locked(clock, idx, now_ms)
+            sm["base"] = (RC.snap(m["add"]["id"], m["drop"]["id"], now_ms) if open_day else None) or old_base.get(key)
+            saved.append(sm)
+        _save({"mp": mp, "updated": now_ms, "moves": saved, "done": out["done"], "missed": out["missed"]})
         print(f"  weekly plan saved for matchup {mp}: {len(fresh['moves'])} moves, {len(done)} done, "
               f"{len(changes)} changed since the last build")
     else:

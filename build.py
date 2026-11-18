@@ -26,10 +26,12 @@ import dashboard as D
 import edge as EDG
 import enrich as E
 import gameplan as GP
+import keep as KP
 import netcache as NC
 import planner as PL
 import playercard as PC
 import pwa
+import record as RC
 import roles as R
 import site_builder as SB
 import starters as S
@@ -97,14 +99,22 @@ def write_notify_payload(site_data, now_ms):
     def line(m):
         return f"add {m['add']['n']} ({m['add']['tm']}), drop {m['drop']['n']} (+{m['gain']:.1f})"
 
-    today = [m for m in moves if m.get("t") == first_open]
+    # only Strong moves are worth a ping; smaller ones wait in the app
+    strong = [m for m in moves if m.get("conf") == "strong"]
+    today = [m for m in strong if m.get("t") == first_open]
+    claims = [m for m in strong if m.get("waiver") and first_open is not None and m.get("t") == first_open + 1]
+    small = [m for m in moves if m.get("t") == first_open and m.get("conf") != "strong"]
     if today:
-        parts = [("Move today: " if len(today) == 1 else "Moves today: ") + "; ".join(line(m) for m in today[:2]) + "."]
-    elif moves:
-        nxt = moves[0]
-        parts = [f"No move needed today. Next: {nxt['day']}, {line(nxt)}."]
+        parts = [("Do today: ") + "; ".join(line(m) for m in today[:2]) + "."]
     else:
-        parts = ["No add is worth a move today."]
+        parts = ["Nothing you need to do today."]
+        nxt = next((m for m in strong if first_open is None or m.get("t", 0) > first_open), None)
+        if nxt:
+            parts.append(f"Next: {nxt['day'].split()[0]}, {line(nxt)}.")
+    for m in claims[:1]:
+        parts.append(f"Put in a waiver claim for {m['add']['n']} today.")
+    if small and not today:
+        parts.append(f"{len(small)} smaller optional move{'s' if len(small) != 1 else ''} in the app.")
     m = site_data.get("matchup")
     if m:
         parts.append(f"Win chance {m['p_win'] * 100:.0f}%.")
@@ -136,6 +146,12 @@ def _main():
                                 ("view", "mMatchup"), ("view", "mMatchupScore")])
     standings = D.load_nhl_standings()
     abbr, _ = D.schedule_maps(data["schedules"])
+    mp_now = (league.get("status") or {}).get("currentMatchupPeriod")
+    KP.apply_env(mp_now)                                # "Keep him" list sent from the page with this refresh
+    try:
+        RC.install(data, cfg["season"])                 # season points for the track record
+    except Exception as e:
+        print(f"  track-record totals skipped ({type(e).__name__}: {e})")
 
     nhl_counts = (0, 0)
     print("Loading deeper stats...")
@@ -209,6 +225,14 @@ def _main():
                                          healthy=site_data["health"]["healthy_plan"])
     except Exception as e:                              # the locked plan is an extra: never fail the build over it
         print(f"  weekly plan skipped ({type(e).__name__}: {e})")
+    try:
+        site_data["record"] = RC.build(mp_now, write=NC.STATE["mode"] != "replay")
+        r = site_data["record"]
+        if r:
+            print(f"  track record: made {r['made']['n']} ({r['made']['pts']:+.1f} pts), "
+                  f"skipped {r['skipped']['n']} ({r['skipped']['pts']:+.1f} pts), {r['untracked']} logged before tracking")
+    except Exception as e:                                  # the track record is an extra: never fail the build over it
+        print(f"  track record skipped ({type(e).__name__}: {e})")
     try:
         site_data["edge"] = EDG.build(cfg, data, league, standings, now_ms, site_data)
     except Exception as e:                                  # the schedule matrix is an extra: never fail the build over it

@@ -47,19 +47,20 @@ function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 setTok(tok());
 fg.addEventListener('click',function(e){e.preventDefault();setTok('');say('Token removed from this browser.');});
 var busy=false;
-btn.addEventListener('click',async function(){
-  if(busy)return;
+async function run(inputs,quiet){
+  if(busy)return false;
   if(!tok()){
+    if(quiet)return false;
     var v=window.prompt('One-time setup: paste a GitHub token for this repo (Actions: read and write). It is saved only in this browser.\n\nCreate one at https://github.com/settings/personal-access-tokens/new');
-    if(!v){say('A token is needed to start a refresh.',true);return;}
+    if(!v){say('A token is needed to start a refresh.',true);return false;}
     setTok(v.trim());
   }
   busy=true;btn.disabled=true;var t0=Date.now();
   try{
-    say('Starting refresh...');
-    var r=await api('/actions/workflows/'+WF+'/dispatches',{method:'POST',body:JSON.stringify({ref:'main',inputs:{reason:'manual-button'}})});
-    if(r.status===401||r.status===403||r.status===404){setTok('');say('GitHub rejected the token (expired or missing permission). Click again to paste a new one.',true);return;}
-    if(r.status!==204){say('Could not start the refresh (HTTP '+r.status+').',true);return;}
+    say(quiet?'Updating the plan with your keep list...':'Starting refresh...');
+    var r=await api('/actions/workflows/'+WF+'/dispatches',{method:'POST',body:JSON.stringify({ref:'main',inputs:inputs})});
+    if(r.status===401||r.status===403||r.status===404){setTok('');say('GitHub rejected the token (expired or missing permission). Tap Refresh data to paste a new one.',true);return false;}
+    if(r.status!==204){say('Could not start the refresh (HTTP '+r.status+').',true);return false;}
     var run=null;
     for(var i=0;i<60;i++){
       await sleep(6000);
@@ -72,10 +73,14 @@ btn.addEventListener('click',async function(){
       say((run&&run.status==='in_progress'?'Building... ':'Queued... ')+secs+'s');
       if(run&&run.status==='completed')break;
     }
-    if(run&&run.status==='completed'&&run.conclusion==='success'){say('Done. Reloading...');location.href=location.pathname+'?r='+Date.now()+location.hash;return;}
-    if(run&&run.status==='completed'){say('The build failed. Check the Actions tab on GitHub.',true);return;}
+    if(run&&run.status==='completed'&&run.conclusion==='success'){say('Done. Reloading...');location.href=location.pathname+'?r='+Date.now()+location.hash;return true;}
+    if(run&&run.status==='completed'){say('The build failed. Check the Actions tab on GitHub.',true);return true;}
     say('Still running after 6 minutes. Reload in a bit.',true);
   }catch(e){say('Something went wrong: '+e.message,true);}
   finally{busy=false;btn.disabled=false;}
-});
+  return true;
+}
+/* used by the Keep button: quiet = never prompt for a token; returns true when an update was started */
+window.FHRefresh=function(inputs,quiet){if(!tok()||busy)return false;run(inputs,quiet);return true;};
+btn.addEventListener('click',function(){run({reason:'manual-button'},false);});
 })();</script></body></html>
