@@ -12,6 +12,10 @@ on:
         description: "live = build and publish; preview = build only and save it to the branch for review"
         required: false
         default: "live"
+      keep:
+        description: "Players you chose to keep this week (ESPN ids, comma-separated, or none). Sent by the Keep button."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -41,6 +45,7 @@ jobs:
         run: python build.py
         env:
           FH_RECORD: snapshot.json.gz
+          FH_KEEP: ${{ github.event.inputs.keep }}
           ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
       - name: Save the preview to the branch
@@ -58,7 +63,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          for f in plan_state.json cache history; do [ -e "$f" ] && git add "$f" || true; done
+          for f in plan_state.json keep.json cache history; do [ -e "$f" ] && git add "$f" || true; done
           if ! git diff --cached --quiet; then
             git commit -m "Update weekly plan and saved Daily Faceoff data"
             for i in 1 2 3; do git pull --rebase -q origin main && git push && break; sleep 5; done

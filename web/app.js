@@ -674,13 +674,7 @@ function streamsRender(){
 }
 
 function gpMoveHtml(m,i){
-  var tag=m.tier==='make'?'<span class="good">make this move</span>':'<span class="warn">optional move</span>';
-  var h='<div class="step"><div class="num"'+(m.tier==='make'?'':' style="background:var(--gray)"')+'>'+(i+1)+'</div><div>'
-  +'<div><b>'+esc(m.day)+'</b> &middot; '+tag+(m.waiver?' <span class="warn">on waivers, put the claim in the day before</span>':'')+'</div>'
-  +'<div>add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' game'+(m.games===1?'':'s')+' left)</span></div>'
-  +'<div>drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts this week</span> <span class="muted">('+sgn(m.net,1)+' after the long-term cost)</span></div>'
-  +reasonsHtml(m)+'</div></div>';
-  return h;
+  return '<div class="step"><div class="num"'+(cfOf(m)==='strong'?'':' style="background:var(--gray)"')+'>'+(i+1)+'</div><div style="flex:1;min-width:0"><div><b>'+esc(m.day)+'</b></div>'+mvCard(m)+'</div></div>';
 }
 function gpTargets(list,label){
   var h='<div class="chip" style="min-width:290px"><div class="d">'+label+'</div>';
@@ -693,7 +687,7 @@ function gameplanRender(){
   var P=lkPlan(D.gameplan),h='';
   if(!P){$('#t-gameplan').innerHTML='<div class="card">The game plan is not available right now.</div>';return;}
   var M=P.matchup,n=P.moves.length;
-  h+='<div class="card"><h2>Your game plan for the rest of this week</h2>'+lkNote(P)+(P.cautious?'<div class="why warn" style="margin-bottom:8px">Line data could not be loaded this update, so only moves from the last good update are shown. New suggestions return with the next good update.</div>':'');
+  h+='<div class="card"><h2>Your game plan for the rest of this week</h2>'+lkNote(P)+keptHtml()+(P.cautious?'<div class="why warn" style="margin-bottom:8px">Line data could not be loaded this update, so only moves from the last good update are shown. New suggestions return with the next good update.</div>':'');
   if(M){
     var pa=M.p_win_after;
     h+='<div class="vs"><div class="team"><div class="n">'+esc(D.me)+'</div><div class="s">'+f(M.me_now,1)+'</div><div class="r">projected final '+Math.round(M.proj_me)+(P.gain>0?' &rarr; '+Math.round(M.proj_me+P.gain)+' with the plan':'')+'</div></div>'
@@ -704,8 +698,10 @@ function gameplanRender(){
   h+='<div style="margin-top:12px"><span class="big">+'+f(P.gain,1)+'</span> <span class="muted">projected points from '+n+' of your '+P.moves_left+' remaining moves ('+f(P.base,0)+' &rarr; '+f(P.total,0)+' for the rest of the matchup). Each move\'s gain already has its long-term cost taken off (what you lose next week and later by not keeping the player you drop).</span></div>';
   if(!n)h+='<div class="verdict">No move adds points after what you would give up. Keep your lineup and use the day-by-day check below to set it each morning.</div>';
   else{
-    var mk=P.moves.filter(function(m){return m.tier==='make';}).length;
-    h+='<div class="verdict">'+(mk?mk+' move'+(mk===1?'':'s')+' clear the normal bar. ':'No move clears the normal bar. ')+(n-mk?(n-mk)+' optional move'+(n-mk===1?'':'s')+' add smaller gains. ':'')+(P.unused?P.unused+' move'+(P.unused===1?'':'s')+' stay unused because nothing else adds points.':'')+'</div>';
+    var cnt={strong:0,lean:0,optional:0};P.moves.forEach(function(m){cnt[cfOf(m)]++;});
+    h+='<div class="verdict">'+(cnt.strong?cnt.strong+' Strong move'+(cnt.strong===1?'':'s')+' (do '+(cnt.strong===1?'it':'them')+'). ':'No Strong move this week. ')
+      +(cnt.lean?cnt.lean+' Lean (worth it if you have moves to spare). ':'')+(cnt.optional?cnt.optional+' Optional (small edge, fine to skip). ':'')
+      +(P.unused?P.unused+' move'+(P.unused===1?'':'s')+' stay unused because nothing else adds points.':'')+'</div>';
   }
   h+='</div>';
   if(n){h+='<div class="card"><h2>The moves, in the order to make them</h2>';P.moves.forEach(function(m,i){h+=gpMoveHtml(m,i);});
@@ -771,6 +767,7 @@ var LK=(function(){
   return {closed:closed,count:count,first:first,age:age,bar:bar,start:start};
 })();
 function lkPlan(pl){
+  pl=kpApply(pl);
   if(!pl||!LK.count())return pl;
   var keep=function(m){return !LK.closed(m.t);};
   var c={};for(var k in pl)c[k]=pl[k];
@@ -843,7 +840,7 @@ var ICON={
 };
 /* each sub-view lists its cards by title: [title, startsCollapsed] */
 var VIEWS=[
- {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['Today\'s checklist'],['This week matchup'],['Lineup sheet',1]]}]},
+ {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['Today'],['Track record'],['This week matchup',1],['Lineup sheet',1]]}]},
  {id:'moves',label:'Moves',subs:[
    {id:'plan',label:'Game plan',cards:[['Your game plan for the rest of this week'],['Day-by-day playbook'],['Next week preview'],['Moves and waivers',1],['Day-by-day lineup check',1]]},
    {id:'swap',label:'Swap lab',cards:[['Try a swap'],['Your roster: who to look at this week']]},
@@ -910,7 +907,7 @@ function uiNext(c){
 function uiBadge(){
   var b=document.getElementById('bn-moves');if(!b)return;
   var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null;
-  var fi=LK.first(),n=P?P.moves.filter(function(m){return m.t===fi||(m.waiver&&m.t-1===fi);}).length:0;
+  var fi=LK.first(),n=P?P.moves.filter(function(m){return (m.t===fi||(m.waiver&&m.t-1===fi))&&cfOf(m)==='strong';}).length:0;
   var o=b.querySelector('.bdg');if(o)o.parentNode.removeChild(o);
   if(n)b.insertAdjacentHTML('beforeend','<span class="bdg">'+n+'</span>');
 }
@@ -928,6 +925,7 @@ function uiLayout(){
     if(old)old.parentNode.replaceChild(c,old);else box.appendChild(c);
   });
   try{uiToday();}catch(e){}
+  try{uiRecord();}catch(e){}
   try{uiStreams();uiPlaybook();}catch(e){}
   try{uiHelp();}catch(e){}
   try{uiLineup();}catch(e){}
@@ -1034,16 +1032,16 @@ function wpPill(m){
   return t?'<span class="pill '+t[0]+'">'+t[1]+'</span> ':'';
 }
 function wpMove(m,full){
-  var why=(m.why&&m.why[0])?'<div class="muted">'+esc(m.why[0])+'</div>':'';
-  if(full&&(m.why_add||m.why_drop)&&typeof reasonsHtml==='function')why=(m.cost>=0.05?'<div class="muted">'+sgn(m.net,1)+' after a long-term cost of '+f(m.cost,1)+'</div>':'')+'<details class="pc-det" style="margin-top:4px"><summary>Why</summary>'+reasonsHtml(m)+'</details>';
+  if(m.state==='due'||m.state==='waiting')return '<li class="mvli">'+wpPill(m)+mvCard(m)+'</li>';
   var note=(m.agree===false)?' <span class="warn">&middot; today\'s model no longer picks him</span>':'';
-  return '<li>'+wpPill(m)+'<span class="'+(m.tier==='make'?'good':'warn')+'"><b>'+(m.tier==='make'?'Make this move':'Optional move')+'</b></span>: add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' gm)</span>, drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span>'+(m.state==='done'?'':note)+why+'</li>';
+  var why=m.why1?'<div class="muted">'+esc(m.why1)+'</div>':((m.why&&m.why[0])?'<div class="muted">'+esc(m.why[0])+'</div>':'');
+  return '<li>'+wpPill(m)+cfPill(m)+' add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' gm)</span>, drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span>'+(m.state==='done'?'':note)+why+'</li>';
 }
 function uiPlaybook(){
   var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,S=D.streams,WP=D.weekplan||{};
   if(!P||!S)return;
   var h='',fi=LK.first(),done=WP.done||[],missed=WP.missed||[],ch=WP.changes||[];
-  h+='<div class="muted" style="margin-bottom:6px">One plan for the whole site: the Today checklist, this page and the morning alert all show these moves. '
+  h+='<div class="muted" style="margin-bottom:6px">One plan for the whole site: the Today screen, this page and the morning alert (Strong moves only) all use these moves. '
     +'Each update keeps a planned move unless a clearly better one comes up, and says what changed.</div>';
   if(WP.saved===false)h+='<div class="why warn" style="margin-bottom:6px">Some data was missing in this update, so this plan was not saved as the week\'s plan. The next good update replaces it.</div>';
   if(ch.length)h+='<div class="pbh">Changed since the last update</div><ul class="pbl">'+ch.map(function(c){
@@ -1075,14 +1073,14 @@ function uiPlaybook(){
     var byDay={},order=[];
     PV.moves.forEach(function(m){if(!byDay[m.day]){byDay[m.day]=[];order.push(m.day);}byDay[m.day].push(m);});
     if(!order.length)g+='<div class="muted">No move clearly adds points next week yet.</div>';
-    order.forEach(function(d){g+='<div class="pbh">'+esc(d)+'</div><ul class="pbl">'+byDay[d].map(function(m){return wpMove({add:m.add,drop:m.drop,games:m.games,gain:m.gain,tier:m.tier,why:m.why,state:'waiting'});}).join('')+'</ul>';});
+    order.forEach(function(d){g+='<div class="pbh">'+esc(d)+'</div><ul class="pbl">'+byDay[d].map(function(m){return wpMove({add:m.add,drop:m.drop,games:m.games,gain:m.gain,tier:m.tier,conf:m.conf,why1:m.why1,why:m.why,state:'preview'});}).join('')+'</ul>';});
     uiPut('Next week preview',g,{v:'moves',s:'plan',c:0});
   }else{
     $$('.card[data-ut="Next week preview"]').forEach(function(x){x.parentNode.removeChild(x);});
   }
 }
 
-/* ---------- Today's checklist: everything to do before the day's first puck drop, in one card ---------- */
+/* ---------- Today: what to do before the day's first puck drop (or that there is nothing to do), in one card ---------- */
 function etTime(ms){try{return new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'}).format(new Date(ms));}catch(e){return '';}}
 function etToday(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}catch(e){return '';}}
 function lsChanges(i){
@@ -1103,40 +1101,164 @@ function uiToday(){
   var C=D.clock,P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,h='';
   if(!C)return;
   var fi=LK.first(),n=C.labels.length,isToday=fi<n&&C.dates[fi]===etToday();
-  var age=C.built?(Date.now()-C.built)/3600000:0;
-  if(age>12)h+='<div class="why bad" style="margin-bottom:8px">This page is '+Math.round(age)+' hours old, so the automatic update may have failed. Tap Refresh data, or check ESPN before making moves.</div>';
-  if(D.health&&D.health.level!=='ok'&&D.health.items&&D.health.items.length)h+='<div class="why warn" style="margin-bottom:8px">&#9888; '+esc(D.health.items.join(' '))+'</div>';
+  var age=C.built?(Date.now()-C.built)/3600000:0,H=D.health||{},M=D.matchup;
+  /* the strip: win chance, moves left, data health */
+  var hl=age>12?['bad','Data is '+Math.round(age)+' h old']:(H.level==='bad'?['bad','Data missing']:(H.level==='warn'?['warn','Some data missing']:['good','Data up to date']));
+  h+='<div class="tstrip">';
+  if(M)h+='<div class="ts"><div class="ts-v">'+Math.round(M.p_win*100)+'%</div><div class="ts-k">win chance</div><div class="ts-s">'+f(M.me_now,1)+' to '+f(M.opp_now,1)+'</div></div>';
+  if(P&&P.moves_left!=null)h+='<div class="ts"><div class="ts-v">'+P.moves_left+'</div><div class="ts-k">moves left</div><div class="ts-s">of '+(P.limit||7)+' this week</div></div>';
+  h+='<button type="button" class="ts ts-h" data-go="league/help"><div class="ts-v '+hl[0]+'">&#9679;</div><div class="ts-k">'+hl[1]+'</div><div class="ts-s">'+esc(String(D.updated||'').replace(/^.*?,\s*/,''))+'</div></button>';
+  h+='</div>';
+  if(age>12)h+='<div class="why bad" style="margin-bottom:8px">The automatic update may have failed. Tap Refresh data, or check ESPN before making moves.</div>';
+  else if(H.level&&H.level!=='ok'&&H.items&&H.items.length)h+='<div class="why warn" style="margin-bottom:8px">&#9888; '+esc(H.items[0])+(H.level==='bad'?' Nothing is marked Strong until it is back.':'')+'</div>';
   if(fi>=n){
-    h+='<div class="tdh">Every game day in this matchup has started</div><div class="muted">Nothing left to add for this week. Next week\'s plan shows up after the next update (Moves, Next week preview).</div>';
-    uiPut('Today\'s checklist',h,{v:'today',s:'main',c:0});return;
+    h+='<div class="tbig">You\'re set for this week</div><div class="muted">Every game day in this matchup has started. Next week\'s plan shows up after the next update (Moves, Next week preview).</div>';
+    uiPut('Today',h,{v:'today',s:'main',c:0});return;
   }
-  var lk=C.lock[fi];
-  h+='<div class="tdh">'+(isToday?'Today':esc(C.labels[fi]))+(lk?' &middot; adds lock at <b>'+etTime(lk)+' ET</b>':' &middot; no NHL games')+'</div>';
-  if(lk)h+='<div class="muted">In this league nobody can be added once the day\'s first game starts.</div>';
-  var mv=P?P.moves.filter(function(m){return m.t===fi;}):[],cl=P?P.moves.filter(function(m){return m.waiver&&m.t-1===fi;}):[];
-  h+='<div class="tdk">1. Moves</div>';
-  if(mv.length||cl.length){
-    h+='<ul class="pbl">'+mv.map(function(m){return '<li><b>Add</b> <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+')</span>, <b>drop</b> <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="good">'+sgn(m.gain,1)+' pts this week</span>'+(m.tier==='make'?'':' <span class="warn">optional</span>')+'</li>';}).join('')
-      +cl.map(function(m){return '<li><b>Put in a waiver claim</b> for <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">(to add him '+esc(dayShort(m.day))+', dropping '+esc(m.drop.n)+')</span></li>';}).join('')+'</ul>';
+  var lk=C.lock[fi],when=isToday?'today':esc(dayShort(C.labels[fi]));
+  var all=P?P.moves.filter(function(m){return m.t===fi;}):[];
+  var strong=all.filter(function(m){return cfOf(m)==='strong';}),small=all.filter(function(m){return cfOf(m)!=='strong';});
+  var cl=P?P.moves.filter(function(m){return m.waiver&&m.t-1===fi;}):[];
+  var lc=isToday?lsChanges(fi):null,lineTodo=lc?lc.into.length+lc.out.length:0;
+  if(strong.length||cl.length){
+    h+='<div class="tbig">'+(strong.length?'Do '+(strong.length===1?'this':'these')+' '+when:'One thing to do '+when)+(lk?' <span class="tlock">before '+etTime(lk)+' ET</span>':'')+'</div>';
+    h+=strong.map(function(m){return mvCard(m);}).join('');
+    h+=cl.map(function(m){return '<div class="mv mv-'+cfOf(m)+'"><div class="mv-top">'+cfPill(m)+' <span class="muted">waiver claim</span></div><div class="mv-sw">Put in a claim for <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">to add him '+esc(dayShort(m.day))+', dropping '+esc(m.drop.n)+'</span></div><div class="mv-why">'+esc(m.why1||'')+'</div></div>';}).join('');
   }else{
-    var nx=P?P.moves.filter(function(m){return m.t>fi;})[0]:null;
-    h+='<div class="muted">No move today.'+(nx?' Next: '+esc(dayShort(nx.day))+', add '+esc(nx.add.n)+' and drop '+esc(nx.drop.n)+'.':'')+'</div>';
+    h+='<div class="tbig ok">&#10003; Nothing you need to do '+when+'</div>';
+    var nx=P?P.moves.filter(function(m){return m.t>fi&&cfOf(m)==='strong';})[0]:null;
+    h+='<div class="muted">'+(nx?'Next Strong move: <b>'+esc(dayShort(nx.day))+'</b>, add '+esc(nx.add.n)+' for '+esc(nx.drop.n)+'.':'No Strong move left this week. Your roster is in good shape.')+'</div>';
   }
-  h+='<div class="tdk">2. Lineup</div>';
-  var lc=isToday?lsChanges(fi):null;
-  if(!isToday)h+='<div class="muted">Set your lineup the morning of '+esc(C.labels[fi])+'.</div>';
-  else if(lc&&(lc.into.length||lc.out.length)){
-    h+='<ul class="pbl">'+lc.into.map(function(p){return '<li><b>Start</b> <a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">(on your bench, has a game)</span></li>';}).join('')
-      +lc.out.map(function(p){return '<li><b>Bench</b> <a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">('+(p.gl===0||!p.v||!(p.v[fi]>0)?'no game today':'lower projection than the players replacing him')+')</span></li>';}).join('')+'</ul>';
-  }else h+='<div class="muted">Your skater lineup is already the best one for today'+(lc?' ('+lc.playing+' of your skaters play)':'')+'.</div>';
-  (D.alerts||[]).forEach(function(a){if(a.k==='bad'||/injur|not starting/i.test(a.t))h+='<div class="why '+(a.k==='bad'?'bad':'warn')+'">'+esc(a.t)+'</div>';});
-  h+='<div class="tdk">3. Goalies</div>';
+  if(small.length){
+    var tot=small.reduce(function(s2,m){return s2+(m.net||0);},0);
+    h+='<details class="tsmall"'+(UI.open.tsmall?' open':'')+'><summary>'+small.length+' smaller move'+(small.length===1?'':'s')+' '+when+' ('+sgn(tot,1)+' pts) &middot; only if you have moves to spare</summary>'+small.map(function(m){return mvCard(m);}).join('')+'</details>';
+  }
+  /* lineup + goalies: short, only what needs doing */
   var gl=[];(D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){if(r.day===C.labels[fi])gl.push({g:g.p,r:r});});});
   gl.sort(function(a,b){return (b.r.ev||0)-(a.r.ev||0);});
-  if(!gl.length)h+='<div class="muted">None of your goalies play.</div>';
-  else h+='<ul class="pbl">'+gl.map(function(x){return '<li><a class="pl" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a> '+(x.r.home?'vs':'@')+' '+esc(x.r.opp)+' <span class="pill '+x.r.cls+'">'+esc(x.r.verdict)+'</span> <span class="muted">'+esc(x.r.conf||'')+'</span></li>';}).join('')+'</ul>';
-  h+='<div class="goto"><button type="button" class="chip-btn" data-go="moves/plan">Week plan</button><button type="button" class="chip-btn" data-go="moves/swap">Try a swap</button></div>';
-  uiPut('Today\'s checklist',h,{v:'today',s:'main',c:0});
+  var al=(D.alerts||[]).filter(function(a){return a.k==='bad'||/injur|not starting/i.test(a.t);});
+  h+='<div class="tdk">Lineup '+(isToday?'today':'for '+esc(dayShort(C.labels[fi])))+'</div>';
+  if(!isToday)h+='<div class="muted">Set it the morning of '+esc(C.labels[fi])+'.</div>';
+  else if(lineTodo){
+    h+='<ul class="pbl">'+lc.into.map(function(p){return '<li><b>Start</b> <a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">(on your bench, has a game)</span></li>';}).join('')
+      +lc.out.map(function(p){return '<li><b>Bench</b> <a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">('+(p.gl===0||!p.v||!(p.v[fi]>0)?'no game today':'lower projection than the players replacing him')+')</span></li>';}).join('')+'</ul>';
+  }else h+='<div class="muted">&#10003; Your skaters are already set'+(lc?' ('+lc.playing+' play today)':'')+'.</div>';
+  al.forEach(function(a){h+='<div class="why '+(a.k==='bad'?'bad':'warn')+'">'+esc(a.t)+'</div>';});
+  if(gl.length)h+='<ul class="pbl">'+gl.map(function(x){return '<li><a class="pl" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a> '+(x.r.home?'vs':'@')+' '+esc(x.r.opp)+' <span class="pill '+x.r.cls+'">'+esc(x.r.verdict)+'</span> <span class="muted">'+esc(x.r.conf||'')+'</span></li>';}).join('')+'</ul>';
+  else h+='<div class="muted">None of your goalies play.</div>';
+  h+='<div class="goto"><button type="button" class="chip-btn" data-go="moves/plan">Whole week</button><button type="button" class="chip-btn" data-go="moves/swap">Try a swap</button></div>';
+  uiPut('Today',h,{v:'today',s:'main',c:0});
+}
+
+/* ---------- Confidence, move cards and the "Keep him" list ---------- */
+var CONF={strong:['Strong','Do it'],lean:['Lean','Worth it if you have moves to spare'],optional:['Optional','Small edge, fine to skip']};
+function cfOf(m){return m.conf||(m.tier==='make'?'lean':'optional');}
+function cfPill(m){var c=cfOf(m);return '<span class="cf cf-'+c+'">'+CONF[c][0]+'</span>';}
+var KP=(function(){
+  var K='fh_keep';
+  function mp(){return D.gameplan?D.gameplan.mp:null;}
+  function local(){try{var o=JSON.parse(localStorage.getItem(K)||'null');return (o&&o.mp===mp())?o:null;}catch(e){return null;}}
+  function list(){
+    var o=local(),built=(D.clock&&D.clock.built)||0;
+    if(o&&o.at>built)return o.ids.slice();
+    return ((D.gameplan&&D.gameplan.kept)||[]).slice();
+  }
+  function has(id){return list().indexOf(+id)>=0;}
+  function pending(){var o=local(),built=(D.clock&&D.clock.built)||0;return !!(o&&o.at>built);}
+  function set(ids){try{localStorage.setItem(K,JSON.stringify({mp:mp(),ids:ids,at:Date.now()}));}catch(e){}}
+  function toggle(id){
+    id=+id;var l=list(),i=l.indexOf(id);
+    if(i>=0)l.splice(i,1);else l.push(id);
+    set(l);
+    var sync=(typeof window.FHRefresh==='function')?window.FHRefresh({reason:'manual-button-keep',keep:l.length?l.join(','):'none'},true):false;
+    return {kept:i<0,synced:sync};
+  }
+  return {list:list,has:has,toggle:toggle,pending:pending};
+})();
+function kpApply(pl){
+  if(!pl||!pl.moves||pl._kp)return pl;
+  var kept={};KP.list().forEach(function(id){kept[id]=1;});
+  var c={};for(var k in pl)c[k]=pl[k];c._kp=1;c.keptOut=[];
+  if(!Object.keys(kept).length)return c;
+  var used={};pl.moves.forEach(function(m){if(!kept[m.drop.id])used[m.drop.id]=1;});
+  var delta=0;c.moves=[];
+  pl.moves.forEach(function(m){
+    if(!kept[m.drop.id]){c.moves.push(m);return;}
+    c.keptOut.push(m);delta-=(m.marg!=null?m.marg:m.net);
+    var alt=(m.alts||[]).filter(function(a){return !kept[a.drop.id]&&!used[a.drop.id];})[0];
+    if(alt){used[alt.drop.id]=1;delta+=alt.net;c.moves.push(Object.assign({},alt,{swapped:m.drop.n,why_add:m.why_add}));}
+  });
+  c.gain=Math.max(0,(pl.gain||0)+delta);
+  if(pl.matchup){var mm={};for(var q in pl.matchup)mm[q]=pl.matchup[q];mm.p_win_after=null;c.matchup=mm;}
+  return c;
+}
+function keepBtn(p){
+  var on=KP.has(p.id);
+  return '<button type="button" class="kp'+(on?' on':'')+'" data-keep="'+p.id+'">'+(on?'Kept: undo':'Keep '+esc(shortName(p.n)))+'</button>';
+}
+function mvCard(m,o){
+  o=o||{};var c=cfOf(m);
+  var h='<div class="mv mv-'+c+'"><div class="mv-top">'+cfPill(m)+' <span class="muted">'+esc(CONF[c][1])+'</span>'
+    +(o.day?' <span class="mv-day">'+esc(dayShort(m.day))+'</span>':'')+'</div>'
+    +'<div class="mv-sw"><span class="mv-k">Add</span> <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">'+esc(m.add.pos)+' '+esc(m.add.tm)+'</span></div>'
+    +'<div class="mv-sw"><span class="mv-k">Drop</span> <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">'+esc(m.drop.pos)+' '+esc(m.drop.tm)+'</span></div>';
+  if(m.waiver)h+='<div class="warn" style="font-size:13px">He is on waivers: put the claim in the day before.</div>';
+  if(m.swapped)h+='<div class="muted" style="font-size:13px">Instead of dropping '+esc(m.swapped)+', who you chose to keep.</div>';
+  h+='<div class="mv-why">'+esc(m.why1||(sgn(m.gain,1)+' pts this week'))+'</div>';
+  if(!o.noact){
+    h+='<div class="mv-act">'+keepBtn(m.drop);
+    if((m.why_add&&m.why_add.length)||(m.why_drop&&m.why_drop.length))h+='<details class="pc-det"><summary>Full reasons</summary>'+reasonsHtml(m)+'</details>';
+    h+='</div>';
+  }
+  return h+'</div>';
+}
+function keptHtml(){
+  var l=KP.list();if(!l.length)return '';
+  var names=l.map(function(id){var p=ALL[id];return p?'<a class="pl" data-id="'+id+'" data-noav="1">'+esc(p.n)+'</a> <button type="button" class="kp on" data-keep="'+id+'">undo</button>':'';}).filter(Boolean);
+  if(!names.length)return '';
+  return '<div class="why" style="margin:6px 0">Kept this week (never suggested as drops): '+names.join(' &middot; ')
+    +(KP.pending()?' <span class="muted">(saved on this phone; the alerts catch up after the next update)</span>':'')+'</div>';
+}
+function kpClick(id){
+  var r=KP.toggle(id),p=ALL[id],n=p?shortName(p.n):'He';
+  try{gameplanRender();}catch(e){}
+  try{uiLayout();}catch(e){}
+  kpToast(r.kept?(n+' is kept for this week. '+(r.synced?'Updating the plan and alerts now.':'Saved on this phone. Tap Refresh data to update the morning alert too.')):(n+' can be suggested as a drop again.'));
+}
+function kpToast(t){
+  var el=document.getElementById('kptoast');
+  if(!el){el=document.createElement('div');el.id='kptoast';el.setAttribute('role','status');document.body.appendChild(el);}
+  el.textContent=t;el.classList.add('on');clearTimeout(kpToast._t);kpToast._t=setTimeout(function(){el.classList.remove('on');},4500);
+}
+
+/* ---------- Track record: did the advice work? ---------- */
+function uiRecord(){
+  var R2=D.record;
+  var h='';
+  if(!R2){
+    h='<div class="muted">Every suggested move gets scored after its games: points the player you add scores minus the player you drop, over the same days. The first results show up after the next game day.</div>';
+    uiPut('Track record',h,{v:'today',s:'main',c:0});return;
+  }
+  var M=R2.made,S=R2.skipped,st=R2.strong;
+  if(!M.n&&!S.n){
+    h+='<div class="muted">Scoring starts with this week\'s next moves. Each one is scored after its games: points the player you add scores minus the player you drop, over the same days. Made and skipped moves both count, so you can see what following the advice is worth.</div>';
+    if(R2.untracked)h+='<div class="muted" style="margin-top:6px">'+R2.untracked+' earlier move'+(R2.untracked===1?' was':'s were')+' suggested before scoring started, so '+(R2.untracked===1?'it isn\'t':'they aren\'t')+' counted.</div>';
+  }else{
+    h+='<div class="rec">'
+      +'<div class="rec-t"><div class="rec-v '+(M.pts>=0?'good':'bad')+'">'+sgn(M.pts,1)+'</div><div class="rec-k">Moves you made ('+M.n+')</div><div class="rec-s">'+M.wins+' of '+M.n+' came out ahead</div></div>'
+      +'<div class="rec-t"><div class="rec-v '+(S.pts>0?'warn':'muted')+'">'+sgn(S.pts,1)+'</div><div class="rec-k">Moves you skipped ('+S.n+')</div><div class="rec-s">'+(S.n?'what they would have added':'none yet')+'</div></div></div>';
+    if(st&&st.n)h+='<div class="muted" style="margin:6px 0">Strong calls: '+st.wins+' of '+st.n+' came out ahead ('+sgn(st.pts,1)+' pts).</div>';
+    var rows=R2.moves.filter(function(r){return r.actual!=null;}).slice(0,8);
+    if(rows.length){
+      h+='<ul class="pbl rec-l">'+rows.map(function(r){
+        return '<li><span class="pill '+(r.result==='done'?'start':'done')+'">'+(r.result==='done'?'MADE':'SKIPPED')+'</span> '
+          +'<span class="muted">'+esc(dayShort(r.day||''))+'</span> '+esc(shortName(r.add.n))+' for '+esc(shortName(r.drop.n))
+          +' &middot; <b class="'+(r.actual>0?'good':(r.actual<0?'bad':''))+'">'+sgn(r.actual,1)+'</b>'
+          +' <span class="muted">(expected '+sgn(r.expected||0,1)+(r.final?'':', so far')+')</span></li>';}).join('')+'</ul>';
+    }
+    h+='<div class="muted" style="margin-top:6px">Points the added player scored minus the dropped player, from the move\'s day to the end of that week. Hockey is noisy, so judge it over a few weeks, not one move.</div>';
+  }
+  uiPut('Track record',h,{v:'today',s:'main',c:0});
 }
 
 /* ---------- Help: plain-English terms + what data this update had ---------- */
@@ -1145,7 +1267,9 @@ function uiHelp(){
     ['Games left','Games his NHL team still plays in this Monday-to-Sunday matchup (days that have started do not count).'],
     ['Line 1 / Pair 2 / PP1','His current even-strength line (forwards) or pair (defense), and power-play unit, from DailyFaceoff.com.'],
     ['UTIL','The one lineup spot that takes any forward or defenseman.'],
-    ['Make this move / optional','Make this move = clearly worth one of your weekly moves. Optional = a small gain, worth it only if you have moves to spare.'],
+    ['Strong / Lean / Optional','How sure the plan is about a move. Strong = do it: a clear gain, usually backed by extra games. Lean = a real gain, worth it if you have moves to spare. Optional = a small edge, fine to skip. Only Strong moves go in the morning alert.'],
+    ['Keep','Tap Keep on any suggested drop and that player is never suggested as a drop for the rest of the matchup week. The plan picks the next best drop instead.'],
+    ['Track record','Each suggested move is scored after its games: points the added player scored minus the dropped player, from that day to the end of the week. Moves you skipped are scored too.'],
     ['Long-term cost','What you give up after this week by not keeping the player you drop (his games next week and his quality per game). Every move\'s gain already has it taken off.'],
     ['Easy / hard opponent','How good the other NHL team is (from the standings). Easy opponents give a small boost.'],
     ['Strength (pts/wk)','On the League tab: what each team\'s best lineup should score per week over the next 4 weeks.'],
@@ -1247,6 +1371,10 @@ function uiStart(){uiModalWatch();
   mo2.observe(document.body,{childList:true,subtree:true});
   document.addEventListener('click',function(e){
     var t=e.target;if(!t||!t.closest)return;
+    var kb=t.closest('[data-keep]');
+    if(kb){kpClick(kb.getAttribute('data-keep'));return;}
+    var ts=t.closest('details.tsmall > summary');
+    if(ts){UI.open.tsmall=!ts.parentNode.open;}
     var g=t.closest('[data-go]');
     if(g){showTab(g.getAttribute('data-go'));return;}
     if(t.closest('#phBtn')){UI.photos=!UI.photos;try{localStorage.setItem('fh_photos',UI.photos?'on':'off');}catch(x){}uiPhotos();return;}
