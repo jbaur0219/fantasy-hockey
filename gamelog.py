@@ -37,31 +37,56 @@ def _r1(x):
     return int(x) if x == int(x) else x
 
 
+def _variants(season, part):
+    """Request formats to try, most specific first (ESPN does not document this view)."""
+    top = {"value": PERIODS, "additionalValue": [f"00{season}", f"10{season}"]}
+    return [
+        ("kona_playercard", {"players": {"filterIds": {"value": part}, "filterStatsForTopScoringPeriodIds": top}}),
+        ("kona_playercard", {"players": {"filterIds": {"value": part},
+                                         "filterStatsForTopScoringPeriodIds": {"value": PERIODS, "additionalValue": [f"00{season}"]}}}),
+        ("kona_player_info", {"players": {"filterIds": {"value": part}, "limit": len(part),
+                                          "filterStatsForTopScoringPeriodIds": top}}),
+    ]
+
+
 def fetch(cfg, ids):
     """Raw ESPN player records (with per-game stats) for these ESPN player ids. Never raises."""
     season, league = cfg["season"], cfg["league"]
     url = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/fhl/seasons/{season}/segments/0/leagues/{league}"
-    out, fails = [], 0
+    out, fails, pick = [], 0, None
     ids = list(dict.fromkeys(int(i) for i in ids if i is not None))
     for k in range(0, len(ids), BATCH):
         part = ids[k:k + BATCH]
-        flt = {"players": {"filterIds": {"value": part}, "limit": len(part),
-                           "filterStatsForTopScoringPeriodIds": {"value": PERIODS,
-                                                                 "additionalValue": [f"00{season}", f"10{season}"]}}}
-        try:
-            r = requests.get(url, params=[("view", "kona_playercard")], cookies=cfg.get("cookies"),
-                             headers={"x-fantasy-filter": json.dumps(flt)}, timeout=30)
-            r.raise_for_status()
-            js = r.json()
-            for it in (js.get("players") if isinstance(js, dict) else js) or []:
-                pl = it.get("player") if isinstance(it, dict) and "player" in it else it
-                if isinstance(pl, dict):
-                    out.append(pl)
-        except Exception as e:
+        tries = _variants(season, part)
+        tries = [tries[pick]] if pick is not None else list(enumerate(tries))
+        ok = False
+        for item in tries:
+            i, (view, flt) = item if pick is None else (pick, item)
+            try:
+                r = requests.get(url, params=[("view", view)], cookies=cfg.get("cookies"),
+                                 headers={"x-fantasy-filter": json.dumps(flt)}, timeout=30)
+                if r.status_code >= 400:
+                    if pick is None:
+                        print(f"  game logs: format {i} ({view}) -> HTTP {r.status_code}: {r.text[:160]!r}")
+                    continue
+                js = r.json()
+                got = 0
+                for it in (js.get("players") if isinstance(js, dict) else js) or []:
+                    pl = it.get("player") if isinstance(it, dict) and "player" in it else it
+                    if isinstance(pl, dict):
+                        out.append(pl)
+                        got += 1
+                if pick is None:
+                    n5 = sum(1 for pl in out for s in pl.get("stats") or [] if s.get("statSplitTypeId") == 5)
+                    print(f"  game logs: format {i} ({view}) works: {got} players, {n5} single-game entries")
+                pick, ok = i, True
+                break
+            except Exception as e:
+                if pick is None:
+                    print(f"  game logs: format {i} ({view}) failed ({type(e).__name__}: {str(e)[:80]})")
+        if not ok:
             fails += 1
-            if fails == 1:
-                print(f"  game logs: ESPN request failed ({type(e).__name__}: {str(e)[:80]})")
-            if fails >= 2 and not out:              # ESPN is not answering this view: stop asking
+            if fails >= 2 and not out:              # ESPN is not answering: stop asking
                 break
     return out
 
