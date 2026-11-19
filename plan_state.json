@@ -196,7 +196,7 @@
      33.8,
      19
     ],
-    "at": 1795048438638,
+    "at": 1795068931600,
     "d": [
      26.4,
      19
@@ -211,13 +211,13 @@
     "pos": "RW",
     "tm": "WSH"
    },
-   "gain": 2.84,
+   "gain": 2.86,
    "games": 3,
-   "net": 2.84,
+   "net": 2.86,
    "t": 1,
    "tier": "make",
    "waiver": false,
-   "why1": "Nazar plays 3 games the rest of this week, Wilson plays 2. Nazar is on CHI's second line and first power-play unit. About +2.8 pts this week."
+   "why1": "Nazar plays 3 games the rest of this week, Wilson plays 2. Nazar is on CHI's second line and first power-play unit. About +2.9 pts this week."
   },
   {
    "add": {
@@ -231,7 +231,7 @@
      27.8,
      20
     ],
-    "at": 1795048438638,
+    "at": 1795068931600,
     "d": [
      33.9,
      23
@@ -246,9 +246,9 @@
     "pos": "D",
     "tm": "VGK"
    },
-   "gain": 2.47,
+   "gain": 2.46,
    "games": 3,
-   "net": 2.47,
+   "net": 2.46,
    "t": 1,
    "tier": "make",
    "waiver": false,
@@ -266,7 +266,7 @@
      16.1,
      10
     ],
-    "at": 1795048438638,
+    "at": 1795068931600,
     "d": [
      36.9,
      24
@@ -281,13 +281,13 @@
     "pos": "C",
     "tm": "PHI"
    },
-   "gain": 2.25,
+   "gain": 2.26,
    "games": 3,
-   "net": 2.25,
+   "net": 2.26,
    "t": 1,
    "tier": "make",
    "waiver": false,
-   "why1": "Chytil plays 3 games the rest of this week, Zegras plays 2. Chytil is on VAN's second line and second power-play unit. About +2.2 pts this week."
+   "why1": "Chytil plays 3 games the rest of this week, Zegras plays 2. Chytil is on VAN's second line and second power-play unit. About +2.3 pts this week."
   },
   {
    "add": {
@@ -301,7 +301,7 @@
      28.3,
      14
     ],
-    "at": 1795048438638,
+    "at": 1795068931600,
     "d": [
      29.6,
      18
@@ -316,9 +316,9 @@
     "pos": "D",
     "tm": "ANA"
    },
-   "gain": 1.0,
+   "gain": 1.01,
    "games": 2,
-   "net": 1.0,
+   "net": 1.01,
    "t": 1,
    "tier": "optional",
    "waiver": false,
@@ -336,7 +336,7 @@
      35.2,
      20
     ],
-    "at": 1795048438638,
+    "at": 1795068931600,
     "d": [
      40.4,
      24
@@ -351,9 +351,9 @@
     "pos": "RW",
     "tm": "SJ"
    },
-   "gain": 0.71,
+   "gain": 0.74,
    "games": 2,
-   "net": 0.71,
+   "net": 0.74,
    "t": 1,
    "tier": "optional",
    "waiver": false,
@@ -371,14 +371,14 @@
      32.4,
      19
     ],
-    "at": 1795048438638,
+    "at": 1795068931600,
     "d": [
      40.6,
      24
     ]
    },
    "conf": "optional",
-   "cost": 1.257,
+   "cost": 1.238,
    "day": "Sun Nov 22",
    "drop": {
     "id": 4697387,
@@ -388,7 +388,7 @@
    },
    "gain": 1.87,
    "games": 1,
-   "net": 0.61,
+   "net": 0.63,
    "t": 4,
    "tier": "optional",
    "waiver": false,
@@ -396,5 +396,5 @@
   }
  ],
  "mp": 8,
- "updated": 1795048438638
+ "updated": 1795068931600
 }
