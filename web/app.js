@@ -328,7 +328,7 @@ function leagueRender(){
 }
 
 /* ---------- player card ---------- */
-function closeModal(){$('#modal').classList.remove('open');}
+function closeModal(){if(typeof sheetClose==='function')sheetClose();else $('#modal').classList.remove('open');}
 function modal(p){
   function cell(k,v){return '<div class="cell"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>';}
   var h='<div class="mhead">'+avHtml(p.id,p.tm)+'<b>'+esc(p.n)+'</b><span class="muted">'+esc(p.pos)+' &middot; '+esc(p.tm)+' &middot; '+esc(p.slot==='FA'?(p.st||'Free agent'):p.slot)+'</span><button class="x" id="mx">&times;</button></div><div class="grid">';
@@ -840,7 +840,7 @@ var ICON={
 };
 /* each sub-view lists its cards by title: [title, startsCollapsed] */
 var VIEWS=[
- {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['Today'],['Track record'],['This week matchup',1],['Lineup sheet',1]]}]},
+ {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['Today'],['Track record'],['Lineup sheet',1]]}]},
  {id:'moves',label:'Moves',subs:[
    {id:'plan',label:'Game plan',cards:[['Your game plan for the rest of this week'],['Day-by-day playbook'],['Next week preview'],['Moves and waivers',1],['Day-by-day lineup check',1]]},
    {id:'swap',label:'Swap lab',cards:[['Try a swap'],['Your roster: who to look at this week']]},
@@ -878,9 +878,6 @@ function uiDecorate(){
 function uiTitle(c){var h=c.querySelector('h2');return h?h.textContent.trim():'';}
 function uiBuild(){
   var secs=$$('section[id^="t-"]'),last=secs[secs.length-1],wrap=last.parentNode;
-  var nav=document.createElement('nav');nav.id='bnav';nav.setAttribute('aria-label','Main');
-  nav.innerHTML=VIEWS.map(function(v){return '<button type="button" data-go="'+v.id+'" id="bn-'+v.id+'">'+ICON[v.id]+'<span>'+v.label+'</span></button>';}).join('');
-  wrap.insertBefore(nav,secs[0]);
   var ui=document.createElement('div');ui.id='ui';
   ui.innerHTML='<div id="snav"></div>'+VIEWS.map(function(v){
     return '<div class="uview" id="v-'+v.id+'">'+v.subs.map(function(s){return '<div class="usub" id="s-'+v.id+'-'+s.id+'"></div>';}).join('')+'</div>';}).join('');
@@ -890,6 +887,7 @@ function uiBuild(){
   wrap.insertBefore(ft,ui.nextSibling);
   try{UI.photos=localStorage.getItem('fh_photos')!=='off';}catch(e){}
   uiPhotos();
+  glBuild();
 }
 function uiPhotos(){
   document.body.classList.toggle('nophoto',!UI.photos);
@@ -919,6 +917,7 @@ function uiLayout(){
     if(!sp){var hm=(HOME[c.parentNode.id.replace('t-','')]||'today/main').split('/');sp={v:hm[0],s:hm[1],c:0};}
     var box=document.getElementById('s-'+sp.v+'-'+sp.s);
     c.setAttribute('data-ut',t);c.classList.add('collapsible');
+    glWrap(c);
     var st=UI.open[t];c.classList.toggle('closed',st===undefined?!!sp.c:!st);
     if(t==='Suggested moves')uiNext(c);
     var old=null;$$('.card',box).forEach(function(x){if(x.getAttribute('data-ut')===t&&x!==c)old=x;});
@@ -945,21 +944,29 @@ function showTab(n){
   var V=VMAP[v];
   if(!s||!V.sm[s])s=UI.sub[v]||V.subs[0].id;
   UI.sub[v]=s;
-  var moved=UI.booted&&(UI.view!==v||UI.sub[v]!==s);
-  UI.view=v;
+  var pv=UI.view,ps=UI._ps,moved=UI.booted&&(pv!==v||ps!==s);
+  var dir=0;if(UI.booted&&pv===v&&ps&&ps!==s){var ix=V.subs.map(function(y){return y.id;});dir=ix.indexOf(s)>ix.indexOf(ps)?1:-1;}
+  UI.view=v;UI._ps=s;
   VIEWS.forEach(function(x){
     document.getElementById('v-'+x.id).classList.toggle('on',x.id===v);
     document.getElementById('bn-'+x.id).classList.toggle('on',x.id===v);
     x.subs.forEach(function(y){document.getElementById('s-'+x.id+'-'+y.id).classList.toggle('on',x.id===v&&y.id===s);});
   });
-  document.getElementById('snav').innerHTML=V.subs.length>1?V.subs.map(function(y){return '<button type="button" data-go="'+v+'/'+y.id+'"'+(y.id===s?' class="on"':'')+'>'+y.label+'</button>';}).join(''):'';
+  var sn=document.getElementById('snav'),same=sn.getAttribute('data-v')===v;
+  if(!same){sn.setAttribute('data-v',v);sn.innerHTML=V.subs.length>1?'<div class="thumb"></div>'+V.subs.map(function(y){return '<button type="button" data-go="'+v+'/'+y.id+'">'+y.label+'</button>';}).join(''):'';}
+  $$('button',sn).forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===v+'/'+s);});
+  glThumb(same&&UI.booted);
+  var lt=document.getElementById('lhT'),gt=document.getElementById('gnT');if(lt)lt.textContent=V.label;if(gt)gt.textContent=V.label;
+  glLens(UI.booted&&pv!==v);
+  if(moved)glEnter(document.getElementById('s-'+v+'-'+s),dir);
   try{history.replaceState(null,'','#'+v+(V.subs.length>1?'/'+s:''));}catch(e){}
-  if(UI.booted)window.scrollTo(0,0);
+  if(UI.booted&&pv!==v)window.scrollTo(0,0);
   UI.booted=true;
+  glScroll();
 }
 
 /* ---------- Streams (one card) + Day-by-day playbook (built from the existing data) ---------- */
-var HIDE={'Best skater streams by day':1,'Best adds for the rest of this week':1,'Best stream targets for the week':1,'Streaming goalies by day':1,
+var HIDE={'This week matchup':1,'Best skater streams by day':1,'Best adds for the rest of this week':1,'Best stream targets for the week':1,'Streaming goalies by day':1,
   'Goalie decisions':1,'Suggested moves':1,'Lineup alerts (today)':1,'Best use of your moves this week':1,'The moves, in the order to make them':1};
 UI.st={sel:'week',pos:'All'};
 function dayShort(l){var p=String(l).split(' ');return p[0]+(p[2]?' '+p[2]:'');}
@@ -969,6 +976,7 @@ function uiPut(title,html,home){
   var c=document.createElement('div');c.className='card collapsible';c.setAttribute('data-ut',title);
   var st=UI.open[title];if(st===undefined?!!sp.c:!st)c.classList.add('closed');
   c.innerHTML='<h2>'+esc(title)+'</h2>'+html;
+  glWrap(c);
   var old=null;$$('.card',box).forEach(function(x){if(x.getAttribute('data-ut')===title)old=x;});
   if(old)old.parentNode.replaceChild(c,old);else box.appendChild(c);
 }
@@ -1097,62 +1105,313 @@ function lsChanges(i){
   var out=act.filter(function(p){return p.slot!=='BN'&&!ids[p.id];});
   return {into:into,out:out,playing:playing.length};
 }
+/* =====================================================================================================
+   LIQUID GLASS SHELL
+   Floating glass tab bar with a sliding lens (tap or drag), minimizes on scroll; large title that
+   collapses into the glass nav bar; segmented control with a sliding thumb; iOS sheet for players;
+   Apple Sports style scoreboard on Today. Everything respects Reduce Motion.
+   ===================================================================================================== */
+var SF={
+  today:'<svg viewBox="0 0 28 28"><path class="f" d="M14 3.2c.5 0 1 .2 1.4.5l9 7.6c.4.4.6.9.6 1.4v10.1c0 1.5-1.2 2.7-2.7 2.7h-4.6c-.8 0-1.4-.6-1.4-1.4v-5.4c0-.8-.6-1.4-1.4-1.4h-1.8c-.8 0-1.4.6-1.4 1.4v5.4c0 .8-.6 1.4-1.4 1.4H5.7C4.2 25.5 3 24.3 3 22.8V12.7c0-.5.2-1 .6-1.4l9-7.6c.4-.3.9-.5 1.4-.5z"/></svg>',
+  moves:'<svg viewBox="0 0 28 28"><path class="s" d="M9 4.5L4.5 9 9 13.5M4.8 9h17.7M19 14.5l4.5 4.5-4.5 4.5M23.2 19H5.5"/></svg>',
+  roster:'<svg viewBox="0 0 28 28"><circle class="f" cx="10.5" cy="9" r="4.3"/><path class="f" d="M2.5 22.3c0-3.9 3.6-6.8 8-6.8s8 2.9 8 6.8c0 .9-.7 1.4-1.6 1.4H4.1c-.9 0-1.6-.5-1.6-1.4z"/><circle class="f" cx="19.6" cy="10" r="3.4"/><path class="f" d="M19.4 15.6c3.6 0 6.1 2.4 6.1 5.4 0 .8-.6 1.3-1.3 1.3h-3.6c.2-.6.3-1.3.3-2 0-1.8-.7-3.4-1.9-4.6.1 0 .3-.1.4-.1z"/></svg>',
+  players:'<svg viewBox="0 0 28 28"><circle class="s" cx="12.3" cy="12.3" r="7.3"/><path class="s" d="M17.6 17.6l6 6"/></svg>',
+  league:'<svg viewBox="0 0 28 28"><path class="f" d="M8 3.5h12c.6 0 1 .4 1 1v1h2.6c.8 0 1.4.6 1.4 1.4v1.2c0 3-2.2 5.4-5.1 5.8-.9 1.6-2.4 2.8-4.2 3.2V20h2.6c.9 0 1.6.7 1.6 1.6v2.3c0 .3-.3.6-.6.6H8.7c-.3 0-.6-.3-.6-.6v-2.3c0-.9.7-1.6 1.6-1.6h2.6v-2.9c-1.8-.4-3.3-1.6-4.2-3.2C5.2 13.5 3 11.1 3 8.1V6.9c0-.8.6-1.4 1.4-1.4H7v-1c0-.6.4-1 1-1zm-3 4v.6c0 1.6 1 2.9 2.4 3.4-.3-1-.4-2-.4-3V7.5H5zm16 0v1c0 1-.1 2-.4 3 1.4-.5 2.4-1.8 2.4-3.4v-.6h-2z"/></svg>',
+  refresh:'<svg viewBox="0 0 28 28"><path class="s" d="M22.5 14a8.5 8.5 0 1 1-2.5-6M20.6 3.6v4.8h-4.8"/></svg>',
+  xmark:'<svg viewBox="0 0 28 28"><path class="s" d="M8.5 8.5l11 11M19.5 8.5l-11 11"/></svg>',
+  check:'<svg viewBox="0 0 28 28"><circle class="f" cx="14" cy="14" r="12"/><path class="k" d="M8.6 14.4l3.6 3.5 7.2-7.6"/></svg>',
+  warn:'<svg viewBox="0 0 28 28"><path class="f" d="M12.3 4.2c.8-1.3 2.6-1.3 3.4 0l9.2 15.9c.8 1.3-.2 3-1.7 3H4.8c-1.5 0-2.5-1.7-1.7-3z"/><path class="k" d="M14 10v5.2M14 18.6v.1"/></svg>',
+  chev:'<svg viewBox="0 0 28 28"><path class="s" d="M11 7l7 7-7 7"/></svg>',
+  swap:'<svg viewBox="0 0 28 28"><path class="s" d="M8 6v15M4.5 17.5L8 21l3.5-3.5M20 22V7M16.5 10.5L20 7l3.5 3.5"/></svg>',
+  plus:'<svg viewBox="0 0 28 28"><path class="k" d="M14 8v12M8 14h12"/></svg>',
+  minus:'<svg viewBox="0 0 28 28"><path class="k" d="M8 14h12"/></svg>',
+  clock:'<svg viewBox="0 0 28 28"><circle class="s" cx="14" cy="14" r="10"/><path class="s" d="M14 8.5V14l3.5 2.2"/></svg>'
+};
+var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function hue(s){var h=0;s=String(s||'');for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;return h;}
+function initials(n){var w=String(n||'').replace(/[^A-Za-z0-9' ]/g,'').split(/\s+/).filter(Boolean);return ((w[0]||'?').charAt(0)+(w[1]?w[1].charAt(0):'')).toUpperCase();}
+
+/* ---------- shell: nav bar, large title, tab bar ---------- */
+function glBuild(){
+  var wrap=document.querySelector('.wrap');
+  /* large title */
+  var lh=document.createElement('header');lh.id='lhead';
+  var eye='';try{eye=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'long',month:'long',day:'numeric'}).format(new Date());}catch(e){}
+  lh.innerHTML='<div class="lh-eye">'+esc(eye)+'</div><h1 class="lh-t" id="lhT">Today</h1><div class="lh-sub">'+esc(D.me)+' &middot; '+esc(D.rec)+'</div>';
+  wrap.insertBefore(lh,wrap.firstChild);
+  /* glass nav bar: inline title + refresh button */
+  var nb=document.createElement('div');nb.id='gnav';
+  nb.innerHTML='<div class="gn-edge"></div><div class="gn-row"><div class="gn-side"></div><div class="gn-t" id="gnT">Today</div><div class="gn-side gn-r"></div></div>';
+  document.body.appendChild(nb);
+  var rb=document.getElementById('rfbtn');
+  if(rb){rb.className='gbtn glass';rb.removeAttribute('style');rb.innerHTML=SF.refresh;rb.setAttribute('aria-label','Refresh data');nb.querySelector('.gn-r').appendChild(rb);}
+  /* tab bar: capsule + detached search button (iOS 26) */
+  var old=document.getElementById('bnav');if(old)old.parentNode.removeChild(old);
+  var tb=document.createElement('nav');tb.id='bnav';tb.setAttribute('aria-label','Main');
+  var cap=VIEWS.filter(function(v){return v.id!=='players';});
+  tb.innerHTML='<div class="gn-edge bot"></div><div class="tbcap glass" id="tbcap"><div class="lens" id="lens"></div>'
+    +cap.map(function(v){return '<button type="button" data-go="'+v.id+'" id="bn-'+v.id+'" aria-label="'+v.label+'">'+SF[v.id]+'<span>'+v.label+'</span></button>';}).join('')
+    +'</div><button type="button" class="tbsearch glass" data-go="players" id="bn-players" aria-label="Players">'+SF.players+'</button>';
+  document.body.appendChild(tb);
+  glTabDrag(tb.querySelector('#tbcap'));
+  window.addEventListener('scroll',glScroll,{passive:true});
+  window.addEventListener('resize',function(){glLens(false);glThumb(false);});
+  glScroll();
+}
+function glLens(anim){
+  var cap=document.getElementById('tbcap'),ln=document.getElementById('lens');if(!cap||!ln)return;
+  var b=cap.querySelector('button.on');
+  if(!b){ln.style.opacity='0';return;}
+  ln.style.opacity='';
+  if(anim===false)ln.classList.add('nt');
+  ln.style.width=b.offsetWidth+'px';ln.style.transform='translateX('+b.offsetLeft+'px)';
+  if(anim===false){void ln.offsetWidth;ln.classList.remove('nt');}
+  else if(!RM){ln.classList.remove('pop');void ln.offsetWidth;ln.classList.add('pop');}
+}
+/* drag the lens across the tab bar, like iOS 26 */
+function glTabDrag(cap){
+  var x0=null,moved=false,ln=document.getElementById('lens'),bs;
+  function at(x){var r=cap.getBoundingClientRect(),best=null,bd=1e9;bs.forEach(function(b){var c=r.left+b.offsetLeft+b.offsetWidth/2,d=Math.abs(c-x);if(d<bd){bd=d;best=b;}});return best;}
+  cap.addEventListener('pointerdown',function(e){
+    if(document.getElementById('bnav').classList.contains('min'))return;
+    bs=[].slice.call(cap.querySelectorAll('button'));x0=e.clientX;moved=false;
+    ln.classList.add('held');
+  });
+  window.addEventListener('pointermove',function(e){
+    if(x0==null)return;
+    if(!moved&&Math.abs(e.clientX-x0)<8)return;
+    moved=true;ln.classList.add('drag');cap.classList.add('dragging');
+    var r=cap.getBoundingClientRect(),w=ln.offsetWidth,x=Math.max(4,Math.min(r.width-w-4,e.clientX-r.left-w/2));
+    ln.style.transform='translateX('+x+'px)';
+    var b=at(e.clientX);bs.forEach(function(y){y.classList.toggle('hov',y===b);});
+  });
+  function end(e){
+    if(x0==null)return;
+    ln.classList.remove('held','drag');cap.classList.remove('dragging');bs.forEach(function(y){y.classList.remove('hov');});
+    if(moved){var b=at(e.clientX);if(b)showTab(b.getAttribute('data-go'));else glLens();cap._sup=Date.now();}
+    x0=null;
+  }
+  window.addEventListener('pointerup',end);window.addEventListener('pointercancel',function(){if(x0==null)return;ln.classList.remove('held','drag');x0=null;glLens();});
+  cap.addEventListener('click',function(e){if(cap._sup&&Date.now()-cap._sup<400){e.stopPropagation();e.preventDefault();}},true);
+}
+/* scroll: collapse the large title into the nav bar; minimize the tab bar going down, restore going up */
+var GS={y:0,raf:0,acc:0};
+function glScroll(){
+  if(GS.raf)return;
+  GS.raf=requestAnimationFrame(function(){
+    GS.raf=0;
+    var y=window.pageYOffset||0,dy=y-GS.y;GS.y=y;
+    var lh=document.getElementById('lhead'),nb=document.getElementById('gnav'),tb=document.getElementById('bnav');
+    if(!lh||!nb||document.documentElement.classList.contains('sheet-on'))return;
+    var t=document.getElementById('lhT'),lim=t.offsetTop+t.offsetHeight-48;
+    nb.classList.toggle('scrolled',y>lim);
+    nb.classList.toggle('edge',y>4);
+    if(!RM&&y<0)t.style.transform='scale('+Math.min(1.12,1-y/700)+')';else t.style.transform='';
+    /* tab bar */
+    if(y<60){GS.acc=0;tb.classList.remove('min');}
+    else if(dy>0){GS.acc=Math.max(0,GS.acc)+dy;if(GS.acc>40)tb.classList.add('min');}
+    else if(dy<0){GS.acc=Math.min(0,GS.acc)+dy;if(GS.acc<-24)tb.classList.remove('min');}
+  });
+}
+document.addEventListener('click',function(e){
+  var tb=document.getElementById('bnav');
+  if(tb&&tb.classList.contains('min')&&e.target.closest&&e.target.closest('#tbcap')){e.stopPropagation();e.preventDefault();tb.classList.remove('min');GS.acc=0;}
+},true);
+
+/* ---------- segmented control ---------- */
+function glThumb(anim){
+  var sn=document.getElementById('snav');if(!sn)return;
+  var th=sn.querySelector('.thumb'),b=sn.querySelector('button.on');if(!th||!b)return;
+  if(anim===false)th.classList.add('nt');
+  th.style.width=b.offsetWidth+'px';th.style.transform='translateX('+b.offsetLeft+'px)';
+  if(anim===false){void th.offsetWidth;th.classList.remove('nt');}
+}
+
+/* ---------- view transitions ---------- */
+function glEnter(el,dir){
+  if(RM||!el)return;
+  el.classList.remove('enter','enter-l','enter-r');void el.offsetWidth;
+  el.classList.add(dir>0?'enter-r':(dir<0?'enter-l':'enter'));
+}
+
+/* ---------- inset grouped cards: wrap the body so it can animate open and closed ---------- */
+function glWrap(c){
+  if(!c||c.querySelector(':scope>.cbody'))return;
+  var h=c.querySelector(':scope>h2');
+  var body=document.createElement('div');body.className='cbody';var inn=document.createElement('div');inn.className='cin';body.appendChild(inn);
+  var kids=[].slice.call(c.childNodes);kids.forEach(function(k){if(k!==h)inn.appendChild(k);});
+  c.appendChild(body);
+  if(h&&!h.querySelector('.hchev'))h.insertAdjacentHTML('beforeend','<span class="hchev">'+SF.chev+'</span>');
+}
+
+/* ---------- sheet (player card) ---------- */
+var SH={open:false,closing:0};
+function sheetOpen(){
+  var m=document.getElementById('modal'),bx=m.querySelector('.box'),de=document.documentElement;if(!bx)return;
+  clearTimeout(SH.closing);
+  var x=bx.querySelector('#mx');if(x){x.innerHTML=SF.xmark;x.className='x gbtn glass';x.setAttribute('aria-label','Close');}
+  if(!bx.querySelector('.grab'))bx.insertAdjacentHTML('afterbegin','<div class="grab"></div>');
+  var wrap=document.querySelector('.wrap'),y=window.pageYOffset||0;
+  if(!SH.open){wrap.style.transformOrigin='50% '+y+'px';wrap.style.setProperty('--clipy',y+'px');}
+  SH.open=true;
+  de.classList.add('sheet-on','sh-anim');
+  if(RM){de.style.setProperty('--sp','1');return;}
+  bx.style.transition='none';bx.style.transform='translateY(100%)';void bx.offsetWidth;
+  bx.style.transition='';bx.style.transform='';
+  de.style.setProperty('--sp','0');void bx.offsetWidth;requestAnimationFrame(function(){de.style.setProperty('--sp','1');});
+  if(!bx._dr){bx._dr=1;sheetDrag(bx);}
+}
+function sheetClose(){
+  var m=document.getElementById('modal'),bx=m.querySelector('.box'),de=document.documentElement;
+  if(!SH.open){m.classList.remove('open');return;}
+  SH.open=false;
+  de.classList.add('sh-anim');de.style.setProperty('--sp','0');
+  if(bx){bx.style.transition='';bx.style.transform='translateY(105%)';}
+  m.classList.add('fading');
+  SH.closing=setTimeout(function(){
+    m.classList.remove('open','fading');de.classList.remove('sheet-on','sh-anim');
+    var w=document.querySelector('.wrap');w.style.transformOrigin='';
+    if(bx)bx.style.transform='';
+  },RM?0:480);
+}
+function sheetDrag(bx){
+  var de=document.documentElement,y0=null,dy=0,t=[],drag=false,H=1;
+  function start(y){y0=y;dy=0;t=[[y,performance.now()]];drag=false;H=bx.offsetHeight||1;}
+  function move(y,ev){
+    if(y0==null)return;
+    var d=y-y0;
+    if(!drag){if(bx.scrollTop>0||d<=2)return;drag=true;y0=y;d=0;bx.style.transition='none';de.classList.remove('sh-anim');}
+    if(ev&&ev.cancelable)ev.preventDefault();
+    dy=d;t.push([y,performance.now()]);if(t.length>5)t.shift();
+    var tr=dy>=0?dy:-Math.pow(-dy,0.72);
+    bx.style.transform='translateY('+tr+'px)';
+    de.style.setProperty('--sp',String(Math.max(0,Math.min(1,1-Math.max(0,dy)/H))));
+  }
+  function end(){
+    if(y0==null)return;y0=null;
+    if(!drag)return;drag=false;
+    var a=t[0],b=t[t.length-1],v=(b&&a&&b[1]>a[1])?(b[0]-a[0])/(b[1]-a[1]):0;
+    bx.style.transition='';de.classList.add('sh-anim');
+    if(dy>H*0.28||v>0.45){sheetClose();}
+    else{bx.style.transform='';de.style.setProperty('--sp','1');}
+  }
+  bx.addEventListener('touchstart',function(e){if(e.touches.length===1)start(e.touches[0].clientY);},{passive:true});
+  bx.addEventListener('touchmove',function(e){move(e.touches[0].clientY,e);},{passive:false});
+  bx.addEventListener('touchend',end);bx.addEventListener('touchcancel',end);
+  bx.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.target.closest('.grab,.mhead'))start(e.clientY);});
+  window.addEventListener('pointermove',function(e){if(e.pointerType==='mouse')move(e.clientY,null);});
+  window.addEventListener('pointerup',function(e){if(e.pointerType==='mouse')end();});
+}
+
+/* ---------- numbers that count up ---------- */
+function glCount(root){
+  $$('[data-cu]',root).forEach(function(el){
+    var v=parseFloat(el.getAttribute('data-cu')),dec=+(el.getAttribute('data-dec')||0),suf=el.getAttribute('data-suf')||'';
+    if(RM||isNaN(v)){el.textContent=v.toFixed(dec)+suf;return;}
+    var t0=null,dur=900;
+    function step(ts){if(!t0)t0=ts;var k=Math.min(1,(ts-t0)/dur),e=1-Math.pow(1-k,4);el.textContent=(v*e).toFixed(dec)+suf;if(k<1)requestAnimationFrame(step);}
+    requestAnimationFrame(step);
+  });
+}
+
+/* ---------- Today: Apple Sports style scoreboard + inset grouped lists ---------- */
+function glAv(p,badge){
+  var id=p.id,tm=p.tm||(ALL[id]&&ALL[id].tm);
+  return '<span class="rav">'+(typeof avHtml==='function'?avHtml(id,tm):'')+(badge?'<i class="rb '+badge+'">'+SF[badge==='add'?'plus':'minus']+'</i>':'')+'</span>';
+}
+function glMoveRow(m,open){
+  var c=cfOf(m),key='mv'+m.add.id+'-'+m.drop.id;
+  var sub=esc(dayShort(m.day))+' &middot; '+sgn(m.gain,1)+' pts this week';
+  return '<div class="row mvr'+(open?' open':'')+'" data-exp="'+key+'">'
+    +'<span class="mvr-av">'+glAv(m.add,'add')+glAv(m.drop,'drop')+'</span>'
+    +'<div class="row-m"><div class="row-t">Add <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(shortName(m.add.n))+'</a>, drop <a class="pl" data-noav="1" data-id="'+m.drop.id+'">'+esc(shortName(m.drop.n))+'</a></div><div class="row-s">'+sub+'</div></div>'
+    +'<span class="badge b-'+c+'">'+CONF[c][0]+'</span><span class="rchev">'+SF.chev+'</span></div>'
+    +'<div class="rx'+(open?' open':'')+'" id="x-'+key+'"><div class="rxi">'
+    +(m.swapped?'<div class="rx-n">Instead of dropping '+esc(m.swapped)+', who you chose to keep.</div>':'')
+    +(m.waiver?'<div class="rx-n warn">He is on waivers: put the claim in the day before.</div>':'')
+    +'<p class="rx-why">'+esc(m.why1||'')+'</p>'
+    +'<div class="rx-act">'+keepBtn(m.drop)+'<button type="button" class="gbtn2" data-go="moves/plan">Whole week</button></div>'
+    +'</div></div>';
+}
 function uiToday(){
-  var C=D.clock,P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,h='';
+  var C=D.clock,P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,M=D.matchup,h='';
   if(!C)return;
   var fi=LK.first(),n=C.labels.length,isToday=fi<n&&C.dates[fi]===etToday();
-  var age=C.built?(Date.now()-C.built)/3600000:0,H=D.health||{},M=D.matchup;
-  /* the strip: win chance, moves left, data health */
-  var hl=age>12?['bad','Data is '+Math.round(age)+' h old']:(H.level==='bad'?['bad','Data missing']:(H.level==='warn'?['warn','Some data missing']:['good','Data up to date']));
-  h+='<div class="tstrip">';
-  if(M)h+='<div class="ts"><div class="ts-v">'+Math.round(M.p_win*100)+'%</div><div class="ts-k">win chance</div><div class="ts-s">'+f(M.me_now,1)+' to '+f(M.opp_now,1)+'</div></div>';
-  if(P&&P.moves_left!=null)h+='<div class="ts"><div class="ts-v">'+P.moves_left+'</div><div class="ts-k">moves left</div><div class="ts-s">of '+(P.limit||7)+' this week</div></div>';
-  h+='<button type="button" class="ts ts-h" data-go="league/help"><div class="ts-v '+hl[0]+'">&#9679;</div><div class="ts-k">'+hl[1]+'</div><div class="ts-s">'+esc(String(D.updated||'').replace(/^.*?,\s*/,''))+'</div></button>';
-  h+='</div>';
-  if(age>12)h+='<div class="why bad" style="margin-bottom:8px">The automatic update may have failed. Tap Refresh data, or check ESPN before making moves.</div>';
-  else if(H.level&&H.level!=='ok'&&H.items&&H.items.length)h+='<div class="why warn" style="margin-bottom:8px">&#9888; '+esc(H.items[0])+(H.level==='bad'?' Nothing is marked Strong until it is back.':'')+'</div>';
-  if(fi>=n){
-    h+='<div class="tbig">You\'re set for this week</div><div class="muted">Every game day in this matchup has started. Next week\'s plan shows up after the next update (Moves, Next week preview).</div>';
-    uiPut('Today',h,{v:'today',s:'main',c:0});return;
+  var age=C.built?(Date.now()-C.built)/3600000:0,H=D.health||{};
+  /* scoreboard */
+  if(M){
+    var pw=Math.round(M.p_win*100),me=D.me,op=M.opp_name||'Opponent',h1=215,h2=hue(op);
+    if(Math.abs(h2-h1)<40)h2=(h2+150)%360;
+    var mp=D.gameplan&&D.gameplan.mp,lead=M.me_now>=M.opp_now;
+    h+='<section class="sb" style="--h1:'+h1+';--h2:'+h2+'">'
+      +'<div class="sb-top"><span class="sb-live"></span>'+(mp?'Week '+mp+' &middot; ':'')+M.days_left+' day'+(M.days_left===1?'':'s')+' left</div>'
+      +'<div class="sb-row">'
+      +'<div class="sb-tm"><div class="mono" style="--h:'+h1+'">'+esc(initials(me))+'</div><div class="sb-n">'+esc(me)+'</div><div class="sb-r">'+esc(D.rec)+'</div></div>'
+      +'<div class="sb-sc"><span class="num'+(lead?'':' dim')+'" data-cu="'+M.me_now+'" data-dec="1">'+f(M.me_now,1)+'</span><span class="sb-d"></span><span class="num'+(lead?' dim':'')+'" data-cu="'+M.opp_now+'" data-dec="1">'+f(M.opp_now,1)+'</span></div>'
+      +'<div class="sb-tm"><div class="mono" style="--h:'+h2+'">'+esc(initials(op))+'</div><div class="sb-n">'+esc(op)+'</div><div class="sb-r">'+esc(M.opp_rec||'')+'</div></div>'
+      +'</div>'
+      +'<div class="wp"><div class="wp-h"><span>Win probability</span></div>'
+      +'<div class="wp-bar"><i class="a" style="--w:'+pw+'%"></i><i class="b"></i></div>'
+      +'<div class="wp-l"><span><b data-cu="'+pw+'" data-suf="%">'+pw+'%</b></span><span><b>'+(100-pw)+'%</b></span></div></div>'
+      +'<div class="sb-ft"><span>Projected</span><b>'+Math.round(M.proj_me)+'</b><span>&ndash;</span><b>'+Math.round(M.proj_opp)+'</b></div>'
+      +'</section>';
   }
-  var lk=C.lock[fi],when=isToday?'today':esc(dayShort(C.labels[fi]));
+  /* problems only: the data line is silent when everything is fine */
+  var warn=age>12?'The automatic update may have failed ('+Math.round(age)+' h old). Tap refresh, or check ESPN before making moves.'
+    :((H.level&&H.level!=='ok'&&H.items&&H.items.length)?H.items[0]+(H.level==='bad'?' Nothing is marked Strong until it is back.':''):'');
+  if(fi>=n){
+    h+='<div class="sec"><div class="grp"><div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">You\'re set for this week</div><div class="row-s">Every game day has started. Next week\'s plan shows up after the next update.</div></div></div></div></div>';
+    uiPut('Today',h,{v:'today',s:'main',c:0});glCount(document.getElementById('s-today-main'));return;
+  }
+  var lk=C.lock[fi],when=isToday?'Today':esc(dayShort(C.labels[fi]));
   var all=P?P.moves.filter(function(m){return m.t===fi;}):[];
   var strong=all.filter(function(m){return cfOf(m)==='strong';}),small=all.filter(function(m){return cfOf(m)!=='strong';});
   var cl=P?P.moves.filter(function(m){return m.waiver&&m.t-1===fi;}):[];
-  var lc=isToday?lsChanges(fi):null;
-  if(lc){  /* benching a player with no game changes nothing: only list the benches that free a spot for someone who plays */
-    var ng=function(p){return p.gl===0||!p.v||!(p.v[fi]>0);};
-    lc={into:lc.into,playing:lc.playing,out:lc.out.slice().sort(function(a,b){return ng(b)-ng(a);}).slice(0,lc.into.length)};
-  }
-  var lineTodo=lc?lc.into.length+lc.out.length:0;
+  UI.exp=UI.exp||{};
+  h+='<div class="sec"><div class="sec-h"><span>Moves</span>'+(lk?'<span class="sec-r">'+SF.clock+'Moves lock '+etTime(lk)+'</span>':'')+'</div><div class="grp">';
+  if(warn)h+='<div class="row"><span class="ric wn">'+SF.warn+'</span><div class="row-m"><div class="row-t">Check the data</div><div class="row-s">'+esc(warn)+'</div></div></div>';
   if(strong.length||cl.length){
-    h+='<div class="tbig">'+(strong.length?'Do '+(strong.length===1?'this':'these')+' '+when:'One thing to do '+when)+(lk?' <span class="tlock">before '+etTime(lk)+' ET</span>':'')+'</div>';
-    h+=strong.map(function(m){return mvCard(m);}).join('');
-    h+=cl.map(function(m){return '<div class="mv mv-'+cfOf(m)+'"><div class="mv-top">'+cfPill(m)+' <span class="muted">waiver claim</span></div><div class="mv-sw">Put in a claim for <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">to add him '+esc(dayShort(m.day))+', dropping '+esc(m.drop.n)+'</span></div><div class="mv-why">'+esc(m.why1||'')+'</div></div>';}).join('');
+    h+=strong.map(function(m){return glMoveRow(m,UI.exp['mv'+m.add.id+'-'+m.drop.id]);}).join('');
+    h+=cl.map(function(m){return '<div class="row"><span class="ric">'+SF.clock+'</span><div class="row-m"><div class="row-t">Claim <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div><div class="row-s">To add him '+esc(dayShort(m.day))+', dropping '+esc(m.drop.n)+'</div></div><span class="badge b-'+cfOf(m)+'">'+CONF[cfOf(m)][0]+'</span></div>';}).join('');
   }else{
-    h+='<div class="tbig ok">&#10003; Nothing you need to do '+when+'</div>';
     var nx=P?P.moves.filter(function(m){return m.t>fi&&cfOf(m)==='strong';})[0]:null;
-    h+='<div class="muted">'+(nx?'Next Strong move: <b>'+esc(dayShort(nx.day))+'</b>, add '+esc(nx.add.n)+' for '+esc(nx.drop.n)+'.':'No Strong move left this week. Your roster is in good shape.')+'</div>';
+    h+='<button type="button" class="row" data-go="moves/plan"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">Nothing to do '+(isToday?'today':'yet')+'</div><div class="row-s">'
+      +(nx?'Next: '+esc(dayShort(nx.day))+', add '+esc(shortName(nx.add.n))+' for '+esc(shortName(nx.drop.n)):'No Strong move left this week')+'</div></div><span class="rchev">'+SF.chev+'</span></button>';
   }
   if(small.length){
-    var tot=small.reduce(function(s2,m){return s2+(m.net||0);},0);
-    h+='<details class="tsmall"'+(UI.open.tsmall?' open':'')+'><summary>'+small.length+' smaller move'+(small.length===1?'':'s')+' '+when+' ('+sgn(tot,1)+' pts) &middot; only if you have moves to spare</summary>'+small.map(function(m){return mvCard(m);}).join('')+'</details>';
+    var tot=small.reduce(function(s2,m){return s2+(m.net||0);},0),so=!!UI.exp.small;
+    h+='<div class="row'+(so?' open':'')+'" data-exp="small"><span class="ric gy">'+SF.swap+'</span><div class="row-m"><div class="row-t">'+small.length+' smaller move'+(small.length===1?'':'s')+'</div><div class="row-s">'+sgn(tot,1)+' pts &middot; only if you have moves to spare</div></div><span class="rchev">'+SF.chev+'</span></div>'
+      +'<div class="rx'+(so?' open':'')+'" id="x-small"><div class="rxi nest">'+small.map(function(m){return glMoveRow(m,UI.exp['mv'+m.add.id+'-'+m.drop.id]);}).join('')+'</div></div>';
   }
-  /* lineup + goalies: short, only what needs doing */
+  h+='</div>';
+  var ml=(P&&P.moves_left!=null)?P.moves_left:null,lim=(P&&P.limit)||7;
+  if(ml!=null){
+    var dots='';for(var i=0;i<lim;i++)dots+='<i class="'+(i<lim-ml?'u':'')+'"></i>';
+    h+='<div class="sec-f"><span class="mdots">'+dots+'</span>'+ml+' of '+lim+' moves left this week</div>';
+  }
+  h+='</div>';
+  /* lineup */
+  var lc=isToday?lsChanges(fi):null;
+  if(lc){var ng=function(p){return p.gl===0||!p.v||!(p.v[fi]>0);};
+    lc={into:lc.into,playing:lc.playing,out:lc.out.slice().sort(function(a,b){return ng(b)-ng(a);}).slice(0,lc.into.length)};}
   var gl=[];(D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){if(r.day===C.labels[fi])gl.push({g:g.p,r:r});});});
   gl.sort(function(a,b){return (b.r.ev||0)-(a.r.ev||0);});
   var al=(D.alerts||[]).filter(function(a){return a.k==='bad'||/injur|not starting/i.test(a.t);});
-  h+='<div class="tdk">Lineup '+(isToday?'today':'for '+esc(dayShort(C.labels[fi])))+'</div>';
-  if(!isToday)h+='<div class="muted">Set it the morning of '+esc(C.labels[fi])+'.</div>';
-  else if(lineTodo){
-    h+='<ul class="pbl">'+lc.into.map(function(p){return '<li><b>Start</b> <a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">(on your bench, has a game)</span></li>';}).join('')
-      +lc.out.map(function(p){return '<li><b>Bench</b> <a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">('+(p.gl===0||!p.v||!(p.v[fi]>0)?'no game today':'lower projection than the players replacing him')+')</span></li>';}).join('')+'</ul>';
-  }else h+='<div class="muted">&#10003; Your skaters are already set'+(lc?' ('+lc.playing+' play today)':'')+'.</div>';
-  al.forEach(function(a){h+='<div class="why '+(a.k==='bad'?'bad':'warn')+'">'+esc(a.t)+'</div>';});
-  if(gl.length)h+='<ul class="pbl">'+gl.map(function(x){return '<li><a class="pl" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a> '+(x.r.home?'vs':'@')+' '+esc(x.r.opp)+' <span class="pill '+x.r.cls+'">'+esc(x.r.verdict)+'</span> <span class="muted">'+esc(x.r.conf||'')+'</span></li>';}).join('')+'</ul>';
-  else h+='<div class="muted">None of your goalies play.</div>';
-  h+='<div class="goto"><button type="button" class="chip-btn" data-go="moves/plan">Whole week</button><button type="button" class="chip-btn" data-go="moves/swap">Try a swap</button></div>';
+  h+='<div class="sec"><div class="sec-h"><span>Lineup</span></div><div class="grp">';
+  if(!isToday)h+='<div class="row"><span class="ric gy">'+SF.clock+'</span><div class="row-m"><div class="row-t">Set it '+esc(dayShort(C.labels[fi]))+' morning</div></div></div>';
+  else if(lc&&(lc.into.length||lc.out.length)){
+    h+=lc.into.map(function(p){return '<div class="row">'+glAv(p)+'<div class="row-m"><div class="row-t"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a></div><div class="row-s">On your bench, has a game</div></div><span class="badge b-start">Start</span></div>';}).join('')
+      +lc.out.map(function(p){return '<div class="row">'+glAv(p)+'<div class="row-m"><div class="row-t"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a></div><div class="row-s">'+(p.gl===0||!p.v||!(p.v[fi]>0)?'No game today':'Lower projection than the player replacing him')+'</div></div><span class="badge b-bench">Bench</span></div>';}).join('');
+  }else h+='<div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">Skaters are set</div><div class="row-s">'+(lc?lc.playing+' play today':'')+'</div></div></div>';
+  al.forEach(function(a){h+='<div class="row"><span class="ric '+(a.k==='bad'?'bd':'wn')+'">'+SF.warn+'</span><div class="row-m"><div class="row-s" style="color:var(--label)">'+esc(a.t)+'</div></div></div>';});
+  gl.forEach(function(x){
+    var b=/bench/i.test(x.r.verdict)?'bench':(/risk/i.test(x.r.verdict)?'risky':'start');
+    h+='<div class="row">'+glAv(x.g)+'<div class="row-m"><div class="row-t"><a class="pl" data-noav="1" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a></div><div class="row-s">'+(x.r.home?'vs ':'@ ')+esc(x.r.opp)+(x.r.conf?' &middot; '+esc(x.r.conf):'')+'</div></div><span class="badge b-'+b+'">'+esc(x.r.verdict.replace(/\s*\(.*\)/,''))+'</span></div>';
+  });
+  if(isToday&&!gl.length)h+='<div class="row"><span class="ric gy">'+SF.clock+'</span><div class="row-m"><div class="row-s">None of your goalies play</div></div></div>';
+  h+='</div><div class="sec-f">Updated '+esc(String(D.updated||'').replace(/^.*?,\s*/,''))+'</div></div>';
   uiPut('Today',h,{v:'today',s:'main',c:0});
+  glCount(document.getElementById('s-today-main'));
 }
 
 /* ---------- Confidence, move cards and the "Keep him" list ---------- */
@@ -1376,6 +1635,8 @@ function uiStart(){uiModalWatch();
   mo2.observe(document.body,{childList:true,subtree:true});
   document.addEventListener('click',function(e){
     var t=e.target;if(!t||!t.closest)return;
+    var ex=t.closest('[data-exp]');
+    if(ex&&!t.closest('a,button:not([data-exp])')){var k=ex.getAttribute('data-exp'),x=document.getElementById('x-'+k);UI.exp=UI.exp||{};UI.exp[k]=!UI.exp[k];ex.classList.toggle('open',UI.exp[k]);if(x)x.classList.toggle('open',UI.exp[k]);return;}
     var kb=t.closest('[data-keep]');
     if(kb){kpClick(kb.getAttribute('data-keep'));return;}
     var ts=t.closest('details.tsmall > summary');
@@ -1491,17 +1752,7 @@ function modal(p){
     if(typeof wiPick==='function'){wiPick('drop',String(wk.id));wiPick('add',String(p.id));}
     setTimeout(function(){var o=document.getElementById('wiOut');if(o&&o.scrollIntoView){try{o.scrollIntoView({block:'center'});}catch(e){}}},120);
   });
-  /* swipe down from the top of the card to close */
-  var bx=m.querySelector('.box'),y0=null,dy=0;
-  bx.addEventListener('touchstart',function(e){y0=(bx.scrollTop<=0&&e.touches.length===1)?e.touches[0].clientY:null;dy=0;},{passive:true});
-  bx.addEventListener('touchmove',function(e){
-    if(y0==null)return;dy=e.touches[0].clientY-y0;
-    if(dy>0&&bx.scrollTop<=0){bx.style.transition='none';bx.style.transform='translateY('+Math.min(dy,200)+'px)';}
-  },{passive:true});
-  bx.addEventListener('touchend',function(){
-    if(y0==null)return;bx.style.transition='';bx.style.transform='';
-    if(dy>110)closeModal();y0=null;dy=0;
-  },{passive:true});
+  sheetOpen();
 }
 
 /* ---------- tabs + startup ---------- */
