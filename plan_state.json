@@ -196,7 +196,7 @@
      33.8,
      19
     ],
-    "at": 1795068931600,
+    "at": 1795096685442,
     "d": [
      26.4,
      19
@@ -211,13 +211,13 @@
     "pos": "RW",
     "tm": "WSH"
    },
-   "gain": 2.86,
+   "gain": 2.81,
    "games": 3,
-   "net": 2.86,
-   "t": 1,
+   "net": 2.81,
+   "t": 0,
    "tier": "make",
    "waiver": false,
-   "why1": "Nazar plays 3 games the rest of this week, Wilson plays 2. Nazar is on CHI's second line and first power-play unit. About +2.9 pts this week."
+   "why1": "Nazar plays 3 games the rest of this week, Wilson plays 2. Nazar is on CHI's second line and first power-play unit. About +2.8 pts this week."
   },
   {
    "add": {
@@ -231,7 +231,7 @@
      27.8,
      20
     ],
-    "at": 1795068931600,
+    "at": 1795096685442,
     "d": [
      33.9,
      23
@@ -246,10 +246,10 @@
     "pos": "D",
     "tm": "VGK"
    },
-   "gain": 2.46,
+   "gain": 2.48,
    "games": 3,
-   "net": 2.46,
-   "t": 1,
+   "net": 2.48,
+   "t": 0,
    "tier": "make",
    "waiver": false,
    "why1": "Rinzel plays 3 games the rest of this week, Andersson plays 2. Rinzel is on CHI's top pair and first power-play unit. About +2.5 pts this week."
@@ -266,7 +266,7 @@
      16.1,
      10
     ],
-    "at": 1795068931600,
+    "at": 1795096685442,
     "d": [
      36.9,
      24
@@ -281,10 +281,10 @@
     "pos": "C",
     "tm": "PHI"
    },
-   "gain": 2.26,
+   "gain": 2.29,
    "games": 3,
-   "net": 2.26,
-   "t": 1,
+   "net": 2.29,
+   "t": 0,
    "tier": "make",
    "waiver": false,
    "why1": "Chytil plays 3 games the rest of this week, Zegras plays 2. Chytil is on VAN's second line and second power-play unit. About +2.3 pts this week."
@@ -301,7 +301,7 @@
      28.3,
      14
     ],
-    "at": 1795068931600,
+    "at": 1795096685442,
     "d": [
      29.6,
      18
@@ -319,7 +319,7 @@
    "gain": 1.01,
    "games": 2,
    "net": 1.01,
-   "t": 1,
+   "t": 0,
    "tier": "optional",
    "waiver": false,
    "why1": "Both play 2; Spurgeon projects 1.8 pts a game to Mintyukov's 1.7. Spurgeon is on MIN's top pair. About +1.0 pts this week."
@@ -333,10 +333,10 @@
    },
    "base": {
     "a": [
-     35.2,
+     35.7,
      20
     ],
-    "at": 1795068931600,
+    "at": 1795096685442,
     "d": [
      40.4,
      24
@@ -351,50 +351,15 @@
     "pos": "RW",
     "tm": "SJ"
    },
-   "gain": 0.74,
+   "gain": 0.79,
    "games": 2,
-   "net": 0.74,
-   "t": 1,
+   "net": 0.79,
+   "t": 0,
    "tier": "optional",
    "waiver": false,
-   "why1": "Eklund plays 2 games the rest of this week, Smith plays 1. Eklund is on NYI's second line and first power-play unit. About +0.7 pts this week."
-  },
-  {
-   "add": {
-    "id": 3941973,
-    "n": "Anthony Cirelli",
-    "pos": "C",
-    "tm": "TB"
-   },
-   "base": {
-    "a": [
-     32.4,
-     19
-    ],
-    "at": 1795068931600,
-    "d": [
-     40.6,
-     24
-    ]
-   },
-   "conf": "optional",
-   "cost": 1.238,
-   "day": "Sun Nov 22",
-   "drop": {
-    "id": 4697387,
-    "n": "Jamie Drysdale",
-    "pos": "D",
-    "tm": "PHI"
-   },
-   "gain": 1.87,
-   "games": 1,
-   "net": 0.63,
-   "t": 4,
-   "tier": "optional",
-   "waiver": false,
-   "why1": "Cirelli plays 1 game the rest of this week, Drysdale plays 0. Cirelli is on TB's second line and second power-play unit. About +1.9 pts this week (+0.6 counting what you give up later)."
+   "why1": "Eklund plays 2 games the rest of this week, Smith plays 1. Eklund is on NYI's second line and first power-play unit. About +0.8 pts this week."
   }
  ],
  "mp": 8,
- "updated": 1795068931600
+ "updated": 1795096685442
 }
