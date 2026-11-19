@@ -610,3 +610,103 @@ td{border-bottom:.5px solid var(--sep)!important}tr:last-child td{border-bottom:
   box-shadow:inset 0 0 0 1.2px rgba(255,255,255,.95),inset 0 2px 3px rgba(255,255,255,.9),inset 0 -2px 6px rgba(0,0,0,.06),0 8px 22px rgba(0,0,0,.16)!important}
 @media (prefers-color-scheme:dark){.tbcap .lens.drag:after{box-shadow:inset 0 0 0 1px rgba(255,255,255,.55),inset 0 2px 3px rgba(255,255,255,.3),0 8px 22px rgba(0,0,0,.5)!important}}
 #tbcap.dragging button.on:not(.hov){color:var(--label)!important}
+
+/* ---------- player card: Overview / Game log segmented control ---------- */
+.pcseg{position:relative;display:flex;background:var(--fill3);border-radius:100px;padding:3px;height:36px;margin:2px 0 14px}
+.pcseg .th{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:100px;background:var(--card);
+  box-shadow:0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04);transition:transform .5s var(--spring)}
+@media (prefers-color-scheme:dark){.pcseg .th{background:#5a5a5e;box-shadow:0 3px 8px rgba(0,0,0,.3)}}
+.pcseg.two .th{transform:translateX(100%)}
+.pcseg button{position:relative;z-index:1;flex:1;border:0;background:none;color:var(--label);font:500 14px/1 -apple-system,system-ui,sans-serif;letter-spacing:-.01em;border-radius:100px;cursor:pointer}
+.pcseg button.on{font-weight:600}
+#pcOv,#pcGl{animation:pcIn .32s var(--ease)}
+@keyframes pcIn{from{opacity:0;transform:translateY(4px)}}
+#modal .box.sw-in>*:not(.grab){animation:pcIn .3s var(--ease)}
+.pc-acts{display:flex;gap:8px;margin:12px 0 2px}
+.cm-btn svg{width:17px;height:17px;margin-right:6px;flex:none}.cm-btn svg .s{stroke:currentColor;stroke-width:2.6;fill:none;stroke-linecap:round}
+.rx-act .cm-btn,.mv-act .cm-btn{margin-left:6px}
+
+/* ---------- game log ---------- */
+.gl-say{font-size:14px;color:var(--label2);margin:10px 2px 0;line-height:1.4}
+.gl-wait,.gl-none{padding:28px 6px;text-align:center;color:var(--label2);font-size:15px}
+.spin{display:inline-block;width:16px;height:16px;margin-right:8px;vertical-align:-3px;border-radius:50%;border:2px solid var(--fill);border-top-color:var(--tint);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.glc-w{background:var(--fill4);border-radius:16px;padding:12px 10px 6px}
+.glc{display:block;width:100%;height:auto;overflow:visible}
+.glc rect{transform-box:fill-box;transform-origin:bottom;animation:barUp .55s var(--spring) both}
+@keyframes barUp{from{transform:scaleY(0)}}
+.glc-hi{fill:var(--green)}.glc-lo{fill:var(--gray);opacity:.55}.glc-neg{fill:var(--red);opacity:.8}
+.glc-base{stroke:var(--sep);stroke-width:1}
+.glc-proj{stroke:var(--tint);stroke-width:1.5;stroke-dasharray:4 4}
+.glc-pl{fill:var(--tint);font:600 10px -apple-system,system-ui,sans-serif;text-anchor:end}
+.glc-v{fill:var(--label);font:600 10px ui-rounded,-apple-system,system-ui,sans-serif;text-anchor:middle}
+.glc-d{fill:var(--label2);font:500 9px -apple-system,system-ui,sans-serif;text-anchor:middle}
+.glt-w{background:var(--fill4);border-radius:16px;padding:4px 6px;overflow-x:auto}
+.glt{width:100%;font-size:13px;font-variant-numeric:tabular-nums;border-collapse:collapse}
+.glt th{font-size:11px;font-weight:600;color:var(--label2);text-transform:uppercase;letter-spacing:.02em;padding:8px 3px 6px;border-bottom:.5px solid var(--sep)!important;text-align:center;white-space:nowrap}
+.glt td{padding:9px 3px;border-bottom:.5px solid var(--sep)!important;text-align:center;white-space:nowrap}
+.glt tr:last-child td{border-bottom:0!important}
+.glt th:nth-child(-n+2),.glt td:nth-child(-n+2){text-align:left}
+.glt td:first-child{color:var(--label2)}
+.glt-nx td{color:var(--label2);font-style:normal}.glt-nx td:last-child{text-align:left}
+.glp{display:inline-block;min-width:36px;padding:3px 6px;border-radius:8px;font-weight:700;background:var(--fill3)}
+.glp.hi{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.glp.neg{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}
+.glt-more{margin-top:10px;width:100%}
+
+/* ---------- compare ---------- */
+.cm-top{display:grid;grid-template-columns:1fr 44px 1fr;align-items:start;gap:4px;margin:4px 0 14px}
+.cm-p{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0}
+.cm-p .av{width:72px;height:72px;margin:0 0 8px}
+.cm-n{font-size:17px;font-weight:700;color:var(--label)!important;text-decoration:none;line-height:1.2;letter-spacing:-.01em}
+.cm-s{font-size:13px;color:var(--label2);margin-top:2px}
+.cm-tag{margin-top:6px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:100px;background:var(--fill3);color:var(--label2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cm-tag.mine{background:color-mix(in srgb,var(--tint) 14%,transparent);color:var(--tint)}
+.cm-inj{margin-top:4px;font-size:12px;font-weight:600;color:var(--red)}
+.cm-chg{margin-top:6px;border:0;background:none;color:var(--tint);font:500 14px -apple-system,system-ui,sans-serif;cursor:pointer;padding:4px 8px}
+.cm-empty{justify-content:center;min-height:120px}
+.cm-vsx{align-self:center;margin-top:-30px;width:40px;height:40px;border-radius:50%;border:0;background:var(--fill3);color:var(--label2);font:600 13px -apple-system,system-ui,sans-serif;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .45s var(--spring)}
+.cm-vsx:active{transform:rotate(180deg) scale(.9)}
+.cm-vsx svg{width:20px;height:20px;transform:rotate(90deg)}.cm-vsx svg .s{stroke:currentColor;stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.cm-ver{background:var(--fill4);border-radius:16px;padding:14px 16px;text-align:center}
+.cm-vl{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.cm-vs{font-size:14px;color:var(--label2);margin-top:4px;line-height:1.4}
+.cm-note{font-size:13px;color:var(--orange);margin-top:8px;text-align:center;line-height:1.4}
+.cm-rows{margin-top:10px}
+.cm-r{display:grid;grid-template-columns:72px 1fr 72px;align-items:center;padding:11px 0 9px;border-bottom:.5px solid var(--sep)}
+.cm-r:last-child{border-bottom:0}
+.cm-v{font:600 17px ui-rounded,-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--label2)}
+.cm-v.r{text-align:right}.cm-v.w{color:var(--label);font-weight:800}
+.cm-k{text-align:center;font-size:13px;font-weight:600;color:var(--label);line-height:1.25}
+.cm-k span{display:block;font-weight:400;font-size:11px;color:var(--label2);margin-top:1px}
+.cm-bar{grid-column:1/-1;display:flex;gap:4px;margin-top:7px;height:4px}
+.cm-bar i{flex:1;position:relative;border-radius:2px;background:var(--fill4);overflow:hidden}
+.cm-bar i:after{content:'';position:absolute;top:0;bottom:0;right:0;width:var(--w);border-radius:2px;background:var(--gray);opacity:.45;transition:width .6s var(--spring)}
+.cm-bar i.b:after{right:auto;left:0}
+.cm-bar i.w:after{background:var(--tint);opacity:1}
+.cm-lg{display:flex;gap:16px;justify-content:center;font-size:13px;color:var(--label2);margin-bottom:8px}
+.cm-lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.cmc-a{fill:var(--tint);background:var(--tint)}.cmc-b{fill:var(--orange);background:var(--orange)}
+.cm-act{margin:18px 0 6px}
+.cm-act .cm-try{width:100%;min-height:50px!important;border-radius:14px!important;background:var(--tint)!important;color:#fff!important;font-size:17px!important}
+.cm-try svg{width:18px;height:18px;margin-right:8px}.cm-try svg .s{stroke:currentColor;stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.cm-pick input{width:100%;height:40px;border:0;border-radius:12px;background:var(--fill3);color:var(--label);padding:0 14px;font:17px -apple-system,system-ui,sans-serif;outline:none;margin-bottom:8px}
+.cm-pick>.gbtn2{width:100%;margin-top:12px}
+.cm-gh{font-size:13px;font-weight:600;text-transform:uppercase;color:var(--label2);margin:14px 2px 4px}
+.cm-opt{display:flex;align-items:center;gap:12px;width:100%;padding:9px 2px;border:0;border-bottom:.5px solid var(--sep);background:none;color:var(--label);text-align:left;cursor:pointer;font:inherit}
+.cm-opt:active{background:var(--fill4)}
+.cm-opt .av{width:40px;height:40px;margin:0;flex:none}
+.cm-on{flex:1;min-width:0;display:flex;flex-direction:column}.cm-on b{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cm-on span{font-size:13px;color:var(--label2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cm-ov{font:700 16px ui-rounded,-apple-system,system-ui,sans-serif;text-align:right}.cm-ov i{display:block;font:400 11px -apple-system,system-ui,sans-serif;color:var(--label2)}
+@media (prefers-reduced-motion:reduce){.glc rect,#pcOv,#pcGl,#modal .box.sw-in>*{animation:none!important}}
+
+.gl-nx{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--label2);margin:0 2px 8px}
+.gl-nx svg{width:16px;height:16px;flex:none}.gl-nx svg .s{stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round}.gl-nx b{color:var(--label);font-weight:600}
+.glt{table-layout:fixed}
+.glc-lg{display:flex;justify-content:center;gap:16px;font-size:12px;color:var(--label2);margin:6px 0 2px}
+.glc-lg i{display:inline-block;vertical-align:middle;margin-right:6px}
+.glc-lg .sw-hi{width:10px;height:10px;border-radius:3px;background:var(--green)}
+.glc-lg .sw-pj{width:16px;height:0;border-top:2px dashed var(--tint)}
+.cm-act .cm-try{border:0!important;box-shadow:none!important}

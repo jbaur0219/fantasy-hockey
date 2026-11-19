@@ -25,6 +25,7 @@ import core as C
 import dashboard as D
 import edge as EDG
 import enrich as E
+import gamelog as GL
 import gameplan as GP
 import keep as KP
 import netcache as NC
@@ -237,6 +238,12 @@ def _main():
         site_data["edge"] = EDG.build(cfg, data, league, standings, now_ms, site_data)
     except Exception as e:                                  # the schedule matrix is an extra: never fail the build over it
         print(f"  schedule edge skipped ({type(e).__name__}: {e})")
+    gamelog = None
+    try:
+        gamelog = GL.build(cfg, data, site_data, now_ms)  # recent games, for the Game log tab and Compare
+        site_data["gl"] = {"n": len(gamelog["p"]), "v": now_ms}
+    except Exception as e:                                  # the game log is an extra: never fail the build over it
+        print(f"  game logs skipped ({type(e).__name__}: {e})")
     site_data["moves"] = []                      # the Game plan owns the move suggestions
     if not site_data["mine"]:
         sys.exit("Couldn't find your team. Check LEAGUE_ID and TEAM_ID.")
@@ -250,6 +257,8 @@ def _main():
     if missing:                                            # never publish a page with a section silently missing
         sys.exit("Page is incomplete, not publishing it. Missing: " + ", ".join(missing))
     Path("site/index.html").write_text(html_text, encoding="utf-8")
+    if gamelog is not None:
+        Path("site/gamelog.json").write_text(json.dumps(gamelog, separators=(",", ":")), encoding="utf-8")
     try:
         pwa.write_files("site")
         write_notify_payload(site_data, now_ms)
