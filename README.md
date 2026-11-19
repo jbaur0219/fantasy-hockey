@@ -27,6 +27,7 @@ goalie calls, streams and trade ideas. It never adds, drops, trades or changes a
 | `keep.py` | Players you chose to keep this week (the Keep button sends them as the `keep` input; saved in `keep.json`) |
 | `record.py` | Track record: scores every suggested move after its games (made and skipped), finals in `history/results.json` |
 | `goalies.py` | Start / bench for each goalie, every day of the matchup |
+| `gamelog.py` | Each player's recent games from ESPN (this league's points per game), saved as `site/gamelog.json` for the Game log tab and Compare |
 | `gameplan.py`, `weekplan.py`, `planner.py`, `edge.py`, `playercard.py` | Data for the Game plan, week memory, planner, schedule table, player card |
 | `site_builder.py` + `web/` | The page: `web/page.html`, `web/app.css`, `web/app.js`, with the data dropped in |
 | `scheduler.py`, `watch.py`, `notify.py`, `pwa.py` | When to rebuild, the watcher, push alerts, phone-app files |

@@ -453,6 +453,7 @@ function wiResult(){
   var diff=aft-base;
   var h='<div style="margin-top:10px"><span class="big">'+sgn(diff,1)+'</span> <span class="muted">projected points for your lineup over the rest of this week ('+f(base,1)+' to '+f(aft,1)+')</span></div>';
   h+=wiLine(a,'Add')+wiLine(d,'Drop');
+  if(ALL[a.id]&&ALL[d.id])h+='<div style="margin:8px 0 2px">'+cmpBtn(ALL[a.id],ALL[d.id],'Compare '+shortName(a.n)+' and '+shortName(d.n))+'</div>';
   if(a.st==='WAIVERS'&&st===0)h+='<div class="why warn">He is on waivers, so he cannot be added today. Pick a later start day.</div>';
   var v=[];
   if(diff>=1)v.push('This swap helps this week.');
@@ -1330,7 +1331,7 @@ function glMoveRow(m,open){
     +(m.swapped?'<div class="rx-n">Instead of dropping '+esc(m.swapped)+', who you chose to keep.</div>':'')
     +(m.waiver?'<div class="rx-n warn">He is on waivers: put the claim in the day before.</div>':'')
     +'<p class="rx-why">'+esc(m.why1||'')+'</p>'
-    +'<div class="rx-act">'+keepBtn(m.drop)+'<button type="button" class="gbtn2" data-go="moves/plan">Whole week</button></div>'
+    +'<div class="rx-act">'+keepBtn(m.drop)+cmpBtn(m.add,m.drop)+'<button type="button" class="gbtn2" data-go="moves/plan">Whole week</button></div>'
     +'</div></div>';
 }
 function uiToday(){
@@ -1470,7 +1471,7 @@ function mvCard(m,o){
   if(m.swapped)h+='<div class="muted" style="font-size:13px">Instead of dropping '+esc(m.swapped)+', who you chose to keep.</div>';
   h+='<div class="mv-why">'+esc(m.why1||(sgn(m.gain,1)+' pts this week'))+'</div>';
   if(!o.noact){
-    h+='<div class="mv-act">'+keepBtn(m.drop);
+    h+='<div class="mv-act">'+keepBtn(m.drop)+cmpBtn(m.add,m.drop);
     if((m.why_add&&m.why_add.length)||(m.why_drop&&m.why_drop.length))h+='<details class="pc-det"><summary>Full reasons</summary>'+reasonsHtml(m)+'</details>';
     h+='</div>';
   }
@@ -1683,12 +1684,14 @@ function modal(p){
   var isG=p.grp==='G',unit=isG?'pts/start':'pts/game';
   function tile(v,k){return '<div class="pc-t"><div class="pc-tv">'+v+'</div><div class="pc-tk">'+k+'</div></div>';}
   function row(k,v,note){return '<div class="pc-r"><div>'+k+(note?'<div class="pc-n">'+note+'</div>':'')+'</div><b>'+v+'</b></div>';}
-  var slot=p.slot==='FA'?(p.st||'Free agent'):p.slot;
+  var slot=p.slot==='FA'?({FREEAGENT:'Free agent',WAIVERS:'Waivers'}[p.st]||p.st||'Free agent'):p.slot;
   var sub=[esc(p.pos),esc(p.tm),esc(slot)];if(p.own!=null)sub.push(f(p.own,0)+'% rostered'+(pcTrend(p)?' '+pcTrend(p):''));
   var h='<div class="mhead">'+(typeof avHtml==='function'?avHtml(p.id,p.tm):'')
     +'<div class="pc-id"><b>'+esc(p.n)+'</b><div class="muted">'+sub.join(' &middot; ')+'</div></div>'
     +'<button class="x" id="mx">&times;</button></div>';
   if(p.inj&&p.inj!=='ACTIVE')h+='<div class="pc-inj">Status: '+esc(p.inj)+'</div>';
+  var pct=UI.pct==='gl'?'gl':'ov';CMP.on=false;
+  h+='<div class="pcseg'+(pct==='gl'?' two':'')+'" role="tablist"><i class="th"></i><button type="button" role="tab" data-pct="ov"'+(pct==='ov'?' class="on"':'')+'>Overview</button><button type="button" role="tab" data-pct="gl"'+(pct==='gl'?' class="on"':'')+'>Game log</button></div><div id="pcOv"'+(pct==='gl'?' hidden':'')+'>';
 
   /* headline + plain-English verdict */
   var d=(p.out!=null&&p.ppg!=null)?p.out-p.ppg:null,vc='pc-flat',vt='Producing about what we expect';
@@ -1707,6 +1710,7 @@ function modal(p){
   else if(p.toi!=null)t+=tile(f(p.toi,1)+' min','Ice time / game');
   t+=pcToday(p);
   if(t)h+='<div class="pc-tiles">'+t+'</div>';
+  h+='<div class="pc-acts">'+cmpBtn(p,null,'Compare with…')+'</div>';
 
   var wk=null;
   if(p.slot==='FA'){
@@ -1743,8 +1747,9 @@ function modal(p){
   if(a)h+='<details class="pc-det"><summary>Advanced stats</summary>'+a+'</details>';
 
   if(p.fl&&p.fl.length)h+='<ul class="pc-fl">'+p.fl.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>';
-  var m=$('#modal');m.innerHTML='<div class="box">'+h+'</div>';m.classList.add('open');
-  $('#mx').addEventListener('click',closeModal);
+  h+='</div><div id="pcGl" data-id="'+p.id+'"'+(pct==='gl'?'':' hidden')+'></div>';
+  sheetShow(h);
+  if(pct==='gl')pcTabSet('gl');
   var sw=$('#pcSwap');
   if(sw&&wk)sw.addEventListener('click',function(){
     closeModal();
@@ -1752,8 +1757,259 @@ function modal(p){
     if(typeof wiPick==='function'){wiPick('drop',String(wk.id));wiPick('add',String(p.id));}
     setTimeout(function(){var o=document.getElementById('wiOut');if(o&&o.scrollIntoView){try{o.scrollIntoView({block:'center'});}catch(e){}}},120);
   });
-  sheetOpen();
 }
+
+SF.compare='<svg viewBox="0 0 28 28"><path class="s" d="M8.5 22V12M14 22V6.5M19.5 22v-7.5"/></svg>';
+
+/* ---------- show a sheet, or swap what an open sheet shows (no second slide-up) ---------- */
+function sheetShow(h){
+  var m=$('#modal'),bx=m.querySelector('.box');
+  if(typeof SH!=='undefined'&&SH.open&&bx&&m.classList.contains('open')&&!m.classList.contains('fading')){
+    bx.innerHTML='<div class="grab"></div>'+h;
+    var x=bx.querySelector('#mx');if(x){x.innerHTML=SF.xmark;x.className='x gbtn glass';x.setAttribute('aria-label','Close');}
+    bx.scrollTop=0;bx.classList.remove('sw-in');void bx.offsetWidth;bx.classList.add('sw-in');
+  }else{
+    m.innerHTML='<div class="box">'+h+'</div>';m.classList.add('open');
+    if(typeof sheetOpen==='function')sheetOpen();
+  }
+  var mx=$('#mx');if(mx)mx.addEventListener('click',closeModal);
+  return m.querySelector('.box');
+}
+
+/* ---------- game logs: recent games, loaded from gamelog.json only when a card or Compare needs them ---------- */
+var GLG={d:null,p:null};
+function glLoad(){
+  if(GLG.p)return GLG.p;
+  if(!D.gl||!D.gl.n||typeof fetch!=='function'){GLG.p=Promise.resolve(null);return GLG.p;}
+  GLG.p=fetch('gamelog.json?v='+D.gl.v).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;})
+    .then(function(j){GLG.d=(j&&j.p)?j:null;return GLG.d;});
+  return GLG.p;
+}
+function glRows(id){return (GLG.d&&GLG.d.p&&GLG.d.p[String(id)])||[];}
+function glAvg(rows,n){var r=rows.slice(0,n);if(!r.length)return null;return r.reduce(function(s,x){return s+x[3];},0)/r.length;}
+function glFmt(ms,o){try{return new Intl.DateTimeFormat('en-US',Object.assign({timeZone:'America/New_York'},o)).format(new Date(ms));}catch(e){return '';}}
+function glToi(s){if(!s)return '-';var m=Math.floor(s/60),x=s%60;return m+':'+(x<10?'0':'')+x;}
+function glOpp(r){return (r[2]?'':'@')+esc(r[1]);}
+function glPts(x){return (Math.round(x*10)/10).toFixed(1);}
+/* bar chart of fantasy points, oldest on the left; dashed line = what we project per game */
+function glChart(rows,proj,n){
+  var r=rows.slice(0,n||10).reverse();if(!r.length)return '';
+  var vals=r.map(function(x){return x[3];}),neg=Math.min.apply(null,vals)<0;
+  var W=330,H=neg?140:128,top=18,bot=neg?36:22,ch=H-top-bot,gap=6,bw=Math.min(26,(W-gap*(r.length-1))/r.length);
+  var mx=Math.max.apply(null,vals.concat([(proj||0)*1.4,1])),mn=Math.min.apply(null,vals.concat([0]));
+  var span=mx-mn||1,y0=top+ch*(mx/span),sc=ch/span,x0=(W-(bw*r.length+gap*(r.length-1)))/2;
+  var s='<svg class="glc" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Fantasy points in his last '+r.length+' games">';
+  s+='<line x1="0" x2="'+W+'" y1="'+y0+'" y2="'+y0+'" class="glc-base"/>';
+  r.forEach(function(x,i){
+    var v=x[3],h=Math.max(2,Math.abs(v)*sc),X=x0+i*(bw+gap),Y=v>=0?y0-h:y0;
+    var c=v<0?'neg':(proj!=null&&v>=proj?'hi':'lo');
+    s+='<rect x="'+X+'" y="'+Y+'" width="'+bw+'" height="'+h+'" rx="'+Math.min(6,bw/3)+'" class="glc-'+c+'" style="animation-delay:'+(i*35)+'ms"/>';
+    s+='<text x="'+(X+bw/2)+'" y="'+(v>=0?Y-5:Y+h+11)+'" class="glc-v">'+glPts(v)+'</text>';
+    s+='<text x="'+(X+bw/2)+'" y="'+(H-6)+'" class="glc-d">'+esc(glFmt(x[0],{month:'numeric',day:'numeric'}))+'</text>';
+  });
+  if(proj!=null&&proj>0){var py=y0-proj*sc;s+='<line x1="0" x2="'+W+'" y1="'+py+'" y2="'+py+'" class="glc-proj"/>';}
+  return s+'</svg>';
+}
+function glTable(p,rows,all){
+  var isG=p.grp==='G',show=all?rows:rows.slice(0,5);
+  var hd=isG?['Date','Opp','Pts','Res','GA','SV','SV%']:['Date','Opp','Pts','G','A','SOG','HIT','BLK','TOI'];
+  var nx=GLG.d&&GLG.d.nx&&GLG.d.nx[p.tm],h='';
+  if(nx&&nx[0]>Date.now())h+='<div class="gl-nx">'+SF.clock+'<span>Next: <b>'+(nx[2]?'vs ':'@ ')+esc(nx[1])+'</b> &middot; '+esc(glFmt(nx[0],{weekday:'short',month:'numeric',day:'numeric'}))+', '+esc(glFmt(nx[0],{hour:'numeric',minute:'2-digit'}))+' ET</span></div>';
+  var cw=isG?[15,16,16,13,12,12,16]:[13,14,15,8,8,10,9,9,14];
+  h+='<div class="glt-w"><table class="glt"><colgroup>'+cw.map(function(w){return '<col style="width:'+w+'%">';}).join('')+'</colgroup><thead><tr>'+hd.map(function(x){return '<th>'+x+'</th>';}).join('')+'</tr></thead><tbody>';
+  show.forEach(function(r){
+    var c=r[3]<0?'neg':(p.out!=null&&r[3]>=p.out?'hi':'');
+    h+='<tr><td>'+esc(glFmt(r[0],{month:'numeric',day:'numeric'}))+'</td><td>'+glOpp(r)+'</td><td><span class="glp '+c+'">'+glPts(r[3])+'</span></td>';
+    if(isG)h+='<td>'+(r[4]?'<b class="good">W</b>':'<span class="muted">-</span>')+(r[8]?' <span class="muted">SO</span>':'')+'</td><td>'+r[5]+'</td><td>'+r[6]+'</td><td>'+(r[7]?f(r[6]/r[7],3).replace(/^0/,''):'-')+'</td>';
+    else h+='<td>'+r[4]+'</td><td>'+r[5]+'</td><td>'+r[6]+'</td><td>'+r[7]+'</td><td>'+r[8]+'</td><td>'+glToi(r[9])+'</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  if(rows.length>5)h+='<button type="button" class="gbtn2 glt-more" data-glall="'+p.id+'">'+(all?'Show fewer':'Show all '+rows.length+' games')+'</button>';
+  return h;
+}
+function glPane(p,all){
+  var isG=p.grp==='G',unit=isG?'pts/start':'pts/game';
+  if(!GLG.d){
+    if(GLG.p&&!GLG.done)return '<div class="gl-wait"><span class="spin"></span>Loading recent games&hellip;</div>';
+    return '<div class="gl-none">The game log isn’t in this build yet. It shows up after the next data refresh.</div>';
+  }
+  var rows=glRows(p.id);
+  if(!rows.length)return '<div class="gl-none">No games played in the last few weeks.</div>';
+  var a5=glAvg(rows,5),a10=glAvg(rows,10),best=rows.reduce(function(b,r){return r[3]>b[3]?r:b;},rows[0]);
+  var d=p.out!=null&&a5!=null?a5-p.out:null;
+  var h='<div class="pc-tiles">'+tile2(f(a5,1),'Last '+Math.min(5,rows.length)+' games ('+unit+')')+tile2(f(a10,1),'Last '+Math.min(10,rows.length)+' games')
+    +tile2('<span class="'+(d==null?'':(d>=0.2?'good':(d<=-0.2?'bad':'')))+'">'+(d==null?'-':sgn(d,1))+'</span>','Last 5 vs projection')+'</div>';
+  var hot=rows.slice(0,5).filter(function(r){return p.out!=null&&r[3]>=p.out;}).length;
+  var n5=Math.min(5,rows.length),say=d==null?'':(d>=0.4&&hot*2>n5?'Hot: beating his projection lately.':(d<=-0.4&&hot*2<n5?'Cold: below his projection lately.':(d>=0.4?'Streaky: a big game or two is lifting his average.':(d<=-0.4?'Up and down, and below his projection overall.':'Steady: close to his projection lately.'))));
+  h+='<div class="gl-say">'+say
+    +' '+hot+' of his last '+n5+' '+(isG?'appearances':'games')+' were at or above it. Best: '+glPts(best[3])+' '+glOpp(best)+' on '+esc(glFmt(best[0],{month:'short',day:'numeric'}))+'.</div>';
+  h+='<div class="pc-h">Fantasy points, last '+Math.min(10,rows.length)+' '+(isG?'appearances':'games')+'</div><div class="glc-w">'+glChart(rows,p.out,10)+'<div class="glc-lg"><span><i class="sw-hi"></i>At or above projection</span><span><i class="sw-pj"></i>Projected '+f(p.out,1)+'</span></div></div>';
+  h+='<div class="pc-h">Game log</div>'+glTable(p,rows,all);
+  return h;
+}
+function pcTabSet(t){
+  UI.pct=t;
+  var s=$('#modal .pcseg');if(!s)return;
+  s.classList.toggle('two',t==='gl');
+  $$('#modal .pcseg button').forEach(function(b){var on=b.getAttribute('data-pct')===t;b.classList.toggle('on',on);b.setAttribute('aria-selected',on?'true':'false');});
+  var ov=$('#pcOv'),gl=$('#pcGl');if(ov)ov.hidden=t!=='ov';if(gl)gl.hidden=t!=='gl';
+  if(t==='gl'&&gl){
+    var id=gl.getAttribute('data-id'),p=ALL[id];if(!p)return;
+    var pr=glLoad();gl.innerHTML=glPane(p,false);
+    pr.then(function(){GLG.done=true;var g=$('#pcGl');if(g&&g.getAttribute('data-id')===id&&!g.hidden)g.innerHTML=glPane(p,false);});
+  }
+}
+
+/* ---------- Compare: two players side by side ---------- */
+var CMP={a:null,b:null,pick:null};
+function cmpMine(p){return (D.mine||[]).some(function(x){return x.id===p.id;});}
+function cmpGames(p){return p.gl!=null?p.gl:(p.g7||0);}
+function cmpWeek(p){return (p.out||0)*cmpGames(p)*(p.grp==='G'?(p.sp||0.5):1)*(isInj(p)?0:1);}
+function cmpWho(p){
+  if(cmpMine(p))return 'Your team';
+  if(p.slot==='FA')return p.st==='WAIVERS'?'Waivers':'Free agent';
+  var t=(typeof ownerTeam==='function')?ownerTeam(p.id):null;return t?t.name:'Rostered';
+}
+function cmpPlanMoves(){var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null;return (P&&P.moves)||[];}
+function cmpDefault(a){
+  var mv=cmpPlanMoves(),m;
+  if(cmpMine(a)){
+    m=mv.filter(function(x){return x.drop.id===a.id;})[0];if(m&&ALL[m.add.id])return ALL[m.add.id];
+    var fa=(D.fas||[]).filter(function(x){return x.grp===a.grp&&!isInj(x)&&x.id!==a.id;}).sort(function(x,y){return cmpWeek(y)-cmpWeek(x)||y.out-x.out;});
+    return fa[0]||null;
+  }
+  m=mv.filter(function(x){return x.add.id===a.id;})[0];if(m&&ALL[m.drop.id])return ALL[m.drop.id];
+  return pcWeak(a.grp);
+}
+function cmpOpen(a,b){
+  if(!a)return;
+  CMP.a=a;CMP.b=b||cmpDefault(a);CMP.pick=null;
+  var pr=glLoad();cmpRender();
+  pr.then(function(){GLG.done=true;if(CMP.on)cmpRender(true);});
+}
+function cmpRows(a,b){
+  var G=a.grp==='G'&&b.grp==='G',L=[];
+  function per(p,k){return p.gp?(p[k]||0)/p.gp:null;}
+  var a5=GLG.d?glAvg(glRows(a.id),5):undefined,b5=GLG.d?glAvg(glRows(b.id),5):undefined;
+  L.push(['Projected '+(G?'pts/start':'pts/game'),a.out,b.out,2,'The number every suggestion uses']);
+  L.push([G?'Games left (team)':'Games left this week',cmpGames(a),cmpGames(b),0]);
+  L.push(['Projected pts this week',cmpWeek(a),cmpWeek(b),1,G?'Per start x games x start chance':'Per game x games left']);
+  if(a5!==undefined)L.push(['Last 5 games',a5,b5,1,'Fantasy points per game, most recent']);
+  L.push(['Season',a.ppg,b.ppg,2,(G?'Pts/start':'Pts/game')+' so far']);
+  L.push(['Last 15 days',a.rec,b.rec,2]);
+  if(G){
+    L.push(['Start chance',a.sp!=null?a.sp*100:null,b.sp!=null?b.sp*100:null,0,null,'%']);
+    L.push(['Save %',a.svp,b.svp,3]);
+    if(a.gsax!=null||b.gsax!=null)L.push(['Goals saved vs expected',a.gsax,b.gsax,1]);
+  }else{
+    L.push(['Ice time / game',a.toi,b.toi,1,null,' min']);
+    L.push(['Power-play time / game',a.pp,b.pp,1,null,' min']);
+    L.push(['Shots / game',per(a,'sog'),per(b,'sog'),1]);
+    L.push(['Hits / game',per(a,'hit'),per(b,'hit'),1]);
+    L.push(['Blocks / game',per(a,'blk'),per(b,'blk'),1]);
+  }
+  L.push(['Rostered in ESPN leagues',a.own,b.own,0,null,'%']);
+  return L;
+}
+function cmpRow(r){
+  var k=r[0],x=r[1],y=r[2],d=r[3],suf=r[5]||'',ok=x!=null&&y!=null&&!isNaN(x)&&!isNaN(y);
+  var wa=ok&&x>y+1e-9,wb=ok&&y>x+1e-9,mx=ok?Math.max(Math.abs(x),Math.abs(y),1e-9):1;
+  var fa=x==null||isNaN(x)?'-':f(x,d)+suf,fb=y==null||isNaN(y)?'-':f(y,d)+suf;
+  var pa=ok&&x>0?Math.round(100*x/mx):0,pb=ok&&y>0?Math.round(100*y/mx):0;
+  return '<div class="cm-r"><div class="cm-v'+(wa?' w':'')+'">'+fa+'</div><div class="cm-k">'+esc(k)+(r[4]?'<span>'+esc(r[4])+'</span>':'')+'</div><div class="cm-v r'+(wb?' w':'')+'">'+fb+'</div>'
+    +'<div class="cm-bar"><i class="'+(wa?'w':'')+'" style="--w:'+pa+'%"></i><i class="'+(wb?'w b':'b')+'" style="--w:'+pb+'%"></i></div></div>';
+}
+function cmpSide(p,k){
+  return '<div class="cm-p">'+avHtml(p.id,p.tm)+'<a class="pl cm-n" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'
+    +'<div class="cm-s">'+esc(p.pos)+' &middot; '+esc(p.tm)+(p.rl&&p.rl!=='Not listed'?' &middot; '+esc(p.rl):'')+'</div>'
+    +'<div class="cm-tag'+(cmpMine(p)?' mine':'')+'">'+esc(cmpWho(p))+'</div>'
+    +(p.inj&&p.inj!=='ACTIVE'?'<div class="cm-inj">'+esc(p.inj)+'</div>':'')
+    +'<button type="button" class="cm-chg" data-cmchg="'+k+'">Change</button></div>';
+}
+function cmpForm(a,b){
+  if(!GLG.d)return GLG.p&&!GLG.done?'<div class="gl-wait"><span class="spin"></span>Loading recent games&hellip;</div>':'';
+  var ra=glRows(a.id).slice(0,8).reverse(),rb=glRows(b.id).slice(0,8).reverse();
+  if(!ra.length&&!rb.length)return '';
+  var n=Math.max(ra.length,rb.length),W=330,H=118,top=14,bot=18,ch=H-top-bot;
+  var all=ra.concat(rb).map(function(r){return r[3];}),mx=Math.max.apply(null,all.concat([1])),mn=Math.min.apply(null,all.concat([0])),span=mx-mn||1,y0=top+ch*mx/span,sc=ch/span;
+  var slot=(W-8)/n,bw=Math.min(14,(slot-6)/2);
+  var s='<svg class="glc" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Last games side by side"><line x1="0" x2="'+W+'" y1="'+y0+'" y2="'+y0+'" class="glc-base"/>';
+  function bars(rr,off,cls){rr.forEach(function(r,i){var j=i+(n-rr.length),v=r[3],h=Math.max(2,Math.abs(v)*sc),X=4+j*slot+slot/2+off,Y=v>=0?y0-h:y0;
+    s+='<rect x="'+X+'" y="'+Y+'" width="'+bw+'" height="'+h+'" rx="'+Math.min(5,bw/3)+'" class="'+cls+'" style="animation-delay:'+(j*30)+'ms"><title>'+glPts(v)+' '+(r[2]?'vs ':'@ ')+esc(r[1])+'</title></rect>';});}
+  bars(ra,-bw-1,'cmc-a');bars(rb,1,'cmc-b');
+  s+='<text x="4" y="'+(H-4)+'" class="glc-d" style="text-anchor:start">Older</text><text x="'+(W-4)+'" y="'+(H-4)+'" class="glc-d" style="text-anchor:end">Latest</text></svg>';
+  return '<div class="pc-h">Last '+n+' games</div><div class="cm-lg"><span><i class="cmc-a"></i>'+esc(shortName(a.n))+' '+f(glAvg(glRows(a.id),n),1)+'/g</span><span><i class="cmc-b"></i>'+esc(shortName(b.n))+' '+f(glAvg(glRows(b.id),n),1)+'/g</span></div><div class="glc-w">'+s+'</div>';
+}
+function cmpVerdict(a,b){
+  var wa=cmpWeek(a),wb=cmpWeek(b),dw=wa-wb,dp=(a.out||0)-(b.out||0),na=shortName(a.n),nb=shortName(b.n),ga=cmpGames(a),gb=cmpGames(b);
+  var lead=Math.abs(dw)<0.5?'About even this week':(esc(dw>0?na:nb)+' <b class="good">+'+f(Math.abs(dw),1)+'</b> pts this week');
+  var why=[];
+  if(ga!==gb)why.push(esc(ga>gb?na:nb)+' has '+Math.max(ga,gb)+' games left to '+Math.min(ga,gb));
+  if(Math.abs(dp)>=0.1)why.push(esc(dp>0?na:nb)+' is better per game by '+f(Math.abs(dp),2));
+  else why.push('they are about even per game');
+  var later='';
+  if(Math.abs(dw)>=0.5&&Math.abs(dp)>=0.1&&(dw>0)!==(dp>0))later='<div class="cm-note">This week favors '+esc(dw>0?na:nb)+' on games, but '+esc(dp>0?na:nb)+' is the better player after this week.</div>';
+  return '<div class="cm-ver"><div class="cm-vl">'+lead+'</div><div class="cm-vs">'+why.join(', ')+'.</div>'+later+'</div>';
+}
+function cmpPicker(k){
+  var o=k==='a'?CMP.b:CMP.a;
+  return '<div class="cm-pick"><input type="search" id="cmQ" placeholder="Search any player" autocomplete="off" enterkeyhint="search"><div id="cmList">'+cmpList(k,'',o)+'</div><button type="button" class="gbtn2" data-cmchg="">Cancel</button></div>';
+}
+function cmpList(k,q,o){
+  var n=wiNorm(q).trim(),cur=k==='a'?CMP.a:CMP.b,seen={},out=[];
+  Object.keys(ALL).forEach(function(id){var p=ALL[id];if(seen[p.id]||(cur&&p.id===cur.id)||(o&&p.id===o.id))return;seen[p.id]=1;
+    if(n){if(wiNorm(p.n).indexOf(n)<0)return;}else if(o&&p.grp!==o.grp)return;
+    out.push(p);});
+  if(!n){                         /* no search yet: your players and the best free agents at his position */
+    var mine=out.filter(function(p){return cmpMine(p)&&p.slot!=='IR';}).sort(function(x,y){return x.out-y.out;}).slice(0,6);
+    var fa=out.filter(function(p){return p.slot==='FA'&&!isInj(p);}).sort(function(x,y){return cmpWeek(y)-cmpWeek(x);}).slice(0,6);
+    return (mine.length?'<div class="cm-gh">Your team, weakest first</div>'+mine.map(cmpOpt).join(''):'')+(fa.length?'<div class="cm-gh">Best free agents this week</div>'+fa.map(cmpOpt).join(''):'');
+  }
+  out.sort(function(x,y){return (y.out||0)-(x.out||0);});
+  return out.length?out.slice(0,12).map(cmpOpt).join(''):'<div class="muted" style="padding:10px 2px">No player matches.</div>';
+}
+function cmpOpt(p){
+  return '<button type="button" class="cm-opt" data-cmset="'+p.id+'">'+avHtml(p.id,p.tm)+'<span class="cm-on"><b>'+esc(p.n)+'</b><span>'+esc(p.pos)+' &middot; '+esc(p.tm)+' &middot; '+esc(cmpWho(p))+'</span></span><span class="cm-ov">'+f(p.out,2)+'<i>'+(p.grp==='G'?'pts/start':'pts/gm')+'</i></span></button>';
+}
+function cmpRender(keep){
+  var a=CMP.a,b=CMP.b;
+  var h='<div class="mhead cm-head"><div class="pc-id"><b>Compare</b><div class="muted">'+(b?'This week and beyond':'Pick a second player')+'</div></div><button class="x" id="mx">&times;</button></div>';
+  if(CMP.pick){h+=cmpPicker(CMP.pick);}
+  else if(!b){h+='<div class="cm-top">'+cmpSide(a,'a')+'<div class="cm-vsx">vs</div><div class="cm-p cm-empty"><button type="button" class="gbtn2" data-cmchg="b">Choose a player</button></div></div>';}
+  else{
+    h+='<div class="cm-top">'+cmpSide(a,'a')+'<button type="button" class="cm-vsx" data-cmflip="1" aria-label="Swap sides">'+SF.swap+'</button>'+cmpSide(b,'b')+'</div>';
+    h+=cmpVerdict(a,b);
+    if(a.grp!==b.grp&&(a.grp==='G'||b.grp==='G'))h+='<div class="cm-note">A goalie and a skater are scored differently, so treat this as a rough guide.</div>';
+    h+='<div class="cm-rows">'+cmpRows(a,b).map(cmpRow).join('')+'</div>';
+    h+=cmpForm(a,b);
+    var mineA=cmpMine(a),mineB=cmpMine(b),fa=mineA&&b.slot==='FA'?[b,a]:(mineB&&a.slot==='FA'?[a,b]:null);
+    if(fa)h+='<div class="cm-act"><button type="button" class="pc-swap cm-try" data-cmtry="'+fa[0].id+','+fa[1].id+'">'+SF.swap+' Try add '+esc(shortName(fa[0].n))+', drop '+esc(shortName(fa[1].n))+'</button></div>';
+  }
+  var y=keep?($('#modal .box')||{}).scrollTop:0;
+  var bx=sheetShow(h);CMP.on=true;
+  if(keep&&bx&&y)bx.scrollTop=y;
+  var q=$('#cmQ');
+  if(q){q.addEventListener('input',function(){var l=$('#cmList');if(l)l.innerHTML=cmpList(CMP.pick,q.value,CMP.pick==='a'?CMP.b:CMP.a);});try{q.focus({preventScroll:true});}catch(e){}}
+}
+function cmpBtn(a,b,label){return '<button type="button" class="gbtn2 cm-btn" data-cmp="'+a.id+(b?','+b.id:'')+'">'+SF.compare+(label||'Compare')+'</button>';}
+document.addEventListener('click',function(e){
+  var t=e.target;if(!t||!t.closest)return;
+  var b=t.closest('[data-cmp]');
+  if(b){e.preventDefault();e.stopPropagation();var ids=b.getAttribute('data-cmp').split(',');cmpOpen(ALL[ids[0]],ids[1]?ALL[ids[1]]:null);return;}
+  if(!$('#modal').contains(t))return;
+  b=t.closest('[data-pct]');if(b){pcTabSet(b.getAttribute('data-pct'));return;}
+  b=t.closest('[data-glall]');
+  if(b){var g=$('#pcGl'),p=ALL[b.getAttribute('data-glall')];if(g&&p){var all=!g._all;g._all=all;g.innerHTML=glPane(p,all);}return;}
+  b=t.closest('[data-cmchg]');if(b){CMP.pick=b.getAttribute('data-cmchg')||null;cmpRender();return;}
+  b=t.closest('[data-cmset]');if(b){var np=ALL[b.getAttribute('data-cmset')];if(np){if(CMP.pick==='a')CMP.a=np;else CMP.b=np;}CMP.pick=null;cmpRender();return;}
+  b=t.closest('[data-cmflip]');if(b){var x=CMP.a;CMP.a=CMP.b;CMP.b=x;cmpRender(true);return;}
+  b=t.closest('[data-cmtry]');
+  if(b){var ids=b.getAttribute('data-cmtry').split(',');closeModal();
+    if(typeof showTab==='function')showTab('moves/swap');
+    if(typeof wiPick==='function'){wiPick('drop',ids[1]);wiPick('add',ids[0]);}
+    setTimeout(function(){var o=document.getElementById('wiOut');if(o&&o.scrollIntoView){try{o.scrollIntoView({block:'center'});}catch(x){}}},120);return;}
+},true);
 
 /* ---------- tabs + startup ---------- */
 var TABS=['overview','roster','free','trade','planner','gameplan','streams','league'];
