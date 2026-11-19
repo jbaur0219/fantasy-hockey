@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<defs>
+ <linearGradient id="bg" x1="0.1" y1="0" x2="0.45" y2="1"><stop offset="0" stop-color="#6AD4FF"/><stop offset=".42" stop-color="#0A84FF"/><stop offset="1" stop-color="#2E2B9E"/></linearGradient>
+ <radialGradient id="glow" cx=".22" cy="0" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>
+ <linearGradient id="trail" gradientUnits="userSpaceOnUse" x1="170" y1="800" x2="640" y2="440"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".35" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff"/></linearGradient>
+ <linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#48484A"/><stop offset="1" stop-color="#1C1C1E"/></linearGradient>
+ <linearGradient id="side" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000"/><stop offset=".6" stop-color="#1c1c1e"/><stop offset="1" stop-color="#000"/></linearGradient>
+ <filter id="sh" x="-40%" y="-40%" width="180%" height="200%"><feDropShadow dx="0" dy="34" stdDeviation="34" flood-color="#0a1450" flood-opacity=".6"/></filter>
+ <filter id="lsh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0a1450" flood-opacity=".35"/></filter>
+</defs>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<rect width="1024" height="1024" fill="url(#glow)"/>
+<g stroke="#fff" stroke-opacity=".12" stroke-width="7" stroke-linecap="round" fill="none">
+ <path d="M80 860 C 330 800, 560 840, 960 740"/><path d="M200 935 C 420 900, 640 925, 990 860"/>
+</g>
+<g transform="translate(-24 -44)"><path filter="url(#lsh)" d="M170 800 L 380 600 L 492 690 L 640 520" stroke="url(#trail)" stroke-width="84" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<g filter="url(#sh)" transform="translate(700 420) rotate(-8)">
+ <path d="M-178 0 v66 a178 78 0 0 0 356 0 v-66 z" fill="url(#side)"/>
+ <ellipse rx="178" ry="78" fill="url(#top)"/>
+ <ellipse rx="178" ry="78" fill="none" stroke="#9ED8FF" stroke-opacity=".45" stroke-width="6"/>
+ <path d="M-140 -22 a 150 60 0 0 1 180 -46" stroke="#fff" stroke-opacity=".4" stroke-width="12" stroke-linecap="round" fill="none"/>
+</g>
+</g></svg>
