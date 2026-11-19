@@ -17,7 +17,7 @@ import json
 
 import requests
 
-PERIODS = 30          # last 30 scoring days, which covers about 12-15 games
+PERIODS = 40          # most recent scoring days asked for (ESPN may include last season's; those are dropped)
 KEEP = 15             # games kept per player
 BATCH = 50
 # ESPN stat ids (per-game split, statSplitTypeId 5)
@@ -103,12 +103,14 @@ def game_index(schedules):
     return gi, abbr, by_tp
 
 
-def parse_player(pl, gi, abbr, by_tp):
-    """Rows for one ESPN player record, newest first (only games he actually played)."""
+def parse_player(pl, gi, abbr, by_tp, season=None, now_ms=None):
+    """Rows for one ESPN player record, newest first (only games he actually played this season)."""
     goalie = pl.get("defaultPositionId") == 5
     rows = {}
     for s in pl.get("stats") or []:
         if s.get("statSplitTypeId") != 5:
+            continue
+        if season is not None and s.get("seasonId") not in (None, season):    # ESPN also sends last season's games
             continue
         st = s.get("stats") or {}
         if _n(st, "30") < 1:                      # no game played that day
@@ -119,6 +121,8 @@ def parse_player(pl, gi, abbr, by_tp):
         if not g:
             continue
         date, home, away = g
+        if now_ms is not None and date > now_ms:          # never match a played game to a future date
+            continue
         is_home = 1 if home == tid else 0
         opp = abbr.get(away if is_home else home, "?")
         pts = _r1(s.get("appliedTotal") or 0)
@@ -157,7 +161,7 @@ def build(cfg, data, site_data, now_ms, players=None):
     logs = {}
     for pl in players:
         try:
-            rows = parse_player(pl, gi, abbr, by_tp)
+            rows = parse_player(pl, gi, abbr, by_tp, cfg.get("season"), now_ms)
         except Exception:
             continue
         if rows and pl.get("id") is not None:

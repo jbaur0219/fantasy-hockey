@@ -34,6 +34,14 @@ class GameLog(unittest.TestCase):
         self.assertEqual(rows[0], [3000, "CHI", 0, 4.6, 2, 0, 5, 1, 0, 1100, 1])   # found by team + day (no externalId)
         self.assertEqual(rows[1], [1000, "TB", 1, 2.3, 0, 2, 3, 0, 0, 1423, 0])
 
+    def test_last_season_and_future_dates_dropped(self):
+        old = {"id": 3, "defaultPositionId": 2, "proTeamId": 9, "stats": [
+            {"statSplitTypeId": 5, "seasonId": 2026, "scoringPeriodId": 60, "proTeamId": 9, "appliedTotal": 3,
+             "stats": {"30": 1}},
+            {"statSplitTypeId": 5, "seasonId": 2027, "scoringPeriodId": 60, "proTeamId": 9, "appliedTotal": 3,
+             "stats": {"30": 1}}]}
+        self.assertEqual(GL.parse_player(old, self.gi, self.abbr, self.by_tp, 2027, 5000), [])
+
     def test_goalie_row(self):
         rows = GL.parse_player(GOALIE, self.gi, self.abbr, self.by_tp)
         self.assertEqual(rows, [[1000, "DAL", 0, 5, 1, 2, 25, 27, 0, 3600]])
