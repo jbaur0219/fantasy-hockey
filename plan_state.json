@@ -181,78 +181,6 @@
    "tier": "optional",
    "waiver": false,
    "why1": "Both play 3; Guhle projects 1.7 pts a game to Benson's 1.6. Guhle is on MTL's second pair. About +0.5 pts this week."
-  }
- ],
- "moves": [
-  {
-   "add": {
-    "id": 5080157,
-    "n": "Frank Nazar",
-    "pos": "C",
-    "tm": "CHI"
-   },
-   "base": {
-    "a": [
-     33.8,
-     19
-    ],
-    "at": 1795122444473,
-    "d": [
-     26.4,
-     19
-    ]
-   },
-   "conf": "strong",
-   "cost": 0.0,
-   "day": "Thu Nov 19",
-   "drop": {
-    "id": 2970615,
-    "n": "Tom Wilson",
-    "pos": "RW",
-    "tm": "WSH"
-   },
-   "gain": 2.9,
-   "games": 3,
-   "net": 2.9,
-   "t": 0,
-   "tier": "make",
-   "waiver": false,
-   "why1": "Nazar plays 3 games the rest of this week, Wilson plays 2. Nazar is on CHI's second line and first power-play unit. About +2.9 pts this week."
-  },
-  {
-   "add": {
-    "id": 5080173,
-    "n": "Sam Rinzel",
-    "pos": "D",
-    "tm": "CHI"
-   },
-   "base": {
-    "a": [
-     27.8,
-     20
-    ],
-    "at": 1795122444473,
-    "d": [
-     33.9,
-     23
-    ]
-   },
-   "conf": "strong",
-   "cost": 0.0,
-   "day": "Thu Nov 19",
-   "drop": {
-    "id": 3904186,
-    "n": "Rasmus Andersson",
-    "pos": "D",
-    "tm": "VGK"
-   },
-   "gain": 2.45,
-   "games": 3,
-   "net": 2.45,
-   "t": 0,
-   "tier": "make",
-   "waiver": false,
-   "why1": "Rinzel plays 3 games the rest of this week, Andersson plays 2. Rinzel is on CHI's top pair and first power-play unit. About +2.5 pts this week."
   },
   {
    "add": {
@@ -323,78 +251,185 @@
    "tier": "optional",
    "waiver": false,
    "why1": "Both play 2; Spurgeon projects 1.9 pts a game to Mintyukov's 1.7. Spurgeon is on MIN's top pair. About +1.0 pts this week."
-  },
+  }
+ ],
+ "moves": [
   {
    "add": {
-    "id": 5291952,
-    "n": "Victor Eklund",
-    "pos": "LW",
-    "tm": "NYI"
+    "id": 5080157,
+    "n": "Frank Nazar",
+    "pos": "C",
+    "tm": "CHI"
    },
    "base": {
     "a": [
-     35.7,
+     33.8,
+     19
+    ],
+    "at": 1795132878646,
+    "d": [
+     36.9,
+     24
+    ]
+   },
+   "conf": "strong",
+   "cost": 0.0,
+   "day": "Sat Nov 21",
+   "drop": {
+    "id": 4565230,
+    "n": "Trevor Zegras",
+    "pos": "C",
+    "tm": "PHI"
+   },
+   "gain": 2.59,
+   "games": 2,
+   "net": 2.59,
+   "t": 2,
+   "tier": "make",
+   "waiver": false,
+   "why1": "Nazar plays 2 games the rest of this week, Zegras plays 1. Nazar is on CHI's second line and first power-play unit. About +2.6 pts this week."
+  },
+  {
+   "add": {
+    "id": 5080173,
+    "n": "Sam Rinzel",
+    "pos": "D",
+    "tm": "CHI"
+   },
+   "base": {
+    "a": [
+     27.8,
      20
     ],
-    "at": 1795122444473,
+    "at": 1795132878646,
+    "d": [
+     26.4,
+     19
+    ]
+   },
+   "conf": "strong",
+   "cost": 0.0,
+   "day": "Sat Nov 21",
+   "drop": {
+    "id": 2970615,
+    "n": "Tom Wilson",
+    "pos": "RW",
+    "tm": "WSH"
+   },
+   "gain": 2.31,
+   "games": 2,
+   "net": 2.31,
+   "t": 2,
+   "tier": "make",
+   "waiver": false,
+   "why1": "Rinzel plays 2 games the rest of this week, Wilson plays 1. Rinzel is on CHI's top pair and first power-play unit. About +2.3 pts this week."
+  },
+  {
+   "add": {
+    "id": 5079,
+    "n": "Jared Spurgeon",
+    "pos": "D",
+    "tm": "MIN"
+   },
+   "base": {
+    "a": [
+     28.3,
+     14
+    ],
+    "at": 1795132878646,
+    "d": [
+     29.6,
+     18
+    ]
+   },
+   "conf": "optional",
+   "cost": 0.0,
+   "day": "Sat Nov 21",
+   "drop": {
+    "id": 5080154,
+    "n": "Pavel Mintyukov",
+    "pos": "D",
+    "tm": "ANA"
+   },
+   "gain": 0.53,
+   "games": 1,
+   "net": 0.53,
+   "t": 2,
+   "tier": "optional",
+   "waiver": false,
+   "why1": "Both play 1; Spurgeon projects 1.9 pts a game to Mintyukov's 1.7. Spurgeon is on MIN's top pair. About +0.5 pts this week."
+  },
+  {
+   "add": {
+    "id": 4233643,
+    "n": "Filip Chytil",
+    "pos": "C",
+    "tm": "VAN"
+   },
+   "base": {
+    "a": [
+     16.1,
+     10
+    ],
+    "at": 1795132878646,
+    "d": [
+     33.9,
+     23
+    ]
+   },
+   "conf": "lean",
+   "cost": 0.0,
+   "day": "Sun Nov 22",
+   "drop": {
+    "id": 3904186,
+    "n": "Rasmus Andersson",
+    "pos": "D",
+    "tm": "VGK"
+   },
+   "gain": 1.94,
+   "games": 1,
+   "net": 1.94,
+   "t": 3,
+   "tier": "make",
+   "waiver": false,
+   "why1": "Chytil plays 1 game the rest of this week, Andersson plays 0. Chytil is on VAN's second line and second power-play unit. About +1.9 pts this week."
+  },
+  {
+   "add": {
+    "id": 5080159,
+    "n": "Jonathan Lekkerimaki",
+    "pos": "RW",
+    "tm": "VAN"
+   },
+   "base": {
+    "a": [
+     37.6,
+     23
+    ],
+    "at": 1795132878646,
     "d": [
      40.4,
      24
     ]
    },
    "conf": "optional",
-   "cost": 0.0,
-   "day": "Thu Nov 19",
+   "cost": 1.034,
+   "day": "Sun Nov 22",
    "drop": {
     "id": 5149155,
     "n": "Will Smith",
     "pos": "RW",
     "tm": "SJ"
    },
-   "gain": 0.71,
-   "games": 2,
-   "net": 0.71,
-   "t": 0,
-   "tier": "optional",
-   "waiver": false,
-   "why1": "Eklund plays 2 games the rest of this week, Smith plays 1. Eklund is on NYI's third line and first power-play unit. About +0.7 pts this week."
-  },
-  {
-   "add": {
-    "id": 4697409,
-    "n": "Jake Neighbours",
-    "pos": "LW",
-    "tm": "STL"
-   },
-   "base": {
-    "a": [
-     35.2,
-     21
-    ],
-    "at": 1795122444473,
-    "d": [
-     40.6,
-     24
-    ]
-   },
-   "conf": "optional",
-   "cost": 0.974,
-   "day": "Sun Nov 22",
-   "drop": {
-    "id": 4697387,
-    "n": "Jamie Drysdale",
-    "pos": "D",
-    "tm": "PHI"
-   },
-   "gain": 1.53,
+   "gain": 1.78,
    "games": 1,
-   "net": 0.55,
+   "net": 0.74,
    "t": 3,
    "tier": "optional",
    "waiver": false,
-   "why1": "Neighbours plays 1 game the rest of this week, Drysdale plays 0. Neighbours is on STL's top line and first power-play unit. About +1.5 pts this week (+0.6 counting what you give up later)."
+   "why1": "Lekkerimaki plays 1 game the rest of this week, Smith plays 0. Lekkerimaki is on VAN's top line and first power-play unit. About +1.8 pts this week (+0.7 counting what you give up later)."
   }
  ],
  "mp": 8,
- "updated": 1795122444473
+ "updated": 1795132878646
 }
