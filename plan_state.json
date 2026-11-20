@@ -266,7 +266,7 @@
      36.9,
      20
     ],
-    "at": 1795154595330,
+    "at": 1795182964858,
     "d": [
      37.0,
      25
@@ -281,13 +281,13 @@
     "pos": "C",
     "tm": "PHI"
    },
-   "gain": 2.75,
+   "gain": 2.64,
    "games": 2,
-   "net": 2.75,
-   "t": 2,
+   "net": 2.64,
+   "t": 1,
    "tier": "make",
    "waiver": false,
-   "why1": "Nazar plays 2 games the rest of this week, Zegras plays 1. Nazar is on CHI's second line and first power-play unit. About +2.8 pts this week."
+   "why1": "Nazar plays 2 games the rest of this week, Zegras plays 1. Nazar is on CHI's second line and first power-play unit. About +2.6 pts this week."
   },
   {
    "add": {
@@ -301,7 +301,7 @@
      31.2,
      21
     ],
-    "at": 1795154595330,
+    "at": 1795182964858,
     "d": [
      27.2,
      20
@@ -316,13 +316,48 @@
     "pos": "RW",
     "tm": "WSH"
    },
-   "gain": 2.5,
+   "gain": 2.55,
    "games": 2,
-   "net": 2.5,
-   "t": 2,
+   "net": 2.55,
+   "t": 1,
    "tier": "make",
    "waiver": false,
    "why1": "Rinzel plays 2 games the rest of this week, Wilson plays 1. Rinzel is on CHI's top pair and first power-play unit. About +2.5 pts this week."
+  },
+  {
+   "add": {
+    "id": 4697409,
+    "n": "Jake Neighbours",
+    "pos": "LW",
+    "tm": "STL"
+   },
+   "base": {
+    "a": [
+     37.9,
+     22
+    ],
+    "at": 1795182964858,
+    "d": [
+     40.4,
+     24
+    ]
+   },
+   "conf": "optional",
+   "cost": 0.952,
+   "day": "Sat Nov 21",
+   "drop": {
+    "id": 5149155,
+    "n": "Will Smith",
+    "pos": "RW",
+    "tm": "SJ"
+   },
+   "gain": 1.62,
+   "games": 2,
+   "net": 0.67,
+   "t": 1,
+   "tier": "optional",
+   "waiver": false,
+   "why1": "Neighbours plays 2 games the rest of this week, Smith plays 1. Neighbours is on STL's top line and first power-play unit. About +1.6 pts this week (+0.7 counting what you give up later)."
   },
   {
    "add": {
@@ -336,7 +371,7 @@
      30.1,
      15
     ],
-    "at": 1795154595330,
+    "at": 1795182964858,
     "d": [
      30.8,
      19
@@ -354,7 +389,7 @@
    "gain": 0.58,
    "games": 1,
    "net": 0.58,
-   "t": 2,
+   "t": 1,
    "tier": "optional",
    "waiver": false,
    "why1": "Both play 1; Spurgeon projects 1.9 pts a game to Mintyukov's 1.6. Spurgeon is on MIN's top pair. About +0.6 pts this week."
@@ -371,7 +406,7 @@
      16.6,
      11
     ],
-    "at": 1795154595330,
+    "at": 1795182964858,
     "d": [
      35.1,
      24
@@ -386,15 +421,15 @@
     "pos": "D",
     "tm": "VGK"
    },
-   "gain": 1.72,
+   "gain": 1.75,
    "games": 1,
-   "net": 1.72,
-   "t": 3,
+   "net": 1.75,
+   "t": 2,
    "tier": "make",
    "waiver": false,
-   "why1": "Chytil plays 1 game the rest of this week, Andersson plays 0. Chytil is on VAN's second line and second power-play unit. About +1.7 pts this week."
+   "why1": "Chytil plays 1 game the rest of this week, Andersson plays 0. Chytil is on VAN's second line and second power-play unit. About +1.8 pts this week."
   }
  ],
  "mp": 8,
- "updated": 1795154595330
+ "updated": 1795182964858
 }
