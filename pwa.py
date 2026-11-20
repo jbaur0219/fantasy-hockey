@@ -25,9 +25,9 @@ MANIFEST = {
     "background_color": "#0b1d3a",
     "theme_color": "#0b1d3a",
     "icons": [
-        {"src": "icon-192.png?v=3", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-        {"src": "icon-512.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-        {"src": "icon-512.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        {"src": "icon-192-v4.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+        {"src": "icon-512-v4.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+        {"src": "icon-512-v4.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
     ],
 }
 
@@ -49,7 +49,7 @@ self.addEventListener('push', function (e) {
   var d = {};
   try { d = e.data ? e.data.json() : {}; } catch (x) { d = { body: e.data ? e.data.text() : '' }; }
   e.waitUntil(self.registration.showNotification(d.title || 'Fantasy Hockey', {
-    body: d.body || '', icon: 'icon-192.png', badge: 'icon-192.png', tag: d.tag || 'fh-daily', data: { url: d.url || './' }
+    body: d.body || '', icon: 'icon-192-v4.png', badge: 'icon-192-v4.png', tag: d.tag || 'fh-daily', data: { url: d.url || './' }
   }));
 });
 self.addEventListener('notificationclick', function (e) {
@@ -68,7 +68,7 @@ def write_files(site_dir="site"):
     out = Path(site_dir)
     out.mkdir(exist_ok=True)
     src = Path(__file__).parent / "pwa"
-    for name in ("apple-touch-icon.png", "icon-192.png", "icon-512.png"):
+    for name in ("apple-touch-icon-v4.png", "icon-192-v4.png", "icon-512-v4.png"):
         shutil.copyfile(src / name, out / name)
     (out / "manifest.webmanifest").write_text(json.dumps(MANIFEST, indent=2), encoding="utf-8")
     (out / "sw.js").write_text(SW, encoding="utf-8")
