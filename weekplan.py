@@ -145,8 +145,9 @@ def next_week(cfg, data, league, standings, now_ms, site_data):
     game = STR.make_game_fn(abbr, games, sp, now_ms)
     days = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
     STR.STATE["ref"] = 0
-    nxt = C.team_games(games, abbr, sp + ndays, 7)
-    plan = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, {}, PL.MOVE_LIMIT, nxt)
+    import longterm as LT
+    fut = C.team_games(games, abbr, sp + ndays, LT.HORIZON_DAYS)
+    plan = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, {}, PL.MOVE_LIMIT, fut)
     return {"base": plan["base"], "total": plan["total"], "gain": plan["gain"],
             "moves": [{**{k: mv.get(k) for k in KEEP}, "why": (mv.get("why_add") or [])[:1]} for mv in plan["moves"]],
             "first_day": days[0] if days else ""}

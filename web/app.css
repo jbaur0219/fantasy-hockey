@@ -710,3 +710,6 @@ td{border-bottom:.5px solid var(--sep)!important}tr:last-child td{border-bottom:
 .glc-lg .sw-hi{width:10px;height:10px;border-radius:3px;background:var(--green)}
 .glc-lg .sw-pj{width:16px;height:0;border-top:2px dashed var(--tint)}
 .cm-act .cm-try{border:0!important;box-shadow:none!important}
+
+/* Long term (stream impact after this week) */
+.lt-det{margin-top:8px!important}.lt-det>summary{padding:8px 0 4px!important;gap:8px!important}.lt-det .pill{margin-left:2px}.lt-det ul.why{margin:4px 0 2px;padding-left:18px}

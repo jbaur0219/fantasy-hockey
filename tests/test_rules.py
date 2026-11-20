@@ -41,14 +41,44 @@ class Cost(unittest.TestCase):
         self.assertEqual(C.cost(sk("a", inj="OUT", out=3.0), sk("b", out=1.0), {"AAA": 4}), 0.0)
 
     def test_dropping_the_better_player_costs_points(self):
-        nxt = {"AAA": 3, "BBB": 3}
+        nxt = {"AAA": 10, "BBB": 10}           # games over the three weeks after this matchup
         good, stream = sk("good", out=2.4, tm="AAA"), sk("stream", out=1.5, tm="BBB")
         self.assertGreater(C.cost(good, stream, nxt), 2.0)
         self.assertEqual(C.cost(stream, good, nxt), 0.0)
 
     def test_next_week_schedule_counts(self):
         a, b = sk("a", out=1.8, tm="AAA"), sk("b", out=1.8, tm="BBB")
-        self.assertGreater(C.cost(a, b, {"AAA": 4, "BBB": 2}), C.cost(a, b, {"AAA": 2, "BBB": 4}))
+        self.assertGreater(C.cost(a, b, {"AAA": 11, "BBB": 9}), C.cost(a, b, {"AAA": 9, "BBB": 11}))
+
+    def test_hot_streak_does_not_hide_the_long_term_cost(self):
+        fut = {"AAA": 10, "BBB": 10}
+        cold = sk("cold", out=1.9, tm="AAA", rec=0.7)
+        hot = sk("hot", out=1.6, tm="BBB", rec=3.0)
+        self.assertGreater(C.cost(cold, hot, fut), 0.5)
+
+    def test_widely_rostered_drops_cost_more(self):
+        fut = {"AAA": 10, "BBB": 10}
+        b = sk("b", out=1.5, tm="BBB")
+        self.assertGreater(C.cost(sk("a", out=2.0, own=90.0), b, fut), C.cost(sk("a", out=2.0, own=10.0), b, fut))
+
+
+class LongTerm(unittest.TestCase):
+    def test_verdict_and_plain_reasons(self):
+        import longterm as LT
+        fut = {"AAA": 10, "BBB": 11}
+        y = sk("Trevor Zegras", out=1.73, tm="AAA", own=60.0, gx=-2.6, rl="F1 - PP1", tr=-1.5)
+        x = sk("Frank Nazar", out=1.68, tm="BBB", own=25.0, gx=4.2, rl="F2 - PP1", tr=1.4)
+        r = LT.assess(y, x, fut)
+        self.assertIn(r["v"], ("none", "small", "real"))
+        text = " ".join(r["lines"])
+        self.assertIn("expect fewer", text)
+        self.assertIn("bounce back", text)
+        self.assertIn("60%", text)
+
+    def test_injured_drop_has_no_long_term_cost(self):
+        import longterm as LT
+        r = LT.assess(sk("a", inj="OUT", out=3.0), sk("b"), {"AAA": 10})
+        self.assertEqual(r["v"], "none")
 
 
 class Settings(unittest.TestCase):

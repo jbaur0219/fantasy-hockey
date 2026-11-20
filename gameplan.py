@@ -49,6 +49,8 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
     used = PL._moves_used(league, cfg["team"])
     moves_left = max(0, PL.MOVE_LIMIT - (used or 0))
     nxt = C.team_games(games, abbr, sp + ndays, 7)
+    import longterm as LT
+    fut = C.team_games(games, abbr, sp + ndays, LT.HORIZON_DAYS)     # for the long-term cost of each drop
 
     import keep as KP
     import roles as R
@@ -57,7 +59,7 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
     healthy = lh == "live" or (lh == "cached" and (R.STATE["cache_age_h"] or 0) <= 24)
     mp = (league.get("status") or {}).get("currentMatchupPeriod")
     kept = KP.load(mp)
-    res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, nxt, prev=prev,
+    res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, fut, prev=prev,
                  only_prev=cautious, keep_ids=kept, healthy=healthy)
     entries, _, pool = C.build_inputs(site_data["mine"], site_data["fas"], game, ndays, standings, starters)
     before_rows = _day_rows(entries, ndays, days, game)
@@ -78,7 +80,7 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
             "targets": {g: [target(x) for x in ranked if x["g"] == g][:k]
                         for g, k in (("F", TARGETS_F), ("D", TARGETS_D), ("G", TARGETS_G))},
             "moves_left": moves_left, "limit": PL.MOVE_LIMIT, "used_known": used is not None,
-            "next_games": nxt, "cautious": cautious, "mp": mp, "kept": sorted(kept), "healthy": healthy}
+            "next_games": nxt, "fut": fut, "fut_days": LT.HORIZON_DAYS, "cautious": cautious, "mp": mp, "kept": sorted(kept), "healthy": healthy}
     plan["unused"] = max(0, moves_left - len(plan["moves"]))
     if m:
         # one projection model for the whole site: same daily-lineup values as the plan, for both teams

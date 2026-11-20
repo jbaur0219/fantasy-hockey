@@ -7,10 +7,9 @@ Each move also gets a confidence (Strong / Lean / Optional), a one-line reason, 
 
 How a move is judged
   gain   = extra points your best daily lineup scores for the rest of this matchup with the move made
-  cost   = what you give up after this week, by keeping the new player instead of the one you drop:
-             - next week: the dropped player's expected points next week minus the added player's
-               (real schedule, both players' outlooks), counted at NEXT_WEEK_SHARE
-             - longer term: if the dropped player is the better player per game, LONG_GAMES games of the difference
+  cost   = what you give up after this week, by keeping the new player instead of the one you drop (longterm.py):
+             both players' per-game value with streaks taken out, over their teams' real games in the three weeks
+             after this matchup, weighted by how likely the dropped player is claimed before you could get him back
   net    = gain - cost. A move is "make this move" when net clears the bar for that drop (drop rules in streams4),
            and "optional" when it adds at least OPTIONAL_MIN.
 
@@ -24,11 +23,10 @@ import time
 
 import analyze as A
 import dashboard as D
+import longterm as LT
 import streams as STR
 
 INF = STR.INF
-NEXT_WEEK_SHARE = 0.7     # you could still fix things next week with a move, so next week counts at 70%
-LONG_GAMES = 4.0          # games of per-game difference charged when you drop the better player
 OPTIONAL_MIN = 0.5        # smallest net gain worth an (optional) move
 STICKY = 1.0              # points a new move must beat the previous plan's move by before the plan changes
 # How sure the plan is about a move (shown as Strong / Lean / Optional; only Strong moves go in the morning alert)
@@ -53,19 +51,9 @@ def per_game(p):
     return STR.eff_out(p)
 
 
-def next_week_pts(p, nxt_games):
-    if p["inj"] in A.BAD_INJURY:
-        return 0.0
-    return per_game(p) * nxt_games.get(p["tm"], 0)
-
-
-def cost(y, x, nxt_games):
-    """Points given up after this week by dropping roster player y and keeping free agent x instead."""
-    if y["inj"] in A.BAD_INJURY:
-        return 0.0
-    nw = max(0.0, next_week_pts(y, nxt_games) - next_week_pts(x, nxt_games)) * NEXT_WEEK_SHARE
-    lt = max(0.0, per_game(y) - max(per_game(x), STR.REPLACEMENT[y["grp"]] * (0.5 if y["grp"] == "G" else 1.0)))
-    return round(nw + lt * LONG_GAMES, 3)
+def cost(y, x, fut_games):
+    """Points given up after this week by dropping roster player y and keeping free agent x instead (longterm.py)."""
+    return LT.cost(y, x, fut_games)
 
 
 def day_value(F, Dn, G):
@@ -81,6 +69,7 @@ def day_value(F, Dn, G):
 # ---------------------------------------------------------------------------
 class Model:
     def __init__(self, base, pool, ndays, nxt_games):
+        self.fut = nxt_games
         self.base, self.pool, self.ndays = base, pool, ndays
         self.cost = {}
         for xi, x in enumerate(pool):
@@ -242,7 +231,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
          keep_ids=(), healthy=True):
     """The plan. prev = [(add_id, day_label, drop_id), ...] from the previous build (kept unless clearly beaten).
     keep_ids: players you chose to keep this week (never suggested as drops). healthy: data was complete enough to call
-    a move Strong."""
+    a move Strong. nxt_games: {team: games} over the long-term horizon after this matchup (longterm.HORIZON_DAYS)."""
     t0 = time.time()
     entries, base, pool = build_inputs(mine, fas, game, ndays, standings, starters)
     keep_ids = set(keep_ids or ())
@@ -301,6 +290,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
         if reasons:
             mv["why_add"] = STR._why_add(x, ents, y, t, ndays, days, game, standings)
             mv["why_drop"] = why_drop(y, t, ndays, c, nxt_games, x["p"])
+        mv["lt"] = LT.assess(y["p"], x["p"], nxt_games, c)
         out.append(mv)
         y["leave"] = t
         ents.append({"p": x["p"], "v": x["v"], "grp": x["grp"], "join": t, "leave": INF})
@@ -384,6 +374,7 @@ def alternatives(M, final, m, days, ndays, healthy):
         mv["gd"] = sum(1 for i in range(t, ndays) if b["v"][i] > 0) if yp["inj"] not in A.BAD_INJURY else 0
         mv["conf"] = confidence(mv, yp, healthy)
         mv["why1"] = headline(mv, xp, yp)
+        mv["lt"] = LT.assess(yp, xp, M.fut, c)
         out.append(mv)
     out.sort(key=lambda r: -r["net"])
     return out[:ALTS]
@@ -405,13 +396,11 @@ def why_drop(y, t, ndays, c, nxt_games, xp):
         out.append("No games left this week from that day on." if gl == 0 else
                    (f"Only {gl} game{'s' if gl != 1 else ''} left this week." if gl <= 2 else f"{gl} games left this week."))
         out += [r for r in STR._drop_reasons(p, gl, STR.STATE["ref"]) if not r.startswith("Light week")][:2]
-        ny, nx = nxt_games.get(p["tm"], 0), nxt_games.get(xp["tm"], 0)
         if c >= 0.05:
-            out.append(f"Long-term cost already counted: about {c:.1f} pts (next week he has {ny} game{'s' if ny != 1 else ''}, "
-                       f"{xp['n']} has {nx}).")
+            out.append(f"Long-term cost already counted: about {c:.1f} pts over the next three weeks "
+                       f"(see Long term).")
         else:
-            out.append(f"No long-term cost: next week he has {ny} game{'s' if ny != 1 else ''} and {xp['n']} has {nx}, "
-                       f"and {xp['n']} is at least as good per game.")
+            out.append("No long-term cost: see Long term.")
     return out
 
 

@@ -432,7 +432,7 @@ function wiDay(act){
 function wiFind(L,id){return L.filter(function(x){return String(x.id)===String(id);})[0];}
 function wiLine(p,label){
   var s='<div style="margin-top:6px"><b>'+label+':</b> <a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">('+esc(p.pos)+', '+esc(p.tm)+(p.rl?', '+esc(p.rl):'')+')</span><div class="why">'
-    +p.gl+' game'+(p.gl===1?'':'s')+' left'+(p.o?' ('+esc(p.o)+')':'')+' &middot; about '+f(p.e,1)+' pts this week &middot; outlook '+f(p.out,2)+' per game';
+    +p.gl+' game'+(p.gl===1?'':'s')+' left'+(p.o?' ('+esc(p.o)+')':'')+' &middot; about '+f(p.e,1)+' pts this week &middot; '+f(p.out,2)+' per game this week (recent form included)';
   if(p.ppg!=null)s+=' &middot; scoring '+f(p.ppg,2)+' this season'+(p.rec!=null?', '+f(p.rec,2)+' last 15 days':'');
   if(p.rp)s+=' &middot; typical for his role: '+f(p.rp,2);
   return s+'</div></div>';
@@ -459,14 +459,18 @@ function wiResult(){
   if(diff>=1)v.push('This swap helps this week.');
   else if(diff>-1)v.push('This week it is roughly a wash.');
   else v.push('This week it costs you points.');
-  if(d.out>a.out+0.15)v.push(esc(d.n)+' is still the better player per game on paper ('+f(d.out,2)+' vs '+f(a.out,2)+'), so any gain here is a this-week gain, not a long-term one.');
-  else if(a.out>=d.out)v.push(esc(a.n)+' is at least as good per game, so this is not a step back later either.');
+  var lt=ltAssess(ALL[d.id]||d,ALL[a.id]||a);
+  if(!lt){
+    if(d.out>a.out+0.15)v.push(esc(d.n)+' is still the better player per game on paper ('+f(d.out,2)+' vs '+f(a.out,2)+'), so any gain here is a this-week gain, not a long-term one.');
+    else if(a.out>=d.out)v.push(esc(a.n)+' is at least as good per game, so this is not a step back later either.');
+  }
   if(d.rp&&d.ppg!=null&&d.ppg<0.9*d.rp){
     if(d.cls==='watch'||d.rl==='Off lines'||(d.tr!=null&&d.tr<=-2))v.push('Bounce-back looks less likely: his role or ice time is shrinking.');
     else v.push('His role looks intact, so some bounce-back is plausible. If you would rather hold, bench him this week instead of dropping.');
   }
   v.push('Where he was drafted does not change what he scores from here.');
   h+='<ul class="why">'+v.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul>';
+  if(lt)h+=ltHtml(lt,true);
   h+='<div style="overflow-x:auto"><table style="margin-top:6px"><tr><th>Day</th><th>Before</th><th>After</th><th>Change</th></tr>'+rows+'</table></div>';
   return h;
 }
@@ -1461,6 +1465,43 @@ function keepBtn(p){
   var on=KP.has(p.id);
   return '<button type="button" class="kp'+(on?' on':'')+'" data-keep="'+p.id+'">'+(on?'Kept: undo':'Keep '+esc(shortName(p.n)))+'</button>';
 }
+/* ---------- Long term: what a stream costs after this week (same rules as longterm.py) ---------- */
+var LT={SMALL:0.5,REAL:2.0,FIX:0.35,REPL:{F:1.45,D:1.5,G:1.0},
+  lbl:{none:['No long-term cost','start'],small:['Small long-term cost','risky'],real:['Real long-term cost','bench']}};
+function ltPg(p){var o=p.out||0;return p.grp==='G'?o*(p.sp||0.5):o;}
+function ltGone(p){if(p.own==null)return 0.5;var g=(p.own-20)/60;if((p.own_chg||0)>=2)g+=0.1;return Math.max(0.05,Math.min(0.95,g));}
+function ltRole(p){if(!p.rl||p.grp==='G')return null;var N={F1:'top line',F2:'second line',F3:'third line',F4:'fourth line',D1:'top pair',D2:'second pair',D3:'third pair',PP1:'first power play',PP2:'second power play'};
+  var w=p.rl.split('-').map(function(s){return s.trim();}).filter(Boolean).map(function(s){return N[s]||s;});return w.length?w.join(' and '):null;}
+function ltAssess(y,x){
+  var G=D.gameplan||{},fut=G.fut;if(!fut||!y||!x)return null;
+  var wk=Math.round((G.fut_days||21)/7),d=y.n.split(' ').pop(),a=x.n.split(' ').pop(),L=[];
+  if(y.inj==='OUT'||y.inj==='INJURY_RESERVE'||y.inj==='SUSPENSION')return {v:'none',pts:0,lines:[d+' is '+y.inj.replace('_',' ').toLowerCase()+', so he isn\'t scoring for you now.']};
+  var py=ltPg(y),px=ltPg(x),gy=fut[y.tm]||0,gx=fut[x.tm]||0,fl=(LT.REPL[y.grp]||1.45)*(y.grp==='G'?0.5:1);
+  var c=Math.max(0,py*gy-Math.max(px,fl)*gx)*(LT.FIX+(1-LT.FIX)*ltGone(y));
+  if(Math.abs(py-px)<0.05)L.push('Per game from here on, they\'re about even ('+d+' '+f(py,2)+', '+a+' '+f(px,2)+'), with hot and cold streaks taken out.');
+  else if(py>px)L.push(d+' is the better player per game from here on ('+f(py,2)+' vs '+f(px,2)+'), with hot and cold streaks taken out.');
+  else L.push(a+' is the better player per game from here on ('+f(px,2)+' vs '+f(py,2)+'), with hot and cold streaks taken out.');
+  [[x,a],[y,d]].forEach(function(q){var g=q[0].gx;if(g==null||(q[0].gp||0)<8)return;
+    if(g>=2.5)L.push(q[1]+' has scored about '+Math.round(g)+' more goals than his chances usually give, so expect fewer going forward.');
+    else if(g<=-2.5)L.push(q[1]+' has scored about '+Math.round(-g)+' fewer goals than his chances usually give, so he\'s due to bounce back.');});
+  [[y,d],[x,a]].forEach(function(q){var r=ltRole(q[0]),tr=q[0].tr;if(!r)return;
+    L.push(q[1]+': '+r+(tr!=null&&Math.abs(tr)>=1?', ice time '+(tr>0?'up':'down')+' '+f(Math.abs(tr),1)+' min lately':'')+'.');});
+  L.push(y.tm===x.tm?'Next '+wk+' weeks: both play '+gy+' games ('+y.tm+').':'Next '+wk+' weeks: '+y.tm+' plays '+gy+' games, '+x.tm+' plays '+gx+'.');
+  if(y.own!=null){var g2=ltGone(y),o=Math.round(y.own);
+    L.push(g2>=0.6?d+' is rostered in '+o+'% of ESPN leagues, so someone will likely claim him. Don\'t count on getting him back.':
+      (g2>=0.3?d+' is rostered in '+o+'% of ESPN leagues, so he may get claimed before you want him back.':
+        d+' is rostered in only '+o+'% of ESPN leagues, so he\'ll likely still be there if you want him back (it costs a move).'));}
+  var v=c<LT.SMALL?'none':(c<LT.REAL?'small':'real');
+  L.push(v==='none'?'Bottom line: no real long-term downside.':(v==='small'?'Bottom line: a small long-term cost, about '+f(c,1)+' pts over the next '+wk+' weeks.':
+    'Bottom line: a real long-term cost, about '+f(c,1)+' pts over the next '+wk+' weeks. Only worth it if this week matters a lot.'));
+  return {v:v,pts:c,lines:L};
+}
+function ltPill(lt){var l=LT.lbl[lt.v]||LT.lbl.none;return '<span class="pill '+l[1]+'">'+l[0]+(lt.v!=='none'&&lt.pts!=null?' &middot; '+f(lt.pts,1)+' pts':'')+'</span>';}
+function ltHtml(lt,open){
+  if(!lt)return '';
+  return '<details class="pc-det lt-det"'+(open?' open':'')+'><summary>Long term '+ltPill(lt)+'</summary><ul class="why">'
+    +lt.lines.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></details>';
+}
 function mvCard(m,o){
   o=o||{};var c=cfOf(m);
   var h='<div class="mv mv-'+c+'"><div class="mv-top">'+cfPill(m)+' <span class="muted">'+esc(CONF[c][1])+'</span>'
@@ -1470,6 +1511,7 @@ function mvCard(m,o){
   if(m.waiver)h+='<div class="warn" style="font-size:13px">He is on waivers: put the claim in the day before.</div>';
   if(m.swapped)h+='<div class="muted" style="font-size:13px">Instead of dropping '+esc(m.swapped)+', who you chose to keep.</div>';
   h+='<div class="mv-why">'+esc(m.why1||(sgn(m.gain,1)+' pts this week'))+'</div>';
+  if(m.lt)h+=ltHtml(m.lt);
   if(!o.noact){
     h+='<div class="mv-act">'+keepBtn(m.drop)+cmpBtn(m.add,m.drop);
     if((m.why_add&&m.why_add.length)||(m.why_drop&&m.why_drop.length))h+='<details class="pc-det"><summary>Full reasons</summary>'+reasonsHtml(m)+'</details>';
@@ -1535,7 +1577,7 @@ function uiHelp(){
     ['Strong / Lean / Optional','How sure the plan is about a move. Strong = do it: a clear gain, usually backed by extra games. Lean = a real gain, worth it if you have moves to spare. Optional = a small edge, fine to skip. Only Strong moves go in the morning alert.'],
     ['Keep','Tap Keep on any suggested drop and that player is never suggested as a drop for the rest of the matchup week. The plan picks the next best drop instead.'],
     ['Track record','Each suggested move is scored after its games: points the added player scored minus the dropped player, from that day to the end of the week. Moves you skipped are scored too.'],
-    ['Long-term cost','What you give up after this week by not keeping the player you drop (his games next week and his quality per game). Every move\'s gain already has it taken off.'],
+    ['Long-term cost','What a stream costs you after this week. It compares the two players per game with hot and cold streaks taken out, over their teams\' games in the next 3 weeks, and counts more when the player you drop is widely rostered (someone will likely claim him). No / Small / Real is shown on every move and in Try a swap. Every move\'s gain already has it taken off.'],
     ['Easy / hard opponent','How good the other NHL team is (from the standings). Easy opponents give a small boost.'],
     ['Strength (pts/wk)','On the League tab: what each team\'s best lineup should score per week over the next 4 weeks.'],
     ['Win chance','From both teams\' best daily lineups for the rest of the matchup. Hockey is swingy, so treat it as a lean.']];
