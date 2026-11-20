@@ -266,7 +266,7 @@
      36.9,
      20
     ],
-    "at": 1795192993417,
+    "at": 1795208584014,
     "d": [
      37.0,
      25
@@ -281,9 +281,9 @@
     "pos": "C",
     "tm": "PHI"
    },
-   "gain": 2.64,
+   "gain": 2.63,
    "games": 2,
-   "net": 2.64,
+   "net": 2.63,
    "t": 1,
    "tier": "make",
    "waiver": false,
@@ -301,7 +301,7 @@
      31.2,
      21
     ],
-    "at": 1795192993417,
+    "at": 1795208584014,
     "d": [
      27.2,
      20
@@ -316,9 +316,9 @@
     "pos": "RW",
     "tm": "WSH"
    },
-   "gain": 2.55,
+   "gain": 2.51,
    "games": 2,
-   "net": 2.55,
+   "net": 2.51,
    "t": 1,
    "tier": "make",
    "waiver": false,
@@ -336,14 +336,14 @@
      37.9,
      22
     ],
-    "at": 1795192993417,
+    "at": 1795208584014,
     "d": [
      40.4,
      24
     ]
    },
    "conf": "optional",
-   "cost": 0.954,
+   "cost": 0.0,
    "day": "Sat Nov 21",
    "drop": {
     "id": 5149155,
@@ -351,62 +351,27 @@
     "pos": "RW",
     "tm": "SJ"
    },
-   "gain": 1.61,
+   "gain": 1.6,
    "games": 2,
-   "net": 0.66,
+   "net": 1.6,
    "t": 1,
    "tier": "optional",
    "waiver": false,
-   "why1": "Neighbours plays 2 games the rest of this week, Smith plays 1. Neighbours is on STL's top line and first power-play unit. About +1.6 pts this week (+0.7 counting what you give up later)."
+   "why1": "Neighbours plays 2 games the rest of this week, Smith plays 1. Neighbours is on STL's top line and first power-play unit. About +1.6 pts this week."
   },
   {
    "add": {
-    "id": 5079,
-    "n": "Jared Spurgeon",
-    "pos": "D",
-    "tm": "MIN"
-   },
-   "base": {
-    "a": [
-     30.1,
-     15
-    ],
-    "at": 1795192993417,
-    "d": [
-     30.8,
-     19
-    ]
-   },
-   "conf": "optional",
-   "cost": 0.0,
-   "day": "Sat Nov 21",
-   "drop": {
-    "id": 5080154,
-    "n": "Pavel Mintyukov",
-    "pos": "D",
-    "tm": "ANA"
-   },
-   "gain": 0.58,
-   "games": 1,
-   "net": 0.58,
-   "t": 1,
-   "tier": "optional",
-   "waiver": false,
-   "why1": "Both play 1; Spurgeon projects 1.9 pts a game to Mintyukov's 1.6. Spurgeon is on MIN's top pair. About +0.6 pts this week."
-  },
-  {
-   "add": {
-    "id": 4233643,
-    "n": "Filip Chytil",
-    "pos": "C",
+    "id": 5080159,
+    "n": "Jonathan Lekkerimaki",
+    "pos": "RW",
     "tm": "VAN"
    },
    "base": {
     "a": [
-     16.6,
-     11
+     37.8,
+     24
     ],
-    "at": 1795192993417,
+    "at": 1795208584014,
     "d": [
      35.1,
      24
@@ -421,15 +386,15 @@
     "pos": "D",
     "tm": "VGK"
    },
-   "gain": 1.75,
+   "gain": 1.72,
    "games": 1,
-   "net": 1.75,
+   "net": 1.72,
    "t": 2,
    "tier": "make",
    "waiver": false,
-   "why1": "Chytil plays 1 game the rest of this week, Andersson plays 0. Chytil is on VAN's second line and second power-play unit. About +1.8 pts this week."
+   "why1": "Lekkerimaki plays 1 game the rest of this week, Andersson plays 0. Lekkerimaki is on VAN's top line and first power-play unit. About +1.7 pts this week."
   }
  ],
  "mp": 8,
- "updated": 1795192993417
+ "updated": 1795208584014
 }
