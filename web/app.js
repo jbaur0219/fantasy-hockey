@@ -431,11 +431,9 @@ function wiDay(act){
 }
 function wiFind(L,id){return L.filter(function(x){return String(x.id)===String(id);})[0];}
 function wiLine(p,label){
-  var s='<div style="margin-top:6px"><b>'+label+':</b> <a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">('+esc(p.pos)+', '+esc(p.tm)+(p.rl?', '+esc(p.rl):'')+')</span><div class="why">'
-    +p.gl+' game'+(p.gl===1?'':'s')+' left'+(p.o?' ('+esc(p.o)+')':'')+' &middot; about '+f(p.e,1)+' pts this week &middot; '+f(p.out,2)+' per game this week (recent form included)';
-  if(p.ppg!=null)s+=' &middot; scoring '+f(p.ppg,2)+' this season'+(p.rec!=null?', '+f(p.rec,2)+' last 15 days':'');
-  if(p.rp)s+=' &middot; typical for his role: '+f(p.rp,2);
-  return s+'</div></div>';
+  var bits=[esc(p.tm)];if(p.rl)bits.push(esc(p.rl.replace(/\s*-\s*/g,' · ')));
+  return '<div class="wi-row"><span class="wi-lbl">'+label+'</span>'+avHtml(p.id,p.tm)+'<div class="wi-nm"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a>'
+    +'<span class="muted">'+bits.join(' · ')+'</span></div><div class="wi-pt"><b>'+f(p.e,1)+'</b><span class="muted">'+p.gl+' gm</span></div></div>';
 }
 function wiResult(){
   var W=(D.streams&&D.streams.whatif)||null;
@@ -450,28 +448,24 @@ function wiResult(){
     base+=b;aft+=c;
     if(!LK.closed(i))rows+='<tr><td>'+esc(W.days[i])+'</td><td>'+f(b,1)+'</td><td>'+(i>=st?f(c,1):'-')+'</td><td>'+(i>=st?sgn(c-b,1):'-')+'</td></tr>';
   }
-  var diff=aft-base;
-  var h='<div style="margin-top:10px"><span class="big">'+sgn(diff,1)+'</span> <span class="muted">projected points for your lineup over the rest of this week ('+f(base,1)+' to '+f(aft,1)+')</span></div>';
-  h+=wiLine(a,'Add')+wiLine(d,'Drop');
-  if(ALL[a.id]&&ALL[d.id])h+='<div style="margin:8px 0 2px">'+cmpBtn(ALL[a.id],ALL[d.id],'Compare '+shortName(a.n)+' and '+shortName(d.n))+'</div>';
+  var diff=aft-base,lt=ltAssess(ALL[d.id]||d,ALL[a.id]||a);
+  var h='<div class="wi-head"><span class="big">'+sgn(diff,1)+'</span><span class="muted">pts this week</span></div>';
+  h+='<div class="wi-pair">'+wiLine(a,'Add')+wiLine(d,'Drop')+'</div>';
   if(a.st==='WAIVERS'&&st===0)h+='<div class="why warn">He is on waivers, so he cannot be added today. Pick a later start day.</div>';
-  var v=[];
-  if(diff>=1)v.push('This swap helps this week.');
-  else if(diff>-1)v.push('This week it is roughly a wash.');
-  else v.push('This week it costs you points.');
-  var lt=ltAssess(ALL[d.id]||d,ALL[a.id]||a);
-  if(!lt){
-    if(d.out>a.out+0.15)v.push(esc(d.n)+' is still the better player per game on paper ('+f(d.out,2)+' vs '+f(a.out,2)+'), so any gain here is a this-week gain, not a long-term one.');
-    else if(a.out>=d.out)v.push(esc(a.n)+' is at least as good per game, so this is not a step back later either.');
-  }
+  var wk=diff>=1?'Helps this week':(diff>-1?'About even this week':'Costs you this week');
+  var ltw=!lt?'':(lt.v==='none'?'no real long-term downside':(lt.v==='small'?'a small long-term cost (about '+f(lt.pts,1)+' pts)':'a real long-term cost (about '+f(lt.pts,1)+' pts)'));
+  var joiner=!lt?'.':((diff>=1)===(lt.v==='none')?', with '+ltw+'.':', but '+ltw+'.');
+  h+='<div class="wi-verdict">'+wk+joiner+'</div>';
   if(d.rp&&d.ppg!=null&&d.ppg<0.9*d.rp){
-    if(d.cls==='watch'||d.rl==='Off lines'||(d.tr!=null&&d.tr<=-2))v.push('Bounce-back looks less likely: his role or ice time is shrinking.');
-    else v.push('His role looks intact, so some bounce-back is plausible. If you would rather hold, bench him this week instead of dropping.');
+    if(d.cls==='watch'||d.rl==='Off lines'||(d.tr!=null&&d.tr<=-2))h+='<div class="why muted">'+esc(d.n.split(' ').pop())+'\'s role or ice time is shrinking, so a bounce-back is less likely.</div>';
+    else h+='<div class="why muted">'+esc(d.n.split(' ').pop())+'\'s role looks intact. If you\'d rather hold him, bench him this week instead.</div>';
   }
-  v.push('Where he was drafted does not change what he scores from here.');
-  h+='<ul class="why">'+v.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul>';
-  if(lt)h+=ltHtml(lt,true);
-  h+='<div style="overflow-x:auto"><table style="margin-top:6px"><tr><th>Day</th><th>Before</th><th>After</th><th>Change</th></tr>'+rows+'</table></div>';
+  if(ALL[a.id]&&ALL[d.id])h+='<div style="margin:10px 0 2px">'+cmpBtn(ALL[a.id],ALL[d.id],'Compare '+shortName(a.n)+' and '+shortName(d.n))+'</div>';
+  if(lt){
+    var why=lt.lines.slice(0,-1);
+    h+='<details class="pc-det lt-det"><summary>Long term '+ltPill(lt)+'</summary><ul class="why">'+why.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></details>';
+  }
+  h+='<details class="pc-det"><summary>Day by day</summary><div style="overflow-x:auto"><table style="margin-top:6px"><tr><th>Day</th><th>Before</th><th>After</th><th>Change</th></tr>'+rows+'</table></div></details>';
   return h;
 }
 /* ---------- searchable pickers for Try a swap ---------- */
