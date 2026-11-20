@@ -66,10 +66,28 @@ def _get(url, params=None):
         return None
 
 
+NHL_PAGE = 100              # NHL.com now returns at most 100 rows per request (limit=-1 is ignored), so page through
+
+
 def nhl_report(report, season_id):
-    r = _get(f"https://api.nhle.com/stats/rest/en/{report}",
-             {"limit": -1, "cayenneExp": f"seasonId={season_id} and gameTypeId=2"})
-    return r.json().get("data", []) if r else []
+    """Every row of an NHL.com stats report, a page at a time (sorted by player id so pages never overlap)."""
+    rows, start = [], 0
+    while True:
+        r = _get(f"https://api.nhle.com/stats/rest/en/{report}",
+                 {"start": start, "limit": NHL_PAGE, "sort": '[{"property":"playerId","direction":"ASC"}]',
+                  "cayenneExp": f"seasonId={season_id} and gameTypeId=2"})
+        if not r:
+            break
+        body = r.json()
+        page = body.get("data", [])
+        rows += page
+        total = body.get("total") or 0
+        start += len(page)
+        if not page or start >= total or start >= 5000:
+            break
+    if rows:
+        print(f"  NHL.com {report}: {len(rows)} rows")
+    return rows
 
 
 def moneypuck(kind, year):
@@ -137,7 +155,7 @@ def _find(group, name, team_id):
     nhl = D.NHL_ABBR.get(espn, espn)
     same = [c for c in cands if nhl and nhl in (c.get("teams") or "").split(",")]
     pool = same or cands
-    return max(pool, key=lambda c: c.get("gp") or 0)
+    return max(cands, key=lambda c: c.get("gp") or 0)
 
 
 # ---------------------------------------------------------------------------
