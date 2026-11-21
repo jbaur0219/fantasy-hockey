@@ -31,6 +31,7 @@ import keep as KP
 import netcache as NC
 import planner as PL
 import playercard as PC
+import pool as POOL
 import pwa
 import record as RC
 import roles as R
@@ -274,6 +275,13 @@ def _main():
         site_data["gl"] = {"n": len(gamelog["p"]), "v": now_ms}
     except Exception as e:                                  # the game log is an extra: never fail the build over it
         print(f"  game logs skipped ({type(e).__name__}: {e})")
+    pool = None
+    try:
+        pool = POOL.build(cfg, data, site_data, standings, now_ms)   # everyone else ESPN lists, for search in the app
+        site_data["pool"] = {"n": pool["n"], "v": now_ms}
+        print(f"  player search: {pool['n']} more players")
+    except Exception as e:                                  # search falls back to the players already in the page
+        print(f"  player search list skipped ({type(e).__name__}: {e})")
     site_data["moves"] = []                      # the Game plan owns the move suggestions
     if not site_data["mine"]:
         sys.exit("Couldn't find your team. Check LEAGUE_ID and TEAM_ID.")
@@ -291,6 +299,8 @@ def _main():
     print(f"  app code {ver['code']}, data {ver['data']}")
     if gamelog is not None:
         Path("site/gamelog.json").write_text(json.dumps(gamelog, separators=(",", ":")), encoding="utf-8")
+    if pool is not None:
+        Path("site/pool.json").write_text(json.dumps(pool, separators=(",", ":"), ensure_ascii=True), encoding="utf-8")
     write_health_file(site_data, now_ms)
     try:
         pwa.write_files("site")

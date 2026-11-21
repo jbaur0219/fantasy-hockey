@@ -1198,7 +1198,7 @@ function glBuild(){
   var cap=VIEWS.filter(function(v){return v.id!=='players';});
   tb.innerHTML='<div class="gn-edge bot"></div><div class="tbcap glass" id="tbcap"><div class="lens" id="lens"></div>'
     +cap.map(function(v){return '<button type="button" data-go="'+v.id+'" id="bn-'+v.id+'" aria-label="'+v.label+'">'+SF[v.id]+'<span>'+v.label+'</span></button>';}).join('')
-    +'</div><button type="button" class="tbsearch glass" data-go="players" id="bn-players" aria-label="Players">'+SF.players+'</button>';
+    +'</div><button type="button" class="tbsearch glass" data-go="players" id="bn-players" aria-label="Search players">'+SF.players+'</button>';
   document.body.appendChild(tb);
   glTabDrag(tb.querySelector('#tbcap'));
   window.addEventListener('scroll',glScroll,{passive:true});
@@ -1410,12 +1410,13 @@ document.addEventListener('focusout',function(e){
   if(e.target&&/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName))setTimeout(function(){glReset();window.scrollTo(window.pageXOffset||0,window.pageYOffset||0);},120);
 });
 function sheetDrag(bx){
-  var de=document.documentElement,y0=null,dy=0,t=[],drag=false,H=1;
-  function start(y){y0=y;dy=0;t=[[y,performance.now()]];drag=false;H=bx.offsetHeight||1;}
-  function move(y,ev){
+  var de=document.documentElement,y0=null,x0=0,dy=0,t=[],drag=false,H=1;
+  function start(y,x){y0=y;x0=x||0;dy=0;t=[[y,performance.now()]];drag=false;bx._vdrag=false;H=bx.offsetHeight||1;}
+  function move(y,ev,x){
     if(y0==null)return;
     var d=y-y0;
-    if(!drag){if(bx.scrollTop>0||d<=2)return;drag=true;y0=y;d=0;bx.style.transition='none';de.classList.remove('sh-anim');}
+    /* a sideways swipe (matchup paging) is not a pull-down */
+    if(!drag){if(bx._swx||bx.scrollTop>0||d<=2||(x!=null&&Math.abs(x-x0)>=d))return;drag=true;bx._vdrag=true;y0=y;d=0;bx.style.transition='none';de.classList.remove('sh-anim');}
     if(ev&&ev.cancelable)ev.preventDefault();
     dy=d;t.push([y,performance.now()]);if(t.length>5)t.shift();
     var tr=dy>=0?dy:-Math.pow(-dy,0.72);
@@ -1424,14 +1425,14 @@ function sheetDrag(bx){
   }
   function end(){
     if(y0==null)return;y0=null;
-    if(!drag)return;drag=false;
+    if(!drag)return;drag=false;bx._vdrag=false;
     var a=t[0],b=t[t.length-1],v=(b&&a&&b[1]>a[1])?(b[0]-a[0])/(b[1]-a[1]):0;
     bx.style.transition='';de.classList.add('sh-anim');
     if(dy>H*0.28||v>0.45){sheetClose();}
     else{bx.style.transform='';de.style.setProperty('--sp','1');}
   }
-  bx.addEventListener('touchstart',function(e){if(e.touches.length===1)start(e.touches[0].clientY);},{passive:true});
-  bx.addEventListener('touchmove',function(e){move(e.touches[0].clientY,e);},{passive:false});
+  bx.addEventListener('touchstart',function(e){if(e.touches.length===1)start(e.touches[0].clientY,e.touches[0].clientX);},{passive:true});
+  bx.addEventListener('touchmove',function(e){move(e.touches[0].clientY,e,e.touches[0].clientX);},{passive:false});
   bx.addEventListener('touchend',end);bx.addEventListener('touchcancel',end);
   bx.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.target.closest('.grab,.mhead'))start(e.clientY);});
   window.addEventListener('pointermove',function(e){if(e.pointerType==='mouse')move(e.clientY,null);});
@@ -1477,8 +1478,10 @@ function uiToday(){
   if(M){
     var pw=Math.round(M.p_win*100),me=D.me,op=M.opp_name||'Opponent',h1=215,h2=hue(op);
     if(Math.abs(h2-h1)<40)h2=(h2+150)%360;
-    var mp=D.gameplan&&D.gameplan.mp,lead=M.me_now>=M.opp_now;
-    h+='<section class="sb" style="--h1:'+h1+';--h2:'+h2+'">'
+    var mp=D.gameplan&&D.gameplan.mp,lead=M.me_now>=M.opp_now,mi=muMine();
+    /* tap the scoreboard for the full head-to-head sheet (same one as League > Matchups) */
+    h+='<section class="sb'+(mi>=0?' tap':'')+'" style="--h1:'+h1+';--h2:'+h2+'"'
+      +(mi>=0?' data-mu="'+mi+'" role="button" tabindex="0" aria-label="Open your matchup: '+esc(me)+' '+f(M.me_now,1)+', '+esc(op)+' '+f(M.opp_now,1)+'"':'')+'>'
       +'<div class="sb-top"><span class="sb-live"></span>'+(mp?'Week '+mp+' &middot; ':'')+M.days_left+' day'+(M.days_left===1?'':'s')+' left</div>'
       +'<div class="sb-row">'
       +'<div class="sb-tm"><div class="mono" style="--h:'+h1+'">'+esc(initials(me))+muImg(todayTeam(true))+'</div><div class="sb-n">'+esc(me)+'</div><div class="sb-r">'+esc(D.rec)+'</div></div>'
@@ -1488,7 +1491,7 @@ function uiToday(){
       +'<div class="wp"><div class="wp-h"><span>Win probability</span></div>'
       +'<div class="wp-bar"><i class="a" style="--w:'+pw+'%"></i><i class="b"></i></div>'
       +'<div class="wp-l"><span><b data-cu="'+pw+'" data-suf="%">'+pw+'%</b></span><span><b>'+(100-pw)+'%</b></span></div></div>'
-      +'<div class="sb-ft"><span>Projected</span><b>'+Math.round(M.proj_me)+'</b><span>&ndash;</span><b>'+Math.round(M.proj_opp)+'</b></div>'
+      +'<div class="sb-ft"><span>Projected</span><b>'+Math.round(M.proj_me)+'</b><span>&ndash;</span><b>'+Math.round(M.proj_opp)+'</b>'+(mi>=0?'<span class="sb-go" aria-hidden="true">'+SF.chev+'</span>':'')+'</div>'
       +'</section>';
   }
   h+='<div id="livebox">'+lvHtml()+'</div>';
@@ -1862,6 +1865,8 @@ function modal(p){
   function tile(v,k){return '<div class="pc-t"><div class="pc-tv">'+v+'</div><div class="pc-tk">'+k+'</div></div>';}
   function row(k,v,note){return '<div class="pc-r"><div>'+k+(note?'<div class="pc-n">'+note+'</div>':'')+'</div><b>'+v+'</b></div>';}
   var slot=p.slot==='FA'?({FREEAGENT:'Free agent',WAIVERS:'Waivers'}[p.st]||p.st||'Free agent'):p.slot;
+  var own=p.slot!=='FA'?ownerTeam(p.id):null;
+  if(own&&!own.me)slot='On '+own.name;                    /* someone else's player (opened from search or a matchup) */
   var sub=[esc(p.pos),esc(p.tm),esc(slot)];if(p.own!=null)sub.push(f(p.own,0)+'% rostered'+(pcTrend(p)?' '+pcTrend(p):''));
   var h='<div class="mhead">'+(typeof avHtml==='function'?avHtml(p.id,p.tm):'')
     +'<div class="pc-id"><b>'+esc(p.n)+'</b><div class="muted">'+sub.join(' &middot; ')+'</div></div>'
@@ -1892,9 +1897,10 @@ function modal(p){
   var wk=null;
   if(p.slot==='FA'){
     wk=pcWeak(p.grp);var u=wk?p.out-wk.out:up(p);
+    var wiW=(D.streams&&D.streams.whatif)||null,canSw=!!(wk&&wiW&&wiFind(wiW.fas,p.id));   /* Try swap only knows the free agents the plan scored */
     h+='<div class="pc-vs"><div>'+(wk?'Vs your weakest '+p.grp+', <b>'+esc(pcShort(wk.n))+'</b> ('+f(wk.out)+'): ':'Versus your weakest '+p.grp+': ')
       +'<b class="'+(u>=0.2?'good':(u<0?'bad':''))+'">'+sgn(u)+'</b> '+unit+'</div>'
-      +(wk?'<button type="button" class="pc-swap" id="pcSwap">Try swap</button>':'')+'</div>';
+      +(canSw?'<button type="button" class="pc-swap" id="pcSwap">Try swap</button>':'')+'</div>';
   }
 
   /* usage */
@@ -2410,22 +2416,154 @@ function muBody(){
   if(MU.tab==='wk')muTopFill(g,S);
   else if(muShown(S)!=null)muPastFill(g,S,muShown(S));
 }
-function muOpen(i){
-  var S=D.sb,g=S&&S.games[i];if(!g)return;
-  MU.open=i;MU.day=null;MU.dd=false;MU.tab='tn';
-  var A=muTeam(g.a),B=muTeam(g.b),w=muWin(g);
-  var h='<div class="mhead"><div class="pc-id"><b>Week '+esc(S.mp)+'</b><span class="muted">'+muDayTxt(S)+' &middot; updated '+esc(D.updated)+'</span></div><button class="x" id="mx">&times;</button></div>';
+/* your own matchup's place in the list (-1 when the league scoreboard is missing) */
+function muMine(){var S=D.sb,k=-1;if(S&&S.games)S.games.forEach(function(g,i){if(k<0&&muMe(g))k=i;});return k;}
+/* one matchup: the scoreboard, the Tonight / Week switch and the two lineups. This is the part that slides. */
+function muPageHtml(i){
+  var S=D.sb,g=S.games[i],A=muTeam(g.a),B=muTeam(g.b),w=muWin(g);
   function side(t,sc,pr){return '<div class="sb-tm">'+muMono(t)+'<div class="sb-n">'+esc(t.name)+'</div><div class="sb-r">'+esc(t.rec)+' &middot; proj '+f(pr,0)+'</div></div>';}
-  h+='<div class="sb mu-sb" style="--h1:'+muHue(A.id)+';--h2:'+muHue(B.id)+'"><div class="sb-row">'+side(A,g.as,g.ap)
+  var h='<div class="sb mu-sb" style="--h1:'+muHue(A.id)+';--h2:'+muHue(B.id)+'"><div class="sb-row">'+side(A,g.as,g.ap)
     +'<div class="sb-sc"><span class="'+(g.as<g.bs?'dim':'')+'">'+f(g.as,1)+'</span><i class="sb-d"></i><span class="'+(g.bs<g.as?'dim':'')+'">'+f(g.bs,1)+'</span></div>'+side(B,g.bs,g.bp)+'</div>'
     +'<div class="wp"><div class="wp-bar" style="--w:'+w.a+'%"><i class="a"></i><i class="b"></i></div><div class="wp-l"><span>'+w.a+'%</span><span>'+(S.done?'Final':'Win chance')+'</span><span>'+w.b+'%</span></div></div></div>';
-  h+='<div class="pcseg mu-seg" id="muSeg"><span class="th"></span><button type="button" data-mut="tn">'+(S.done?'Lineups':'Tonight')+'</button><button type="button" data-mut="wk">Week</button></div>';
+  h+='<div class="pcseg mu-seg'+(MU.tab==='wk'?' two':'')+'" id="muSeg"><span class="th"></span><button type="button" data-mut="tn"'+(MU.tab==='tn'?' class="on"':'')+'>'+(S.done?'Lineups':'Tonight')+'</button><button type="button" data-mut="wk"'+(MU.tab==='wk'?' class="on"':'')+'>Week</button></div>';
   h+='<div class="mu-hh"><span>'+esc(A.name)+'</span><span>'+esc(B.name)+'</span></div><div id="muBody"></div>';
-  sheetShow(h);
+  return h;
+}
+/* page dots: one per matchup, yours tinted; tap one to jump */
+function muDotsHtml(i){
+  var S=D.sb,n=S.games.length;if(n<2)return '';
+  return S.games.map(function(g,k){
+    var A=muTeam(g.a),B=muTeam(g.b);
+    return '<button type="button" class="mu-pd'+(k===i?' on':'')+(muMe(g)?' me':'')+'" data-mupg="'+k+'" aria-label="Matchup '+(k+1)+' of '+n+': '+esc(A.name)+' vs '+esc(B.name)+'"'+(k===i?' aria-current="true"':'')+'><i></i></button>';
+  }).join('');
+}
+function muPaint(i){
+  var pg=document.getElementById('muPage');if(!pg)return;
+  MU.open=i;MU.dd=false;
+  pg.innerHTML=muPageHtml(i);
+  var dt=document.getElementById('muDots');if(dt)dt.innerHTML=muDotsHtml(i);
   muBody();
 }
+function muOpen(i){
+  var S=D.sb,g=S&&S.games[i];if(!g)return;
+  if(SH.open&&document.getElementById('muPage')){muGo(i);return;}          /* already on a matchup: page over to it */
+  MU.open=i;MU.day=null;MU.dd=false;MU.tab='tn';
+  var h='<div class="mhead"><div class="pc-id"><b>Week '+esc(S.mp)+'</b><span class="muted">'+muDayTxt(S)+' &middot; updated '+esc(D.updated)+'</span></div><button class="x" id="mx">&times;</button></div>';
+  h+='<div class="mu-pgs" id="muDots" role="group" aria-label="Matchups"></div><div class="mu-pw"><div class="mu-page" id="muPage"></div></div>';
+  var bx=sheetShow(h);
+  muPaint(i);
+  if(bx)muSwipe(bx);
+}
+
+/* ---- swipe left / right between matchups ----
+   The header and the page dots stay put; the matchup underneath follows your finger like a page in iOS. Past the first
+   or last matchup it only stretches. A flick or a drag past about a quarter of the screen turns the page. */
+var MSW={on:false,ax:0,x0:0,y0:0,dx:0,t:[],busy:false,g:null,gd:0};
+function muRub(d,W){var a=Math.abs(d),r=(1-1/(a*0.55/W+1))*W*0.5;return d<0?-r:r;}
+function muScrollsX(el,stop){
+  for(;el&&el!==stop;el=el.parentElement){var ox=getComputedStyle(el).overflowX;if((ox==='auto'||ox==='scroll')&&el.scrollWidth>el.clientWidth+1)return true;}
+  return false;
+}
+function muW(){var pg=document.getElementById('muPage'),bx=pg&&pg.closest('.box');return (bx&&bx.clientWidth)||window.innerWidth;}
+/* the neighbouring matchup, drawn beside the current one so it slides in with your finger (ids renamed: display only) */
+function muGhost(j){
+  var pg=document.getElementById('muPage'),S=D.sb;if(!pg||!S||!S.games[j])return null;
+  muGhostOff();
+  var g=S.games[j],el=document.createElement('div');el.className='mu-page mu-ghost';el.setAttribute('aria-hidden','true');
+  el.innerHTML=(muPageHtml(j).replace('<div id="muBody"></div>','<div>'+(MU.tab==='wk'?muWeek(g,S):muTonight(g,S))+'</div>')).replace(/ id="/g,' data-gid="');
+  pg.parentNode.appendChild(el);MSW.g=el;MSW.gj=j;
+  return el;
+}
+function muGhostOff(){if(MSW.g&&MSW.g.parentNode)MSW.g.parentNode.removeChild(MSW.g);MSW.g=null;MSW.gj=null;}
+function muPlace(dx,d){
+  var pg=document.getElementById('muPage'),W=muW();if(!pg)return;
+  pg.style.transform='translate3d('+dx.toFixed(1)+'px,0,0)';
+  if(MSW.g)MSW.g.style.transform='translate3d('+(dx+d*W).toFixed(1)+'px,0,0)';
+}
+/* turn to matchup j: the current page leaves, j arrives (a drag in progress continues from where the finger let go) */
+function muGo(j,from){
+  var S=D.sb,pg=document.getElementById('muPage');
+  if(!S||!S.games[j]||!pg||MSW.busy)return;
+  var i=MU.open,bx=pg.closest('.box');
+  if(j===i){muBack();return;}
+  var d=j>i?1:-1,W=muW();
+  if(RM){muGhostOff();muPaint(j);return;}
+  MSW.busy=true;
+  if(!MSW.g||MSW.gj!==j){muGhost(j);from=0;muPlace(0,d);void pg.offsetWidth;}
+  var g=MSW.g,left=W-Math.abs(from||0),dur=Math.round(Math.max(220,Math.min(420,left/W*420)));
+  var tr='transform '+dur+'ms cubic-bezier(.25,.9,.3,1)';
+  pg.style.transition=tr;g.style.transition=tr;
+  muPlace(-d*W,d);
+  setTimeout(function(){
+    pg.style.transition='none';pg.style.transform='';
+    muPaint(j);muGhostOff();
+    MSW.busy=false;
+    if(bx){var pgs=document.getElementById('muDots'),top=pgs?pgs.offsetTop-80:0;
+      if(bx.scrollTop>Math.max(0,top)){try{bx.scrollTo({top:Math.max(0,top),behavior:'smooth'});}catch(x){bx.scrollTop=Math.max(0,top);}}}
+  },dur);
+}
+function muBack(){
+  var pg=document.getElementById('muPage');if(!pg)return;
+  var g=MSW.g,d=MSW.gd||1,tr='transform .45s var(--spring)';
+  pg.style.transition=tr;if(g)g.style.transition=tr;
+  muPlace(0,d);
+  setTimeout(function(){if(!MSW.on&&!MSW.busy)muGhostOff();pg.style.transition='';},460);
+}
+function muSwipe(bx){
+  if(bx._msw)return;bx._msw=1;
+  function page(){return document.getElementById('muPage');}
+  bx.addEventListener('touchstart',function(e){
+    MSW.on=false;MSW.ax=0;
+    if(e.touches.length!==1||MSW.busy||!page()||bx._vdrag)return;
+    var t=e.target;
+    if(t.closest&&t.closest('.mu-dd,input,select,textarea'))return;
+    if(muScrollsX(t,bx))return;
+    MSW.on=true;MSW.x0=e.touches[0].clientX;MSW.y0=e.touches[0].clientY;MSW.dx=0;MSW.t=[[MSW.x0,performance.now()]];
+  },{passive:true});
+  bx.addEventListener('touchmove',function(e){
+    if(!MSW.on||e.touches.length!==1)return;
+    var x=e.touches[0].clientX,dx=x-MSW.x0,dy=e.touches[0].clientY-MSW.y0;
+    if(!MSW.ax){
+      if(Math.abs(dx)<8&&Math.abs(dy)<8)return;
+      if(bx._vdrag||Math.abs(dx)<=Math.abs(dy)*1.2){MSW.on=false;return;}         /* scrolling or pulling the sheet down */
+      MSW.ax=1;bx._swx=true;MSW.x0=x-(dx>0?8:-8);dx=x-MSW.x0;
+      if(MU.dd){MU.dd=false;muBody();}
+    }
+    if(e.cancelable)e.preventDefault();
+    MSW.dx=dx;MSW.t.push([x,performance.now()]);if(MSW.t.length>5)MSW.t.shift();
+    var pg=page();if(!pg)return;
+    var n=D.sb.games.length,i=MU.open,W=muW(),d=dx<0?1:-1,j=i+d;
+    pg.style.transition='none';
+    if(j<0||j>=n){muGhostOff();muPlace(muRub(dx,W),d);return;}                   /* first or last: just stretch */
+    if(!MSW.g||MSW.gj!==j)muGhost(j);
+    MSW.gd=d;MSW.g.style.transition='none';
+    muPlace(dx,d);
+  },{passive:false});
+  function end(){
+    if(!MSW.on)return;MSW.on=false;
+    if(!MSW.ax)return;
+    bx._swx=false;MSW.ax=0;
+    if(!page())return;
+    var a=MSW.t[0],b=MSW.t[MSW.t.length-1],v=(a&&b&&b[1]>a[1])?(b[0]-a[0])/(b[1]-a[1]):0;
+    var dx=MSW.dx,W=muW(),n=D.sb.games.length,i=MU.open,j=i+(dx<0?1:-1);
+    var go=Math.abs(dx)>W*0.25||(Math.abs(v)>0.3&&Math.abs(dx)>20&&(v>0)===(dx>0));
+    if(go&&j>=0&&j<n)muGo(j,dx);else muBack();
+  }
+  bx.addEventListener('touchend',end);bx.addEventListener('touchcancel',end);
+}
+document.addEventListener('keydown',function(e){
+  if(!SH.open||!document.getElementById('muPage'))return;
+  var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
+  var S=D.sb,j=MU.open+(e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0);
+  if(j!==MU.open&&S&&S.games[j]){e.preventDefault();muGo(j);}
+});
+/* the Today scoreboard is a role=button section: Enter or Space opens it too */
+document.addEventListener('keydown',function(e){
+  var t=e.target;if((e.key==='Enter'||e.key===' ')&&t&&t.matches&&t.matches('.sb.tap[data-mu]')){e.preventDefault();muOpen(+t.getAttribute('data-mu'));}
+});
 document.addEventListener('click',function(e){
   var t=e.target;if(!t||!t.closest)return;
+  var pd=t.closest('[data-mupg]');if(pd){muGo(+pd.getAttribute('data-mupg'));return;}
   var a=t.closest('[data-mu]');if(a){muOpen(+a.getAttribute('data-mu'));return;}
   var b=t.closest('[data-mut]');if(b){MU.tab=b.getAttribute('data-mut');MU.dd=false;muBody();return;}
   var d=t.closest('[data-mud]');
@@ -2573,9 +2711,155 @@ function lvStart(){
   lvFetch();
 }
 
+/* =====================================================================================================
+   SEARCH: every player in the league, whatever his status (your team, another team, free agent, waivers, injured).
+   It lives at the top of the Players tab; the round search button in the tab bar opens it with the keyboard up.
+   The page already has every rostered player and the top free agents. pool.json (built with the data) adds the rest
+   of ESPN's list and is only loaded once you search. Recent picks are remembered on this phone.
+   ===================================================================================================== */
+var PS={q:'',scope:'all',more:false,ix:null,pool:null,pp:null,n:0};
+var PS_SC=[['all','All'],['fa','Free agents'],['team','On a team'],['inj','Injured']];
+function psNorm(x){return wiNorm(x).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();}
+function psOwn(){var o={};(D.teams||[]).forEach(function(t){t.players.forEach(function(p){o[p.id]=t;});});return o;}
+/* who has him: {k: 'me' | 'team' | 'fa' | 'wv', t: label, team} */
+function psStat(p,own){
+  var t=own[p.id];
+  if(t)return t.me?{k:'me',t:'Your team'+(p.slot==='BN'?' · Bench':(p.slot==='IR'?' · IR':''))}:{k:'team',t:t.name,team:t};
+  return p.st==='WAIVERS'?{k:'wv',t:'Waivers'}:{k:'fa',t:'Free agent'};
+}
+function psIndex(){
+  if(PS.ix)return PS.ix;
+  var seen={},L=[],own=psOwn();
+  function add(p){
+    if(!p||seen[p.id])return;seen[p.id]=1;
+    var nm=psNorm(p.n),w=nm.split(' ');
+    L.push({p:p,nm:nm,w:w,last:w.slice(1).join(' '),tm:String(p.tm||'').toLowerCase(),s:psStat(p,own)});
+  }
+  (D.teams||[]).forEach(function(t){t.players.forEach(add);});
+  (D.mine||[]).forEach(add);(D.fas||[]).forEach(add);
+  (PS.pool||[]).forEach(add);
+  PS.n=L.length;PS.ix=L;return L;
+}
+function psLoad(){
+  if(PS.pp)return PS.pp;
+  if(!D.pool||!D.pool.n||typeof fetch!=='function'||location.protocol==='file:'){PS.pp=Promise.resolve(null);return PS.pp;}   /* file: = the one-file test copy */
+  PS.pp=fetch('pool.json?v='+D.pool.v).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;}).then(function(j){
+    if(j&&j.p&&j.p.length){
+      PS.pool=j.p;j.p.forEach(function(p){if(!ALL[p.id])ALL[p.id]=p;});
+      PS.ix=null;psCount();var w=document.getElementById('psw');if(PS.q||(w&&w.classList.contains('on')))psRender();
+    }
+    return j;
+  });
+  return PS.pp;
+}
+function psInScope(e,sc){
+  if(sc==='fa')return e.s.k==='fa'||e.s.k==='wv';
+  if(sc==='team')return e.s.k==='me'||e.s.k==='team';
+  if(sc==='inj')return isInj(e.p)||(e.p.inj&&e.p.inj!=='ACTIVE');
+  return true;
+}
+/* how well a player matches: whole name > last name > a word > anywhere; an NHL team's code lists his team */
+function psScore(e,q,toks){
+  if(e.nm===q)return 100;
+  if(e.nm.indexOf(q)===0)return 90;
+  if(e.last&&e.last.indexOf(q)===0)return 85;
+  if(toks.every(function(t){return e.w.some(function(w){return w.indexOf(t)===0;});}))return 75;
+  if(q.length>=3&&e.nm.replace(/ /g,'').indexOf(q.replace(/ /g,''))>=0)return 50;
+  if(toks.length===1&&q.length>=2&&q.length<=3&&e.tm===q)return 40;
+  return 0;
+}
+function psFind(q){
+  var toks=q.split(' ').filter(Boolean),out=[];
+  psIndex().forEach(function(e){var s=psScore(e,q,toks);if(s)out.push({e:e,s:s});});
+  out.sort(function(a,b){return (b.s-a.s)||((b.e.p.own||0)-(a.e.p.own||0))||((b.e.p.out||0)-(a.e.p.out||0));});   /* best-known first: per-start and per-game numbers do not compare */
+  return out.map(function(x){return x.e;});
+}
+function psMark(name,q){
+  var toks=q.split(' ').filter(Boolean),w=String(name).split(' ');
+  return w.map(function(x){var n=psNorm(x),hit=toks.filter(function(t){return n.indexOf(t)===0;})[0];
+    if(!hit||x.length<hit.length)return esc(x);
+    return '<b>'+esc(x.slice(0,hit.length))+'</b>'+esc(x.slice(hit.length));}).join(' ');
+}
+function psRow(e,q){
+  var p=e.p,s=e.s,inj=(p.inj&&p.inj!=='ACTIVE')?'<i class="ps-tg inj">'+esc(injShort(p.inj))+'</i>':'';
+  var blk=(s.k==='team'&&s.team&&s.team.block&&s.team.block.indexOf(p.id)>=0)?'<i class="ps-tg blk">On the block</i>':'';
+  var g=p.gl!=null?p.gl+' game'+(p.gl===1?'':'s')+' left':'';
+  return '<button type="button" class="ps-r" data-psid="'+p.id+'">'+avHtml(p.id,p.tm)
+    +'<span class="ps-m"><span class="ps-n">'+(q?psMark(p.n,q):esc(p.n))+'</span>'
+    +'<span class="ps-s"><span class="ps-st ps-k'+s.k+'">'+esc(s.t)+'</span>'+inj+blk+'</span>'
+    +'<span class="ps-d">'+esc(p.pos)+' &middot; '+esc(p.tm)+(g?' &middot; '+g:'')+'</span></span>'
+    +'<span class="ps-v"><b>'+f(p.out,1)+'</b><span>'+(p.grp==='G'?'per start':'per game')+'</span></span></button>';
+}
+var PS_RK='fh_recent_search';
+function psRecent(){try{return (JSON.parse(localStorage.getItem(PS_RK)||'[]')||[]).filter(function(id){return ALL[id];});}catch(e){return [];}}
+function psRemember(id){try{var r=psRecent().filter(function(x){return String(x)!==String(id);});r.unshift(+id);localStorage.setItem(PS_RK,JSON.stringify(r.slice(0,8)));}catch(e){}}
+function psCount(){psIndex();var i=document.getElementById('psQ');if(i&&PS.pool)i.placeholder='Search all '+PS.n.toLocaleString('en-US')+' players';}
+function psHint(){psIndex();return PS.pool?'Search all '+PS.n.toLocaleString('en-US')+' players: every team, free agents and waivers':'Search every player in the league';}
+function psRender(){
+  var box=document.getElementById('psRes'),host=document.getElementById('s-players-main'),w=document.getElementById('psw');if(!box||!host)return;
+  var q=psNorm(PS.q),focused=w&&w.classList.contains('on');
+  host.classList.toggle('ps-busy',!!q||focused);
+  var sc=document.getElementById('psSc');
+  if(!q){
+    if(sc)sc.hidden=true;
+    var rc=psRecent(),own=psOwn(),h='';
+    if(focused&&rc.length){
+      h='<div class="ps-hd"><span>Recent</span><button type="button" class="ps-clr" data-psclr="1">Clear</button></div><div class="ps-list">'
+        +rc.map(function(id){var p=ALL[id];return psRow({p:p,s:psStat(p,own)},'');}).join('')+'</div>';
+    }else if(focused)h='<div class="ps-empty">'+esc(psHint())+'.<br>Try a last name, or an NHL team like <b>EDM</b>.</div>';
+    box.innerHTML=h;return;
+  }
+  var all=psFind(q),cnt={};
+  PS_SC.forEach(function(x){cnt[x[0]]=all.filter(function(e){return psInScope(e,x[0]);}).length;});
+  if(sc){sc.hidden=false;sc.innerHTML=PS_SC.map(function(x){return '<button type="button" class="ps-c'+(PS.scope===x[0]?' on':'')+'" data-pssc="'+x[0]+'">'+x[1]+(cnt[x[0]]?' <i>'+cnt[x[0]]+'</i>':'')+'</button>';}).join('');}
+  var rows=all.filter(function(e){return psInScope(e,PS.scope);}),lim=PS.more?200:40;
+  var h2='';
+  if(!rows.length)h2='<div class="ps-empty">No '+(PS.scope==='all'?'':PS_SC.filter(function(x){return x[0]===PS.scope;})[0][1].toLowerCase()+' ')+'players match &ldquo;'+esc(PS.q.trim())+'&rdquo;.'
+    +(PS.scope!=='all'&&cnt.all?'<br><button type="button" class="ps-more" data-pssc="all">Show all '+cnt.all+' matches</button>':'')+'</div>';
+  else{
+    h2='<div class="ps-list">'+rows.slice(0,lim).map(function(e){return psRow(e,q);}).join('')+'</div>';
+    if(rows.length>lim)h2+='<button type="button" class="ps-more" data-psmore="1">Show '+(Math.min(rows.length,200)-lim)+' more</button>';
+  }
+  if(PS.pp&&!PS.pool&&D.pool&&D.pool.n)h2+='<div class="ps-foot"><span class="spin"></span>Adding the rest of the free agents</div>';
+  box.innerHTML=h2;
+}
+function psSet(q){PS.q=q;PS.more=false;var x=document.getElementById('psX');if(x)x.hidden=!q;psRender();}
+function psFocus(){var i=document.getElementById('psQ');if(i){i.focus();psLoad();}}
+function psInit(){
+  var host=document.getElementById('s-players-main');if(!host||document.getElementById('psw'))return;
+  var el=document.createElement('div');el.id='psbox';
+  el.innerHTML='<div class="ps-w" id="psw"><label class="ps-f">'+SF.players
+    +'<input id="psQ" type="search" placeholder="Search every player" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="search" aria-label="Search every player in the league">'
+    +'<button type="button" class="ps-x" id="psX" hidden aria-label="Clear search"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="10"/><path d="M6.6 6.6l6.8 6.8M13.4 6.6l-6.8 6.8"/></svg></button></label>'
+    +'<button type="button" class="ps-cn" id="psCn">Cancel</button></div>'
+    +'<div class="ps-sc" id="psSc" hidden></div><div id="psRes" aria-live="polite"></div>';
+  host.insertBefore(el,host.firstChild);
+  var i=document.getElementById('psQ'),w=document.getElementById('psw');
+  i.addEventListener('focus',function(){w.classList.add('on');psLoad();psRender();});
+  i.addEventListener('blur',function(){setTimeout(function(){if(document.activeElement!==i&&!PS.q){w.classList.remove('on');psRender();}},120);});
+  i.addEventListener('input',function(){psSet(i.value);});
+  i.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault();var r=document.querySelector('#psRes .ps-r');if(PS.q&&r&&psNorm(PS.q).length>2&&document.querySelectorAll('#psRes .ps-r').length===1)r.click();else i.blur();}
+    if(e.key==='Escape'){i.value='';psSet('');i.blur();}
+  });
+  document.addEventListener('click',function(e){
+    var t=e.target;if(!t||!t.closest)return;
+    if(t.closest('#psX')){i.value='';psSet('');i.focus();return;}
+    if(t.closest('#psCn')){i.value='';PS.scope='all';w.classList.remove('on');psSet('');i.blur();return;}
+    var b=t.closest('[data-pssc]');if(b){PS.scope=b.getAttribute('data-pssc');PS.more=false;psRender();return;}
+    if(t.closest('[data-psmore]')){PS.more=true;psRender();return;}
+    if(t.closest('[data-psclr]')){try{localStorage.removeItem(PS_RK);}catch(x){}psRender();i.focus();return;}
+    b=t.closest('[data-psid]');
+    if(b){var p=ALL[b.getAttribute('data-psid')];if(p){psRemember(p.id);if(document.activeElement===i)i.blur();modal(p);}return;}
+    /* the round search button in the tab bar: go to Players with the keyboard up (after showTab has run) */
+    if(t.closest('#bn-players'))psFocus();
+  });
+  psCount();
+}
+
 streamsRender();
 LK.start();
 appStart();
-uiStart();showTab((location.hash||'').slice(1));
+uiStart();try{psInit();}catch(e){}showTab((location.hash||'').slice(1));
 updStart();lvStart();
 })();

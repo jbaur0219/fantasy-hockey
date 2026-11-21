@@ -960,3 +960,80 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none}
   background:var(--red);color:#fff;box-shadow:0 0 0 2px #1c1c1e;z-index:4;pointer-events:none;transform:none}
 #bnav .tbcap button.on .bdg{box-shadow:0 0 0 2px #2c2c30}
 @media (prefers-color-scheme:light){#bnav .tbcap button .bdg{box-shadow:0 0 0 2px #fff}}
+
+/* ---------- Today: the scoreboard opens your matchup ---------- */
+.sb.tap{cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .45s var(--spring),box-shadow .3s}
+.sb.tap:active{transform:scale(.975);transition-duration:.12s}
+.sb.tap:focus-visible{outline:3px solid var(--tint);outline-offset:3px}
+.sb-ft{position:relative}
+.sb-go{position:absolute;right:-4px;top:50%;margin-top:-3px;width:16px;height:16px;color:rgba(255,255,255,.42)}
+.sb-go svg{width:100%;height:100%;display:block}.sb-go svg .s{stroke:currentColor;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- matchup sheet: page dots and swiping ---------- */
+#modal .box{overflow-x:hidden}
+.mu-page{will-change:transform;touch-action:pan-y}
+.mu-pgs{display:flex;justify-content:center;gap:0;margin:-4px 0 8px;min-height:20px}
+.mu-pd{border:0;background:none;padding:6px 4px;margin:0;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center}
+.mu-pd i{display:block;width:7px;height:7px;border-radius:4px;background:var(--label3);transition:width .45s var(--spring),background .3s}
+.mu-pd.me i{background:color-mix(in srgb,var(--tint) 45%,transparent)}
+.mu-pd.on i{width:20px;background:var(--label)}
+.mu-pd.on.me i{background:var(--tint)}
+
+/* ---------- Players: search every player ---------- */
+#psbox{margin:14px 0 4px}
+.ps-x[hidden]{display:none}
+#faQ{display:none}   /* the search at the top of Players covers it */
+.ps-w{display:flex;align-items:center;gap:0}
+.ps-f{flex:1;min-width:0;display:flex;align-items:center;gap:6px;height:44px;padding:0 10px 0 12px;border-radius:14px;background:var(--fill3);cursor:text;transition:background .2s}
+.ps-f>svg{width:20px;height:20px;flex:none;color:var(--label2)}.ps-f>svg .s{stroke:currentColor;stroke-width:2.6;fill:none;stroke-linecap:round}
+.ps-f input{flex:1;min-width:0;height:100%;border:0!important;outline:0;background:transparent!important;padding:0!important;margin:0!important;box-shadow:none!important;
+  font:400 17px/1.2 -apple-system,system-ui,sans-serif!important;color:var(--label);border-radius:0!important;-webkit-appearance:none;appearance:none}
+.ps-f input::placeholder{color:var(--label2)}
+.ps-f input::-webkit-search-cancel-button,.ps-f input::-webkit-search-decoration{-webkit-appearance:none;display:none}
+.ps-x{flex:none;width:28px;height:28px;border:0;padding:4px;margin:0 -4px 0 0;background:none;cursor:pointer;display:flex}
+.ps-x svg{width:100%;height:100%}.ps-x circle{fill:var(--label3)}.ps-x path{stroke:var(--card);stroke-width:1.9;stroke-linecap:round}
+.ps-cn{flex:none;border:0;background:none;color:var(--tint);font:400 17px -apple-system,system-ui,sans-serif;cursor:pointer;
+  max-width:0;padding:0;opacity:0;overflow:hidden;white-space:nowrap;transition:max-width .45s var(--soft-spring),padding .45s var(--soft-spring),opacity .25s}
+.ps-w.on .ps-cn{max-width:90px;padding:0 2px 0 14px;opacity:1}
+.ps-sc{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:12px -16px 0;padding:0 16px 2px}
+.ps-sc::-webkit-scrollbar{display:none}
+.ps-sc[hidden]{display:none}
+.ps-c{flex:none;height:34px;padding:0 14px;border:0;border-radius:17px;background:var(--fill3);color:var(--label);font:500 15px -apple-system,system-ui,sans-serif;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:background .2s,color .2s,transform .3s var(--spring)}
+.ps-c i{font-style:normal;color:var(--label2);font-weight:400;margin-left:2px}
+.ps-c.on{background:var(--label);color:var(--bg)}.ps-c.on i{color:inherit;opacity:.65}
+.ps-c:active{transform:scale(.94)}
+#psRes{margin-top:12px}
+#psRes:empty{display:none}
+.ps-list{background:var(--card);border-radius:22px;overflow:hidden;animation:pcIn .25s var(--ease)}
+.ps-r{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:9px 16px;border:0;background:none;color:var(--label);text-align:left;font:inherit;cursor:pointer;position:relative;-webkit-tap-highlight-color:transparent;transition:background .15s}
+.ps-r:active{background:var(--fill4)}
+.ps-r+.ps-r:before{content:'';position:absolute;left:70px;right:0;top:0;border-top:.5px solid var(--sep)}
+.ps-r .av{width:42px!important;height:42px!important;margin:0!important;background:var(--fill3)}
+.ps-r .av .tl{width:18px;height:18px}
+body.nophoto .ps-r+.ps-r:before{left:16px}
+.ps-m{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ps-n{font-size:17px;font-weight:400;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ps-n b{font-weight:700}
+.ps-s{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden}
+.ps-st{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ps-kme{color:var(--tint)}.ps-kfa{color:var(--green)}.ps-kwv{color:var(--orange)}.ps-kteam{color:var(--label2)}
+.ps-tg{flex:none;font-style:normal;font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;line-height:16px}
+.ps-tg.inj{color:var(--red);background:color-mix(in srgb,var(--red) 13%,transparent)}
+.ps-tg.blk{color:var(--orange);background:color-mix(in srgb,var(--orange) 14%,transparent)}
+.ps-d{font-size:13px;color:var(--label2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ps-v{flex:none;display:flex;flex-direction:column;align-items:flex-end}
+.ps-v b{font:700 19px/1.1 ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.ps-v span{font-size:11px;color:var(--label2)}
+.ps-hd{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 8px;font-size:20px;font-weight:700;letter-spacing:-.01em}
+.ps-clr{border:0;background:none;color:var(--tint);font:400 15px -apple-system,system-ui,sans-serif;cursor:pointer;padding:0}
+.ps-empty{text-align:center;color:var(--label2);font-size:15px;line-height:1.45;padding:28px 18px}
+.ps-empty b{color:var(--label);font-weight:600}
+.ps-more{display:block;margin:12px auto 0;border:0;background:var(--fill3);color:var(--tint);font:600 15px -apple-system,system-ui,sans-serif;height:38px;padding:0 18px;border-radius:19px;cursor:pointer}
+.ps-foot{text-align:center;color:var(--label2);font-size:13px;margin-top:12px}
+/* while searching, the results take the place of the free agent list */
+#s-players-main.ps-busy>.card{display:none}
+.mu-pw{position:relative}
+.mu-ghost{position:absolute;left:0;right:0;top:0;pointer-events:none}
+.mu-page .sb,.mu-page .wp-bar .a{animation:none}     /* pages swap under your finger: no entrance animation */
+.mu-page{display:flow-root}

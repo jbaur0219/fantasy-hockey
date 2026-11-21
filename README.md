@@ -37,6 +37,7 @@ goalie calls, streams and trade ideas. It never adds, drops, trades or changes a
 | `record.py` | Track record: scores every suggested move after its games (made and skipped), finals in `history/results.json` |
 | `goalies.py` | Start / bench for each goalie, every day of the matchup |
 | `gamelog.py` | Each player's recent games from ESPN (this league's points per game), saved as `site/gamelog.json` for the Game log tab and Compare |
+| `pool.py` | Every other player ESPN lists (deep free agents, waivers, injured), saved as `site/pool.json` for the search on the Players tab; loaded only when you search |
 | `gameplan.py`, `weekplan.py`, `planner.py`, `edge.py`, `playercard.py` | Data for the Game plan, week memory, planner, schedule table, player card |
 | `site_builder.py` + `web/` | The page: `web/page.html`, `web/app.css`, `web/app.js`. Published split (shell + `data.json` + `version.json`); `full.html` is a one-file copy for the test tools |
 | `scheduler.py`, `watch.py`, `notify.py`, `pwa.py` | When to rebuild, the watcher, push alerts, phone-app files |
