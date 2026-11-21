@@ -857,6 +857,7 @@ var VIEWS=[
    {id:'week',label:'Schedule',cards:[['Schedule advantage'],['Your week at a glance'],['Games per team, rest of this matchup',1]]}]},
  {id:'players',label:'Players',subs:[{id:'main',label:'Players',cards:[['Free agents and waivers']]}]},
  {id:'league',label:'League',subs:[
+   {id:'games',label:'Matchups',cards:[['Matchups']]},
    {id:'table',label:'Standings',cards:[['Standings and power rankings']]},
    {id:'trade',label:'Trade lab',cards:[['On the trading block'],['Trade finder'],['Trade lab']]},
    {id:'help',label:'Help',cards:[['What the terms mean'],['Data health']]}]}
@@ -936,6 +937,7 @@ function uiLayout(){
   try{uiHelp();}catch(e){}
   try{uiLineup();}catch(e){}
   try{uiEdge();}catch(e){}
+  try{uiMatchups();}catch(e){}
   VIEWS.forEach(function(v){v.subs.forEach(function(s){
     var box=document.getElementById('s-'+v.id+'-'+s.id);
     s.cards.forEach(function(c){$$('.card',box).forEach(function(x){if(x.getAttribute('data-ut')===c[0])box.appendChild(x);});});
@@ -2102,6 +2104,148 @@ $('#title').textContent=D.me;
 $('#sub').textContent=D.league+' \u00b7 record '+D.rec+' \u00b7 updated '+D.updated+LK.age();
 overview();rosterRender();faRender();tradeInit();leagueRender();plannerRender();
 gameplanRender();
+/* =====================================================================================================
+   MATCHUPS: every game in the league this week, and a head-to-head sheet for each one
+   ===================================================================================================== */
+var MU={tab:'tn',open:-1};
+function muTeam(id){for(var i=0;i<D.teams.length;i++)if(D.teams[i].id===id)return D.teams[i];return {id:id,name:'Team '+id,rec:'',players:[]};}
+function muInit(n){var w=String(n||'?').replace(/[^A-Za-z0-9 ]/g,' ').trim().split(/\s+/).filter(Boolean);if(!w.length)return '?';return (w[0].charAt(0)+(w[1]?w[1].charAt(0):w[0].charAt(1)||'')).toUpperCase();}
+function muHue(id){return ((+id||1)*67+200)%360;}
+function muMono(t,cls){return '<span class="mono '+(cls||'')+'" style="--h:'+muHue(t.id)+'">'+esc(muInit(t.name))+'</span>';}
+function muMe(g){var me=null;D.teams.forEach(function(t){if(t.me)me=t.id;});return me!=null&&(g.a===me||g.b===me);}
+function muDayTxt(S){var n=S.dates.length,i=Math.min(S.today,n-1);return S.done?'Final':'Day '+(i+1)+' of '+n;}
+function muWin(g){var a=Math.round(g.pa*100);return {a:a,b:100-a};}
+function muTile(g,i,S){
+  var A=muTeam(g.a),B=muTeam(g.b),w=muWin(g),lead=g.as===g.bs?0:(g.as>g.bs?1:-1),mine=muMe(g);
+  function row(t,sc,pr,on,left){
+    return '<div class="mu-r'+(on?' lead':'')+'">'+muMono(t,'mu-mono')+'<div class="mu-n"><b>'+esc(t.name)+(t.me?' <i class="mu-you">You</i>':'')+'</b><span>'+esc(t.rec)+' &middot; '+left+' games left &middot; proj '+f(pr,0)+'</span></div><div class="mu-s">'+f(sc,1)+'</div></div>';}
+  return '<button type="button" class="mu-tile'+(mine?' mine':'')+'" data-mu="'+i+'">'
+    +row(A,g.as,g.ap,lead>0,g.al)+row(B,g.bs,g.bp,lead<0,g.bl)
+    +'<div class="mu-wp"><div class="mu-bar" style="--a:'+muHue(A.id)+';--b:'+muHue(B.id)+'"><i style="width:'+w.a+'%"></i><i></i></div>'
+    +'<div class="mu-wl"><span>'+w.a+'%</span><span class="mu-wk">'+(S.done?'Final':'Win chance')+'</span><span>'+w.b+'%</span></div></div></button>';
+}
+function uiMatchups(){
+  var S=D.sb,h='';
+  if(!S||!S.games||!S.games.length){
+    uiPut('Matchups','<div class="muted">Every matchup in the league shows up here after the next data refresh.</div>',{v:'league',s:'games',c:0});return;}
+  var today=S.labels[Math.min(S.today,S.labels.length-1)]||'';
+  h+='<div class="mu-head"><div><div class="mu-h1">Week '+esc(S.mp)+'</div><div class="mu-h2">'+esc(today)+' &middot; '+muDayTxt(S)+'</div></div>'
+    +'<div class="mu-dots">'+S.dates.map(function(d,i){return '<i class="'+(i<S.today||S.done?'p':i===S.today?'t':'')+'"></i>';}).join('')+'</div></div>';
+  h+=S.games.map(function(g,i){return muTile(g,i,S);}).join('');
+  h+='<div class="muted mu-ft">Tap a matchup for tonight\'s lineups, day-by-day scores and top scorers. Scores as of '+esc(D.updated)+'.</div>';
+  uiPut('Matchups',h,{v:'league',s:'games',c:0});
+}
+
+/* ---- the sheet ---- */
+function muStatus(p,S){
+  var g=S.tn&&S.tn[p.tm];
+  if(!g)return {on:false,t:'No game'};
+  var opp=(g[2]?'vs ':'@')+g[1],now=Date.now();
+  if(now<g[0])return {on:true,t:opp+' &middot; '+etTime(g[0]).replace(':00','').replace(/\s?PM$/,'p').replace(/\s?AM$/,'a'),up:true};
+  if(now<g[0]+3*3600e3)return {on:true,t:opp+' &middot; <b class="mu-live">Live</b>',live:true};
+  return {on:true,t:opp+' &middot; Final'};
+}
+function muInj(p){return (p.inj&&p.inj!=='ACTIVE')?' <i class="mu-inj">'+esc(p.inj==='DAY_TO_DAY'?'DTD':p.inj==='OUT'?'O':p.inj.charAt(0))+'</i>':'';}
+function muPts(p,st,S){
+  var v=S.pt?S.pt[p.id]:undefined;
+  if(v!=null&&(st.on&&!st.up||v!==0))return '<b>'+f(v,1)+'</b>';
+  if(st.on&&st.up&&p.out!=null)return '<span class="mu-pj">'+f(p.out,1)+'</span>';
+  return '<span class="mu-dash">&ndash;</span>';
+}
+function muCell(p,S,right){
+  if(!p)return '<div class="mu-c empty'+(right?' r':'')+'"><span class="mu-dash">Empty</span></div>';
+  var st=muStatus(p,S);
+  return '<div class="mu-c'+(st.on?'':' off')+(right?' r':'')+'"><span class="mu-nm">'+(right?muInj(p):'')+'<a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'+(right?'':muInj(p))+'</span>'
+    +'<span class="mu-g">'+esc(p.pos)+' '+esc(p.tm)+' &middot; '+st.t+'</span></div>';
+}
+function muGroup(label,A,B,S){
+  var n=Math.max(A.length,B.length);if(!n)return '';
+  var h='<div class="mu-gh">'+label+'</div>';
+  for(var i=0;i<n;i++){
+    var a=A[i],b=B[i],sa=a?muStatus(a,S):null,sb=b?muStatus(b,S):null;
+    h+='<div class="mu-lr">'+muCell(a,S,false)+'<div class="mu-p">'+(a?muPts(a,sa,S):'')+'</div><div class="mu-p">'+(b?muPts(b,sb,S):'')+'</div>'+muCell(b,S,true)+'</div>';
+  }
+  return h;
+}
+function muSlots(t,slot,S){
+  return t.players.filter(function(p){return p.slot===slot;}).sort(function(x,y){
+    var a=muStatus(x,S).on?1:0,b=muStatus(y,S).on?1:0;return (b-a)||((y.out||0)-(x.out||0));});
+}
+function muTonight(g,S){
+  var A=muTeam(g.a),B=muTeam(g.b),t=Math.min(S.today,S.dates.length-1);
+  function playing(T){return T.players.filter(function(p){return ['F','D','G','UTIL'].indexOf(p.slot)>=0&&muStatus(p,S).on;}).length;}
+  var h='<div class="mu-sum"><div><b>'+(g.ad[t]==null?'0.0':f(g.ad[t],1))+'</b><span>'+playing(A)+' playing</span></div><div class="mu-sk">'+(S.done?'Last day':'Today')+'</div><div><b>'+(g.bd[t]==null?'0.0':f(g.bd[t],1))+'</b><span>'+playing(B)+' playing</span></div></div>';
+  h+=muGroup('Forwards',muSlots(A,'F',S),muSlots(B,'F',S),S)+muGroup('Defense',muSlots(A,'D',S),muSlots(B,'D',S),S)
+    +muGroup('Utility',muSlots(A,'UTIL',S),muSlots(B,'UTIL',S),S)+muGroup('Goalies',muSlots(A,'G',S),muSlots(B,'G',S),S);
+  var bn=muGroup('Bench',muSlots(A,'BN',S),muSlots(B,'BN',S),S);
+  if(bn)h+='<details class="mu-bn"><summary>Bench</summary>'+bn.replace('<div class="mu-gh">Bench</div>','')+'</details>';
+  var live=S.pt&&Object.keys(S.pt).length;
+  h+='<div class="muted mu-note">'+(live?'Points are from the last update ('+esc(D.updated)+'). Gray numbers are projections for games that have not started.':'Gray numbers are projected points for tonight. Final points show in the day totals above and on the Week tab.')+'</div>';
+  return h;
+}
+function muWeek(g,S){
+  var A=muTeam(g.a),B=muTeam(g.b),mx=1,h='';
+  g.ad.concat(g.bd).forEach(function(v){if(v!=null&&v>mx)mx=v;});
+  h+='<div class="mu-gh">Points by day</div><div class="mu-bf">';
+  S.dates.forEach(function(d,i){
+    var a=g.ad[i],b=g.bd[i],fut=a==null&&b==null&&i>S.today,cls=i===S.today&&!S.done?' t':'';
+    var lab=String(S.labels[i]||'').split(' ')[0];
+    h+='<div class="mu-bfr'+cls+(fut?' fut':'')+'"><div class="mu-bl">'+(a!=null?'<span>'+f(a,1)+'</span><i style="width:'+(a/mx*100)+'%;--h:'+muHue(A.id)+'"></i>':'')+'</div>'
+      +'<div class="mu-bd">'+esc(lab)+'</div><div class="mu-br">'+(b!=null?'<i style="width:'+(b/mx*100)+'%;--h:'+muHue(B.id)+'"></i><span>'+f(b,1)+'</span>':'')+'</div></div>';
+  });
+  h+='</div>';
+  h+='<div class="mu-stats"><div><b>'+f(g.ap,1)+'</b><span>Projected</span><b>'+f(g.bp,1)+'</b></div><div><b>'+g.al+'</b><span>Games left</span><b>'+g.bl+'</b></div></div>';
+  h+='<div class="mu-gh">Top scorers this week</div><div id="muTop"><div class="gl-wait"><span class="spin"></span>Loading</div></div>';
+  return h;
+}
+function muTopFill(g,S){
+  var el=document.getElementById('muTop');if(!el)return;
+  function draw(score){
+    var A=muTeam(g.a),B=muTeam(g.b);
+    function top(T){return T.players.map(function(p){return {p:p,v:score(p)};}).filter(function(x){return x.v!=null&&x.v!==0;}).sort(function(x,y){return y.v-x.v;}).slice(0,5);}
+    var ta=top(A),tb=top(B),n=Math.max(ta.length,tb.length),h='';
+    if(!n){el.innerHTML='<div class="muted" style="padding:8px 2px">No points scored yet this week.</div>';return;}
+    for(var i=0;i<n;i++){var a=ta[i],b=tb[i];
+      h+='<div class="mu-lr">'+(a?'<div class="mu-c"><a class="pl" data-noav="1" data-id="'+a.p.id+'">'+esc(shortName(a.p.n))+'</a><span class="mu-g">'+esc(a.p.pos)+' '+esc(a.p.tm)+(a.p.slot==='BN'?' &middot; bench':'')+'</span></div>':'<div class="mu-c"></div>')
+        +'<div class="mu-p">'+(a?'<b>'+f(a.v,1)+'</b>':'')+'</div><div class="mu-p">'+(b?'<b>'+f(b.v,1)+'</b>':'')+'</div>'
+        +(b?'<div class="mu-c r"><a class="pl" data-noav="1" data-id="'+b.p.id+'">'+esc(shortName(b.p.n))+'</a><span class="mu-g">'+esc(b.p.pos)+' '+esc(b.p.tm)+(b.p.slot==='BN'?' &middot; bench':'')+'</span></div>':'<div class="mu-c r"></div>')+'</div>';}
+    el.innerHTML=h+'<div class="muted mu-note">Points on the current roster this week, bench games included.</div>';
+  }
+  if(S.pw&&Object.keys(S.pw).length){draw(function(p){return S.pw[p.id];});return;}
+  if(typeof glLoad!=='function'){el.innerHTML='<div class="muted">Not available.</div>';return;}
+  var days={};S.dates.forEach(function(d){days[d]=1;});
+  function etd(ms){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ms));}catch(e){return '';}}
+  glLoad().then(function(d){
+    if(!d){el.innerHTML='<div class="muted">Game logs are not available right now.</div>';return;}
+    draw(function(p){var r=glRows(p.id),s=0,k=0;r.forEach(function(x){if(days[etd(x[0])]){s+=x[3];k++;}});return k?s:null;});
+  });
+}
+function muBody(){
+  var S=D.sb,g=S&&S.games[MU.open],b=document.getElementById('muBody');if(!g||!b)return;
+  b.innerHTML=MU.tab==='wk'?muWeek(g,S):muTonight(g,S);
+  var sg=document.getElementById('muSeg');if(sg){sg.classList.toggle('two',MU.tab==='wk');$$('button',sg).forEach(function(x){x.classList.toggle('on',x.getAttribute('data-mut')===MU.tab);});}
+  if(MU.tab==='wk')muTopFill(g,S);
+}
+function muOpen(i){
+  var S=D.sb,g=S&&S.games[i];if(!g)return;
+  MU.open=i;
+  var A=muTeam(g.a),B=muTeam(g.b),w=muWin(g);
+  var h='<div class="mhead"><div class="pc-id"><b>Week '+esc(S.mp)+'</b><span class="muted">'+muDayTxt(S)+' &middot; updated '+esc(D.updated)+'</span></div><button class="x" id="mx">&times;</button></div>';
+  function side(t,sc,pr){return '<div class="sb-tm">'+muMono(t)+'<div class="sb-n">'+esc(t.name)+'</div><div class="sb-r">'+esc(t.rec)+' &middot; proj '+f(pr,0)+'</div></div>';}
+  h+='<div class="sb mu-sb" style="--h1:'+muHue(A.id)+';--h2:'+muHue(B.id)+'"><div class="sb-row">'+side(A,g.as,g.ap)
+    +'<div class="sb-sc"><span class="'+(g.as<g.bs?'dim':'')+'">'+f(g.as,1)+'</span><i class="sb-d"></i><span class="'+(g.bs<g.as?'dim':'')+'">'+f(g.bs,1)+'</span></div>'+side(B,g.bs,g.bp)+'</div>'
+    +'<div class="wp"><div class="wp-bar" style="--w:'+w.a+'%"><i class="a"></i><i class="b"></i></div><div class="wp-l"><span>'+w.a+'%</span><span>'+(S.done?'Final':'Win chance')+'</span><span>'+w.b+'%</span></div></div></div>';
+  h+='<div class="pcseg mu-seg" id="muSeg"><span class="th"></span><button type="button" data-mut="tn">'+(S.done?'Lineups':'Tonight')+'</button><button type="button" data-mut="wk">Week</button></div>';
+  h+='<div class="mu-hh"><span>'+esc(A.name)+'</span><span>'+esc(B.name)+'</span></div><div id="muBody"></div>';
+  sheetShow(h);
+  muBody();
+}
+document.addEventListener('click',function(e){
+  var t=e.target;if(!t||!t.closest)return;
+  var a=t.closest('[data-mu]');if(a){muOpen(+a.getAttribute('data-mu'));return;}
+  var b=t.closest('[data-mut]');if(b){MU.tab=b.getAttribute('data-mut');muBody();var bx=document.querySelector('#modal .box');return;}
+});
+
 streamsRender();
 LK.start();
 appStart();

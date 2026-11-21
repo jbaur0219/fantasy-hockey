@@ -9,7 +9,7 @@ import sys
 from playwright.sync_api import sync_playwright
 
 TABS = ["today", "moves/plan", "moves/swap", "moves/streams", "roster/team", "roster/week", "players",
-        "league/table", "league/trade", "league/help"]
+        "league/games", "league/table", "league/trade", "league/help"]
 
 
 def main(page_path, shots=None):

@@ -34,6 +34,7 @@ import playercard as PC
 import pwa
 import record as RC
 import roles as R
+import scoreboard as SBD
 import site_builder as SB
 import starters as S
 import streams as STR
@@ -252,6 +253,10 @@ def _main():
         site_data["edge"] = EDG.build(cfg, data, league, standings, now_ms, site_data)
     except Exception as e:                                  # the schedule matrix is an extra: never fail the build over it
         print(f"  schedule edge skipped ({type(e).__name__}: {e})")
+    try:
+        site_data["sb"] = SBD.build(cfg, data, league, standings, now_ms)   # every matchup in the league, Matchups tab
+    except Exception as e:                                  # an extra: never fail the build over it
+        print(f"  league scoreboard skipped ({type(e).__name__}: {e})")
     gamelog = None
     try:
         gamelog = GL.build(cfg, data, site_data, now_ms)  # recent games, for the Game log tab and Compare
