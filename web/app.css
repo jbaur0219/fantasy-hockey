@@ -955,8 +955,8 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none}
 
 /* tab-bar alert badges: sit on the icon's top-right corner like iOS, ringed so they never blur into the icon, never wider than the tab.
    Any new badge on a tab just needs the .bdg class. */
-#bnav .tbcap button .bdg,#bnav .tbsearch .bdg{position:absolute;top:1px;left:calc(50% + 7px);right:auto;min-width:19px;height:19px;padding:0 5px;box-sizing:border-box;
-  border-radius:10px;font:700 12px/19px ui-rounded,-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;
+#bnav .tbcap button .bdg,#bnav .tbsearch .bdg{position:absolute;top:-1px;left:calc(50% + 6px);right:auto;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;
+  border-radius:9px;font:700 12px/18px ui-rounded,-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;
   background:var(--red);color:#fff;box-shadow:0 0 0 2px #1c1c1e;z-index:4;pointer-events:none;transform:none}
 #bnav .tbcap button.on .bdg{box-shadow:0 0 0 2px #2c2c30}
 @media (prefers-color-scheme:light){#bnav .tbcap button .bdg{box-shadow:0 0 0 2px #fff}}
