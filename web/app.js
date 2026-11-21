@@ -944,12 +944,15 @@ function uiNext(c){
   h+='<div class="goto"><button type="button" class="chip-btn" data-go="moves/plan">Full game plan</button><button type="button" class="chip-btn" data-go="moves/swap">Try a swap</button></div>';
   c.innerHTML=h;
 }
+function todayTeam(mine,M){
+  var t=null;D.teams.forEach(function(x){if(mine?x.me:(M&&(x.id===M.opp_id||x.name===M.opp_name)))t=x;});return t||{};
+}
 function uiBadge(){
   var b=document.getElementById('bn-moves');if(!b)return;
   var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null;
   var fi=LK.first(),n=P?P.moves.filter(function(m){return (m.t===fi||(m.waiver&&m.t-1===fi))&&cfOf(m)==='strong';}).length:0;
   var o=b.querySelector('.bdg');if(o)o.parentNode.removeChild(o);
-  if(n)b.insertAdjacentHTML('beforeend','<span class="bdg">'+n+'</span>');
+  if(n)b.insertAdjacentHTML('beforeend','<span class="bdg">'+(n>9?'9+':n)+'</span>');
 }
 function uiLayout(){
   var fresh=$$('section[id^="t-"] > .card');
@@ -1478,9 +1481,9 @@ function uiToday(){
     h+='<section class="sb" style="--h1:'+h1+';--h2:'+h2+'">'
       +'<div class="sb-top"><span class="sb-live"></span>'+(mp?'Week '+mp+' &middot; ':'')+M.days_left+' day'+(M.days_left===1?'':'s')+' left</div>'
       +'<div class="sb-row">'
-      +'<div class="sb-tm"><div class="mono" style="--h:'+h1+'">'+esc(initials(me))+'</div><div class="sb-n">'+esc(me)+'</div><div class="sb-r">'+esc(D.rec)+'</div></div>'
+      +'<div class="sb-tm"><div class="mono" style="--h:'+h1+'">'+esc(initials(me))+muImg(todayTeam(true))+'</div><div class="sb-n">'+esc(me)+'</div><div class="sb-r">'+esc(D.rec)+'</div></div>'
       +'<div class="sb-sc"><span class="num'+(lead?'':' dim')+'" data-cu="'+M.me_now+'" data-dec="1">'+f(M.me_now,1)+'</span><span class="sb-d"></span><span class="num'+(lead?' dim':'')+'" data-cu="'+M.opp_now+'" data-dec="1">'+f(M.opp_now,1)+'</span></div>'
-      +'<div class="sb-tm"><div class="mono" style="--h:'+h2+'">'+esc(initials(op))+'</div><div class="sb-n">'+esc(op)+'</div><div class="sb-r">'+esc(M.opp_rec||'')+'</div></div>'
+      +'<div class="sb-tm"><div class="mono" style="--h:'+h2+'">'+esc(initials(op))+muImg(todayTeam(false,M))+'</div><div class="sb-n">'+esc(op)+'</div><div class="sb-r">'+esc(M.opp_rec||'')+'</div></div>'
       +'</div>'
       +'<div class="wp"><div class="wp-h"><span>Win probability</span></div>'
       +'<div class="wp-bar"><i class="a" style="--w:'+pw+'%"></i><i class="b"></i></div>'
