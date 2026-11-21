@@ -12,7 +12,7 @@ def split(path):
     t = open(path, encoding="utf-8").read()
     m = re.search(r'<script type="application/json" id="data">(.*?)</script>', t, re.S)
     data = json.loads(m.group(1).replace("<\\/", "</"))
-    for k in ("updated",):
+    for k in ("updated", "v"):
         data.pop(k, None)
     (data.get("clock") or {}).pop("built", None)
     return t[:m.start()] + t[m.end():], data

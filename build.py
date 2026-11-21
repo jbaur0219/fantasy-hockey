@@ -88,6 +88,15 @@ def health_report(site_data, nhl_counts):
             "healthy_plan": lines["state"] == "live" or (lines["state"] == "cached" and (R.STATE["cache_age_h"] or 0) <= 24)}
 
 
+def scoring_weights(league):
+    """This league's points per stat, as {ESPN stat id: points}, read from the league settings."""
+    try:
+        items = ((league.get("settings") or {}).get("scoringSettings") or {}).get("scoringItems") or []
+        return {str(i["statId"]): i.get("points", 0) for i in items if i.get("points")}
+    except Exception:
+        return {}
+
+
 CORE_SECTIONS = ("streams", "gameplan", "planner")   # the move advice; a build missing any of these is degraded
 
 
@@ -195,6 +204,8 @@ def _main():
 
     now_ms = NC.now_ms()
     site_data = SB.build_site_data(cfg, data, league, standings, now_ms)
+    site_data["v"] = now_ms                                 # data version: the open app reloads when this changes
+    site_data["scoring"] = scoring_weights(league)          # ESPN stat id -> points, for live points during games
     _ab, _gm = D.schedule_maps(data["schedules"])
     site_data["g28"] = C.team_games(_gm, _ab, data["roster"].get("scoringPeriodId", 1), 28)   # trade values: next 4 weeks
     if site_data.get("matchup"):
@@ -275,7 +286,9 @@ def _main():
     missing = [k for k in REQUIRED if k not in html_text]
     if missing:                                            # never publish a page with a section silently missing
         sys.exit("Page is incomplete, not publishing it. Missing: " + ", ".join(missing))
-    Path("site/index.html").write_text(html_text, encoding="utf-8")
+    Path("full.html").write_text(html_text, encoding="utf-8")        # one-file copy for the test tools
+    ver = SB.write_site(site_data, "site")                            # the published app: shell + data.json + version.json
+    print(f"  app code {ver['code']}, data {ver['data']}")
     if gamelog is not None:
         Path("site/gamelog.json").write_text(json.dumps(gamelog, separators=(",", ":")), encoding="utf-8")
     write_health_file(site_data, now_ms)
@@ -297,7 +310,7 @@ def _main():
         print(f"  MOVE add {mv['add']['n']} ({mv['add']['out']:.2f}) drop {mv['drop']['n']} ({mv['drop']['out']:.2f})")
     for a in site_data["alerts"]:
         print("  ALERT:", a["t"])
-    print(f"Saved site/index.html ({len(html_text)//1024} KB)")
+    print(f"Saved the app to site/ ({len(html_text)//1024} KB as one page)")
 
 
 if __name__ == "__main__":

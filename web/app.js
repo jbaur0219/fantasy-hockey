@@ -1415,6 +1415,7 @@ function uiToday(){
       +'<div class="sb-ft"><span>Projected</span><b>'+Math.round(M.proj_me)+'</b><span>&ndash;</span><b>'+Math.round(M.proj_opp)+'</b></div>'
       +'</section>';
   }
+  h+='<div id="livebox">'+lvHtml()+'</div>';
   /* problems only: the data line is silent when everything is fine */
   var warn=age>12?'The automatic update may have failed ('+Math.round(age)+' h old). Tap refresh, or check ESPN before making moves.'
     :((H.level&&H.level!=='ok'&&H.items&&H.items.length)?H.items[0]+(H.level==='bad'?' Nothing is marked Strong until it is back.':''):'');
@@ -2276,8 +2277,144 @@ document.addEventListener('click',function(e){
   var b=t.closest('[data-mut]');if(b){MU.tab=b.getAttribute('data-mut');muBody();var bx=document.querySelector('#modal .box');return;}
 });
 
+/* ---------- Auto-update: the open app reloads itself when new data or new app code is live ---------- */
+/* The published app has window.FH_CODE (see site_builder.LOADER). It asks version.json every minute while open and
+   whenever it comes back to the screen. When something changed it waits for a quiet moment (no sheet open, not
+   typing, no touch for 5 s, or the app is in the background), then reloads and keeps your tab and scroll. */
+var UPD={t:0,busy:false,want:null,tm:null};
+function updQuiet(){
+  if(document.hidden)return true;
+  var m=document.getElementById('modal');if(m&&m.classList.contains('open'))return false;
+  var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return false;
+  return Date.now()-UPD.t>5000;
+}
+function updApply(){
+  if(!UPD.want)return;
+  if(!updQuiet()){clearTimeout(UPD.tm);UPD.tm=setTimeout(updApply,3000);return;}
+  try{sessionStorage.setItem('fh_upd',JSON.stringify({k:UPD.want.k,v:UPD.want.v,y:window.pageYOffset||0}));}catch(e){}
+  location.reload();
+}
+function updCheck(){
+  if(UPD.busy||UPD.want||!window.FH_CODE)return;            /* the one-file test page has nothing to check */
+  UPD.busy=true;
+  fetch('version.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).then(function(v){
+    UPD.busy=false;if(!v)return;
+    var tried=null;try{tried=sessionStorage.getItem('fh_tried');}catch(e){}
+    var w=null;
+    if(v.code&&v.code!==window.FH_CODE)w={k:'code',v:'c'+v.code};
+    else if(v.data&&D.v&&v.data>D.v)w={k:'data',v:'d'+v.data};
+    if(!w||w.v===tried)return;                                /* never loop on the same update */
+    UPD.want=w;updApply();
+  }).catch(function(){UPD.busy=false;});
+}
+function updStart(){
+  ['pointerdown','touchstart','keydown','scroll'].forEach(function(ev){document.addEventListener(ev,function(){UPD.t=Date.now();},{passive:true,capture:true});});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)updCheck();else if(UPD.want)updApply();});
+  setInterval(function(){if(!document.hidden)updCheck();},60000);
+  setTimeout(updCheck,3000);
+  var s=null;try{s=JSON.parse(sessionStorage.getItem('fh_upd')||'null');sessionStorage.removeItem('fh_upd');if(s)sessionStorage.setItem('fh_tried',s.v);}catch(e){}
+  if(s){if(s.y)setTimeout(function(){window.scrollTo(0,s.y);},80);kpToast(s.k==='code'?'The app was just updated.':'Updated with the latest data.');}
+}
+
+/* ---------- Live: tonight's games and roughly how many points your starters have scored so far ----------
+   From ESPN's public scoreboard (the NHL's own feed blocks browser apps). It refreshes every 45 s while a game you
+   care about is on and the app is open. Points use your league's scoring for goals, assists, shots, hits, blocks,
+   saves, goals against, wins and shutouts; power-play and short-handed points show up after the next full update. */
+var LIVE={ev:[],pts:{},done:{},at:0,tm:null,err:0};
+var LV_URL='https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/';
+var LV_AL={LA:'LAK',NJ:'NJD',SJ:'SJS',TB:'TBL',UTAH:'UTA',WAS:'WSH',MON:'MTL',CLB:'CBJ',CLS:'CBJ',NAS:'NSH',NSH:'NSH',VEG:'VGK',WIN:'WPG'};
+var LV_SK={goals:'13',assists:'14',shotsTotal:'29',hits:'31',blockedShots:'32'};
+function lvAb(a){a=String(a||'').toUpperCase();return LV_AL[a]||a;}
+function lvDay(ms){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ms)).replace(/-/g,'');}catch(e){return '';}}
+function lvStarters(list){return (list||[]).filter(function(p){return p.slot!=='BN'&&p.slot!=='IR';});}
+function lvOpp(){var M=D.matchup;if(!M)return [];var t=(D.teams||[]).filter(function(x){return x.id===M.opp_id;})[0];return t?t.players:[];}
+function lvW(id){var S=D.scoring||{};return +S[id]||0;}
+function lvMineIn(e){var a=[e.h.ab,e.a.ab];return (D.mine||[]).filter(function(p){return a.indexOf(lvAb(p.tm))>=0;});}
+function lvBox(e,sm){
+  var bp=(sm&&sm.boxscore&&sm.boxscore.players)||[];
+  bp.forEach(function(t){
+    var ab=lvAb(t.team&&t.team.abbreviation),won=(ab===e.h.ab?e.h.w:(ab===e.a.ab?e.a.w:false))&&e.st==='post',gks=[];
+    (t.statistics||[]).forEach(function(g){
+      var k=g.keys||[];
+      (g.athletes||[]).forEach(function(a){
+        var id=+(a.athlete&&a.athlete.id),st=a.stats||[];if(!id)return;
+        var val=function(n){var i=k.indexOf(n);return i<0?0:(parseFloat(st[i])||0);};
+        if(g.name==='goalies'){
+          var ga=val('goalsAgainst'),sv=k.indexOf('saves')>=0?val('saves'):Math.max(0,val('shotsAgainst')-ga);
+          var o={id:id,ga:ga,sv:sv,f:sv+ga};gks.push(o);
+          LIVE.pts[id]={p:sv*lvW('6')+ga*lvW('4'),s:sv+' saves, '+ga+' GA',g:e.id};
+        }else{
+          var p=0,bits=[];
+          for(var n in LV_SK){var x=val(n);p+=x*lvW(LV_SK[n]);if(x&&(n==='goals'||n==='assists'))bits.push(x+(n==='goals'?'G':'A'));}
+          var sog=val('shotsTotal');if(sog)bits.push(sog+' SOG');
+          LIVE.pts[id]={p:p,s:bits.join(' ')||'no points yet',g:e.id};
+        }
+      });
+    });
+    if(won&&gks.length){                     /* the win goes to the goalie who faced the most shots */
+      gks.sort(function(a,b){return b.f-a.f;});var w=gks[0],L=LIVE.pts[w.id];
+      if(L){L.p+=lvW('1')+(w.ga===0?lvW('7'):0);L.s+=w.ga===0?', win, shutout':', win';}
+    }
+  });
+}
+function lvSum(list){var s=0,n=0;lvStarters(list).forEach(function(p){var L=LIVE.pts[p.id];if(L){s+=L.p;n++;}});return {s:s,n:n};}
+function lvHtml(){
+  var mine=LIVE.ev.filter(function(e){return lvMineIn(e).length;});
+  if(!mine.length)return '';
+  var on=mine.some(function(e){return e.st==='in';}),any=mine.some(function(e){return e.st!=='pre';});
+  var h='<div class="sec"><div class="sec-h"><span>Tonight</span>'+(on?'<span class="sec-r"><span class="sb-live"></span>Live</span>':'')+'</div><div class="grp">';
+  if(any){
+    var me=lvSum(D.mine),op=lvSum(lvOpp()),M=D.matchup;
+    h+='<div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">You +'+me.s.toFixed(1)+(M?' &middot; '+esc(M.opp_name||'Them')+' +'+op.s.toFixed(1):'')+'</div><div class="row-s">Points from tonight\'s games so far (close estimate)</div></div></div>';
+  }
+  mine.sort(function(a,b){var o={in:0,pre:1,post:2};return (o[a.st]-o[b.st])||(a.start-b.start);});
+  mine.forEach(function(e){
+    var ps=lvMineIn(e),bench=function(p){return p.slot==='BN'||p.slot==='IR';};
+    var who=ps.map(function(p){var L=LIVE.pts[p.id];return esc(shortName(p.n))+(L&&e.st!=='pre'?' <b>'+(L.p>=0?'+':'')+L.p.toFixed(1)+'</b>':'')+(bench(p)?' <span class="muted">(bench)</span>':'');}).join(', ');
+    var sc=e.st==='pre'?etTime(e.start):(e.a.ab+' '+e.a.sc+' &ndash; '+e.h.sc+' '+e.h.ab);
+    h+='<div class="row"><span class="ric '+(e.st==='in'?'wn':'gy')+'">'+SF.clock+'</span><div class="row-m"><div class="row-t">'+sc+(e.st!=='pre'?' <span class="muted">&middot; '+esc(e.det)+'</span>':' <span class="muted">&middot; '+esc(e.a.ab+' @ '+e.h.ab)+'</span>')+'</div><div class="row-s">'+who+'</div></div></div>';
+  });
+  h+='</div>';
+  if(any)h+='<div class="sec-f">Power-play points show up after the next full update.'+(LIVE.at?' Checked '+etTime(LIVE.at)+'.':'')+'</div>';
+  return h+'</div>';
+}
+function lvPaint(){var el=document.getElementById('livebox');if(el)el.innerHTML=lvHtml();}
+function lvLater(ms){clearTimeout(LIVE.tm);LIVE.tm=setTimeout(lvFetch,ms);}
+function lvNext(){
+  var mine=LIVE.ev.filter(function(e){return lvMineIn(e).length;}),now=Date.now();
+  if(mine.some(function(e){return e.st==='in';}))return lvLater(45000);
+  var pre=mine.filter(function(e){return e.st==='pre';}).map(function(e){return e.start;});
+  if(pre.length){var s=Math.min.apply(null,pre);return lvLater(s-now<20*60000?90000:Math.min(15*60000,s-now-10*60000));}
+  lvLater(15*60000);                                            /* nothing on: look again later (a new day's slate) */
+}
+function lvJ(r){if(!r.ok)throw new Error(r.status);return r.json();}
+function lvFetch(){
+  if(document.hidden){LIVE.wait=true;return;}
+  LIVE.wait=false;
+  fetch(LV_URL+'scoreboard?dates='+lvDay(Date.now()-5*3600000)).then(lvJ).then(function(s){
+    LIVE.ev=(s.events||[]).map(function(e){
+      var c=(e.competitions||[])[0]||{},cs=c.competitors||[];
+      var side=function(w){var x=cs.filter(function(q){return q.homeAway===w;})[0]||{};return {ab:lvAb(x.team&&x.team.abbreviation),sc:+x.score||0,w:!!x.winner};};
+      var t=(e.status&&e.status.type)||{};
+      return {id:e.id,st:t.state||'pre',det:t.shortDetail||'',start:Date.parse(e.date),h:side('home'),a:side('away')};
+    });
+    var rel={};lvStarters(D.mine).concat(lvStarters(lvOpp())).forEach(function(p){rel[lvAb(p.tm)]=1;});
+    var need=LIVE.ev.filter(function(e){return e.st!=='pre'&&!LIVE.done[e.id]&&(rel[e.h.ab]||rel[e.a.ab]);});
+    return Promise.all(need.map(function(e){
+      return fetch(LV_URL+'summary?event='+e.id).then(lvJ).then(function(sm){lvBox(e,sm);if(e.st==='post')LIVE.done[e.id]=1;}).catch(function(){});
+    }));
+  }).then(function(){LIVE.at=Date.now();LIVE.err=0;lvPaint();lvNext();})
+    .catch(function(){LIVE.err++;lvLater(Math.min(10,LIVE.err)*60000);});
+}
+function lvStart(){
+  if(!D.matchup&&!(D.mine||[]).length)return;
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&(LIVE.wait||Date.now()-LIVE.at>40000)){clearTimeout(LIVE.tm);lvFetch();}});
+  lvFetch();
+}
+
 streamsRender();
 LK.start();
 appStart();
 uiStart();showTab((location.hash||'').slice(1));
+updStart();lvStart();
 })();

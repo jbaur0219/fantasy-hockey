@@ -74,7 +74,7 @@ async function run(inputs,quiet){
       say((run&&run.status==='in_progress'?'Building... ':'Queued... ')+secs+'s');
       if(run&&run.status==='completed')break;
     }
-    if(run&&run.status==='completed'&&run.conclusion==='success'){say('Done. Reloading...');location.href=location.pathname+'?r='+Date.now()+location.hash;return true;}
+    if(run&&run.status==='completed'&&run.conclusion==='success'){say('Done. Reloading...');location.reload();return true;}
     if(run&&run.status==='completed'){say('The build failed. Check the Actions tab on GitHub.',true);return true;}
     say('Still running after 6 minutes. Reload in a bit.',true);
   }catch(e){say('Something went wrong: '+e.message,true);}

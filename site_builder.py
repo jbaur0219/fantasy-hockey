@@ -67,10 +67,84 @@ def build_site_data(cfg, data, league, standings, now_ms):
 WEB = Path(__file__).with_name("web")
 
 
+def _web():
+    return tuple((WEB / f).read_text(encoding="utf-8") for f in ("page.html", "app.css", "app.js"))
+
+
 def render_site(site_data):
-    """web/page.html with the styles, the script and this build's data dropped in."""
-    page = (WEB / "page.html").read_text(encoding="utf-8")
-    css = (WEB / "app.css").read_text(encoding="utf-8")
-    js = (WEB / "app.js").read_text(encoding="utf-8")
+    """One self-contained page (styles, script and data inline). Used by the test tools (replay, compare, smoke)."""
+    page, css, js = _web()
     blob = json.dumps(site_data, separators=(",", ":"), ensure_ascii=True).replace("</", "<\\/")
     return page.replace("__CSS__", css).replace("__JS__", js).replace("__DATA__", blob)
+
+
+# The published app is split in two so it opens instantly and updates itself:
+#   - the app (index.html + app.<code>.js/.css): changes only when the code changes. The phone keeps it, so it opens
+#     straight away. The file names carry a fingerprint of the code, so a new version is never mixed with an old one.
+#   - the data (data.json): changes with every build.
+#   - version.json says which code and which data are live. The open app checks it every minute and when it comes
+#     back to the screen, and reloads itself (keeping your tab and scroll) when either changed.
+LOADER = r"""<script>window.FH_CODE='__CODE__';(function(){
+var el=document.getElementById('data');
+function boot(txt){el.textContent=txt;var s=document.createElement('script');s.src='app.__CODE__.js';document.body.appendChild(s);}
+function fail(){var w=document.querySelector('.wrap');if(w)w.insertAdjacentHTML('afterbegin','<div class="card" style="margin:12px 0">Could not load the latest data. Check your signal, then <a href="" onclick="location.reload();return false">try again</a>.</div>');}
+var tries=0;(function go(){fetch('data.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.text();}).then(boot).catch(function(){if(++tries<3)setTimeout(go,800*tries);else fail();});})();
+})();</script>"""
+
+
+def code_version():
+    """A short fingerprint of the app code: changes whenever page.html, app.css or app.js changes."""
+    import hashlib
+    page, css, js = _web()
+    return hashlib.sha1((page + "\0" + css + "\0" + js + "\0" + LOADER).encode("utf-8")).hexdigest()[:10]
+
+
+def write_shell(out="site"):
+    """index.html + app.<code>.js/.css (no data). Returns the code version."""
+    page, css, js = _web()
+    code = code_version()
+    out = Path(out)
+    out.mkdir(exist_ok=True)
+    for old in list(out.glob("app.*.js")) + list(out.glob("app.*.css")):
+        old.unlink()
+    (out / f"app.{code}.css").write_text(css, encoding="utf-8")
+    (out / f"app.{code}.js").write_text(js, encoding="utf-8")
+    shell = (page.replace("<style>__CSS__</style>", f'<link rel="stylesheet" href="app.{code}.css">')
+                 .replace("__DATA__", "")
+                 .replace("<script>__JS__</script>", LOADER.replace("__CODE__", code)))
+    for k in ("__CSS__", "__JS__", "__DATA__"):
+        if k in shell:
+            raise RuntimeError(f"page.html no longer has the expected {k} slot")
+    (out / "index.html").write_text(shell, encoding="utf-8")
+    return code
+
+
+def write_version(out="site", data_v=None):
+    """version.json: the live code and data versions. data_v=None keeps the data version already in the folder."""
+    out = Path(out)
+    vf = out / "version.json"
+    if data_v is None:
+        try:
+            data_v = json.loads(vf.read_text(encoding="utf-8")).get("data")
+        except Exception:
+            data_v = None
+    v = {"code": code_version(), "data": data_v}
+    vf.write_text(json.dumps(v), encoding="utf-8")
+    return v
+
+
+def write_site(site_data, out="site"):
+    """The published app: the shell, data.json and version.json."""
+    write_shell(out)
+    blob = json.dumps(site_data, separators=(",", ":"), ensure_ascii=True)
+    (Path(out) / "data.json").write_text(blob, encoding="utf-8")
+    return write_version(out, site_data.get("v"))
+
+
+if __name__ == "__main__":
+    # python site_builder.py shell [site]  ->  republish just the app code next to the live data (code-only update)
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "shell":
+        d = sys.argv[2] if len(sys.argv) > 2 else "site"
+        write_shell(d)
+        print("version:", write_version(d))

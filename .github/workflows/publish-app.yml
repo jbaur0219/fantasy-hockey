@@ -1,0 +1,104 @@
+name: Publish app update
+run-name: Publish app update
+
+# When a change lands on main, this puts it live fast:
+#   - only the app's look and behaviour changed (web/, pwa/, pwa.py, site_builder.py): republish the app next to the
+#     live data, with no ESPN build. Live in about 30 seconds, and the open app reloads itself within a minute.
+#   - anything else changed (the model or the data): start a full build (daily.yml), which publishes everything.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write
+
+# Its own queue: sharing the full build's queue would let GitHub cancel a waiting morning build. To avoid putting older
+# data back over a build that finished in the meantime, it re-reads the live data right before publishing.
+concurrency:
+  group: publish-app
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: What changed?
+        id: what
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "kind=app" >> $GITHUB_OUTPUT; exit 0; fi
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then echo "kind=full" >> $GITHUB_OUTPUT; exit 0; fi
+          CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+          echo "$CHANGED"
+          # the bot's own saves (plan, cache, history) need no publish at all
+          OTHER=$(echo "$CHANGED" | grep -v -E '^(plan_state\.json|keep\.json|cache/|history/|preview/)' || true)
+          if [ -z "$OTHER" ]; then echo "kind=none" >> $GITHUB_OUTPUT; exit 0; fi
+          REST=$(echo "$OTHER" | grep -v -E '^(web/|pwa/|pwa\.py$|site_builder\.py$|README\.md$|tools/|tests/|\.github/)' || true)
+          if [ -z "$REST" ]; then echo "kind=app" >> $GITHUB_OUTPUT; else echo "kind=full" >> $GITHUB_OUTPUT; fi
+      - name: Start a full build (the model changed)
+        if: steps.what.outputs.kind == 'full'
+        run: gh workflow run daily.yml -f reason=code-update
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Fetch the live data
+        id: live
+        if: steps.what.outputs.kind == 'app'
+        run: |
+          mkdir -p site
+          BASE="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+          ok=true
+          for f in data.json version.json health.json gamelog.json; do
+            curl -fsS "$BASE/$f?t=$(date +%s)" -o "site/$f" || { echo "could not fetch $f"; rm -f "site/$f"; [ "$f" = data.json ] && ok=false; }
+          done
+          python3 -c "import json;json.load(open('site/data.json'))" 2>/dev/null || ok=false
+          echo "ok=$ok" >> $GITHUB_OUTPUT
+      - name: No live data to reuse, so do a full build instead
+        if: steps.what.outputs.kind == 'app' && steps.live.outputs.ok != 'true'
+        run: gh workflow run daily.yml -f reason=code-update
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/setup-python@v5
+        if: steps.live.outputs.ok == 'true'
+        with:
+          python-version: "3.12"
+      - name: Build the app around the live data
+        if: steps.live.outputs.ok == 'true'
+        run: |
+          python site_builder.py shell site
+          python -c "import pwa; pwa.write_files('site')"
+          ls -la site
+      - name: Re-read the live data in case a full build just finished
+        if: steps.live.outputs.ok == 'true'
+        run: |
+          BASE="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+          NOW=$(curl -fsS "$BASE/version.json?t=$(date +%s)" | python3 -c "import json,sys;print(json.load(sys.stdin).get('data'))" || echo "")
+          HAD=$(python3 -c "import json;print(json.load(open('site/version.json')).get('data'))")
+          if [ -n "$NOW" ] && [ "$NOW" != "$HAD" ]; then
+            echo "new data went live while this ran ($HAD -> $NOW); using it"
+            for f in data.json health.json gamelog.json; do curl -fsS "$BASE/$f?t=$(date +%s)" -o "site/$f" || true; done
+            python3 -c "import json,site_builder as S;S.write_version('site',$NOW);print(open('site/version.json').read())"
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.live.outputs.ok == 'true'
+        with:
+          path: site/
+    outputs:
+      deploy: ${{ steps.live.outputs.ok }}
+
+  deploy:
+    needs: publish
+    if: needs.publish.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

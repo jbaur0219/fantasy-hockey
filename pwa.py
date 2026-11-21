@@ -31,20 +31,47 @@ MANIFEST = {
     ],
 }
 
-SW = r"""/* Fantasy Hockey service worker: push alerts, plus a fallback copy of the page.
-   Network first: when online you always get the newest build. The saved copy is only used with no signal. */
-var CACHE = 'fh-page-v1';
+SW = r"""/* Fantasy Hockey service worker: push alerts, an instant-opening app, and an offline copy.
+   - app.<code>.js / .css and the icons never change under the same name, so they come straight from the phone.
+   - the page and the data are network first, so you always get the newest when online. The saved copy is used
+     only with no signal (or if the network takes more than 4 seconds).
+   - version.json is never cached: the open app asks it every minute whether anything new is live. */
+var CACHE = 'fh-v2';
+function keyOf(u) { return u.split('?')[0].split('#')[0]; }
+function save(key, resp) { if (resp && resp.ok) { var c = resp.clone(); caches.open(CACHE).then(function (k) { k.put(key, c); }); } return resp; }
+function fromCache(key) { return caches.match(key).then(function (m) { return m || caches.match(self.registration.scope); }); }
 self.addEventListener('fetch', function (e) {
-  var r = e.request;
-  if (r.method !== 'GET' || new URL(r.url).origin !== self.location.origin) return;
-  var key = r.url.split('?')[0].split('#')[0];
-  e.respondWith(fetch(r).then(function (resp) {
-    if (resp && resp.ok) { var c = resp.clone(); caches.open(CACHE).then(function (k) { k.put(key, c); }); }
-    return resp;
-  }).catch(function () { return caches.match(key).then(function (m) { return m || caches.match(self.registration.scope); }); }));
+  var r = e.request, u = new URL(r.url);
+  if (r.method !== 'GET' || u.origin !== self.location.origin) return;
+  if (/version\.json$/.test(u.pathname)) return;
+  var key = keyOf(r.url);
+  if (/\/app\.[0-9a-f]+\.(js|css)$|\.png$/.test(u.pathname)) {
+    e.respondWith(caches.match(key).then(function (m) {
+      return m || fetch(r).then(function (resp) {
+        if (resp && resp.ok && /\/app\./.test(u.pathname)) {          /* a new app version: drop the old one's files */
+          var ext = u.pathname.split('.').pop();
+          caches.open(CACHE).then(function (k) { k.keys().then(function (ks) { ks.forEach(function (q) {
+            var qp = new URL(q.url).pathname; if (/\/app\.[0-9a-f]+\./.test(qp) && qp.split('.').pop() === ext && qp !== u.pathname) k.delete(q); }); }); });
+        }
+        return save(key, resp);
+      });
+    }));
+    return;
+  }
+  e.respondWith(new Promise(function (resolve) {
+    var done = false;
+    var net = fetch(r, { cache: 'no-store' }).then(function (resp) { return save(key, resp); });
+    var t = setTimeout(function () { fromCache(key).then(function (m) { if (m && !done) { done = true; resolve(m); } }); }, 4000);
+    net.then(function (resp) { if (!done) { done = true; clearTimeout(t); resolve(resp); } })
+       .catch(function () { clearTimeout(t); fromCache(key).then(function (m) { if (!done) { done = true; resolve(m || Response.error()); } }); });
+  }));
 });
 self.addEventListener('install', function (e) { self.skipWaiting(); });
-self.addEventListener('activate', function (e) { e.waitUntil(self.clients.claim()); });
+self.addEventListener('activate', function (e) {
+  e.waitUntil(caches.keys().then(function (ks) {
+    return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
+  }).then(function () { return self.clients.claim(); }));
+});
 self.addEventListener('push', function (e) {
   var d = {};
   try { d = e.data ? e.data.json() : {}; } catch (x) { d = { body: e.data ? e.data.text() : '' }; }
