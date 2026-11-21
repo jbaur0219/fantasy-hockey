@@ -124,14 +124,15 @@ function overview(){
 var R={pos:'All',q:'',view:'list'};
 var SLOTN={F:'Forward slot',D:'Defense slot',G:'Goalie slot',UTIL:'UTIL slot',BN:'Bench',IR:'Injured reserve'};
 function rosterRow(p){
-  var bits=[esc(p.pos)+' '+esc(p.tm),esc(SLOTN[p.slot]||p.slot)];
+  var bits=[esc(p.pos)+' '+esc(p.tm)];
+  if(p.slot==='BN')bits.push('Bench');
   if(p.rl&&p.rl!=='Not listed')bits.push(esc(rlTxt(p.rl)));
-  if(p.gl!=null)bits.push(p.gl+' game'+(p.gl===1?'':'s')+' left this week');
+  if(p.gl!=null)bits.push(p.gl+' game'+(p.gl===1?'':'s')+' left');
   var trend=(p.rec!=null&&p.ppg!=null&&p.gp>=6)?(p.rec-p.ppg>=0.4?' <span class="good">hot</span>':(p.rec-p.ppg<=-0.4?' <span class="warn">cold</span>':'')):'';
   var inj=(p.inj&&p.inj!=='ACTIVE')?' <span class="bad">'+esc(p.inj.replace(/_/g,' ').toLowerCase())+'</span>':'';
   var av=(typeof avHtml==='function')?avHtml(p.id,p.tm):'';
-  return '<div class="srow"><div class="sm rrow">'+av+'<div class="rtx"><a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a>'+inj+trend+'<div class="muted">'+bits.join(' &middot; ')+'</div></div></div>'
-    +'<div class="sr"><span><b>'+f(p.out,1)+'</b> <span class="muted">'+(p.grp==='G'?'pts/start':'pts/game')+'</span></span></div></div>';
+  return '<div class="srow rsrow"><div class="sm rrow">'+av+'<div class="rtx"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a>'+inj+trend+'<div class="muted">'+bits.join(' &middot; ')+'</div></div></div>'
+    +'<div class="sr rpts"><b>'+f(p.out,1)+'</b><span class="muted">'+(p.grp==='G'?'per start':'per game')+'</span></div></div>';
 }
 function rosterList(rows){
   var bench=function(p){return p.slot==='BN'?1:0;},by=function(a,b){return (bench(a)-bench(b))||(b.out-a.out);};
@@ -146,7 +147,7 @@ function rosterRender(){
   chips('#rosterPos',['All','F','D','G'],R.pos,function(v){R.pos=v;rosterRender();});
   var rows=D.mine.filter(function(p){return (R.pos==='All'||p.grp===R.pos)&&(!R.q||p.n.toLowerCase().indexOf(R.q)>=0);});
   var tg='<div class="controls"><button type="button" class="chip-btn'+(R.view==='list'?' on':'')+'" data-rv="list">Simple</button><button type="button" class="chip-btn'+(R.view==='table'?' on':'')+'" data-rv="table">All stats</button></div>';
-  if(R.view==='list'){$('#rosterTbl').innerHTML=tg+rosterList(rows)+'<div class="muted" style="margin-top:8px">Projected points per game going forward (per start for goalies). Tap a name for the full card.</div>';return;}
+  if(R.view==='list'){$('#rosterTbl').innerHTML=tg+rosterList(rows)+'<div class="muted" style="margin-top:8px">The number on the right is projected points per game from here on (per start for goalies). Tap a name for the full card.</div>';return;}
   $('#rosterTbl').innerHTML=tg+mkTable(rosterCols,rows);wireSort($('#rosterTbl'));
 }
 document.addEventListener('click',function(e){var b=e.target.closest?e.target.closest('[data-rv]'):null;if(b){R.view=b.getAttribute('data-rv');rosterRender();}});
