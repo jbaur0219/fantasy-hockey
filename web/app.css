@@ -924,3 +924,10 @@ button.mu-pick.open .mu-cv{transform:rotate(180deg)}
 
 /* fixed bars stay glued to the visible screen even if iOS offsets it (see glPin in app.js) */
 #gnav,#bnav,#rfbar,.gn-edge.bot{translate:0 var(--vvy,0px)}
+
+/* league team pictures (ESPN team logos); initials show underneath until/unless the picture loads */
+.mono{position:relative;overflow:hidden}
+.mono>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;background:#fff}
+body.nophoto .mono>img{display:none}
+.mono.mono-s{width:26px;height:26px;font-size:10px;flex:none;box-shadow:none}
+.tm-c{display:inline-flex;align-items:center;gap:8px}

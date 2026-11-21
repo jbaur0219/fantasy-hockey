@@ -359,10 +359,10 @@ function tradeInit(){
 
 /* ---------- league ---------- */
 function leagueRender(){
-  var rows=D.teams.map(function(t){return {id:t.id,name:t.name,rec:t.rec,w:t.w,pf:t.pf,me:t.me,power:lineup(t.players)};});
+  var rows=D.teams.map(function(t){return {id:t.id,name:t.name,logo:t.logo,rec:t.rec,w:t.w,pf:t.pf,me:t.me,power:lineup(t.players)};});
   rows.sort(function(a,b){return b.power-a.power;});rows.forEach(function(r,i){r.pr=i+1;});
   rows.sort(function(a,b){return (b.w-a.w)||(b.pf-a.pf);});
-  $('#leagueTbl').innerHTML=mkTable([{h:'Team',v:function(r){return r.name;}},{h:'W-L-T',v:function(r){return r.w;},num:1,r:function(r){return esc(r.rec);}},
+  $('#leagueTbl').innerHTML=mkTable([{h:'Team',v:function(r){return r.name;},r:function(r){return '<span class="tm-c">'+muMono(r,'mono-s')+'<span>'+esc(r.name)+'</span></span>';}},{h:'W-L-T',v:function(r){return r.w;},num:1,r:function(r){return esc(r.rec);}},
     {h:'PF',v:function(r){return r.pf;},num:1,fmt:function(x){return f(x,1);}},
     {h:'Strength',v:function(r){return r.power;},num:1,fmt:function(x){return f(x,0);}},
     {h:'Rank',v:function(r){return r.pr;},num:1}],rows);
@@ -2160,7 +2160,8 @@ var MU={tab:'tn',open:-1,day:null,dd:false};   /* day = index of a past matchup 
 function muTeam(id){for(var i=0;i<D.teams.length;i++)if(D.teams[i].id===id)return D.teams[i];return {id:id,name:'Team '+id,rec:'',players:[]};}
 function muInit(n){var w=String(n||'?').replace(/[^A-Za-z0-9 ]/g,' ').trim().split(/\s+/).filter(Boolean);if(!w.length)return '?';return (w[0].charAt(0)+(w[1]?w[1].charAt(0):w[0].charAt(1)||'')).toUpperCase();}
 function muHue(id){return ((+id||1)*67+200)%360;}
-function muMono(t,cls){return '<span class="mono '+(cls||'')+'" style="--h:'+muHue(t.id)+'">'+esc(muInit(t.name))+'</span>';}
+function muImg(t){return t.logo?'<img src="'+esc(t.logo)+'" loading="lazy" alt="" onerror="this.remove()">':'';}
+function muMono(t,cls){return '<span class="mono '+(cls||'')+'" style="--h:'+muHue(t.id)+'">'+esc(muInit(t.name))+muImg(t)+'</span>';}
 function muMe(g){var me=null;D.teams.forEach(function(t){if(t.me)me=t.id;});return me!=null&&(g.a===me||g.b===me);}
 function muDayTxt(S){var n=S.dates.length,i=Math.min(S.today,n-1);return S.done?'Final':'Day '+(i+1)+' of '+n;}
 function muWin(g){var a=Math.round(g.pa*100);return {a:a,b:100-a};}

@@ -47,7 +47,9 @@ def build_site_data(cfg, data, league, standings, now_ms):
         w, l, ti, pf = D.record_of(m)
         tb = (t.get("tradeBlock") or m.get("tradeBlock") or {}).get("players") or {}
         block = [int(k) for k, v in tb.items() if v == "ON_THE_BLOCK"]      # NORMAL = not actually offered
-        teams.append({"id": tid, "name": D.team_label(m) if m else f"Team {tid}", "rec": f"{w}-{l}-{ti}",
+        logo = m.get("logo") or t.get("logo") or ""
+        logo = logo if isinstance(logo, str) and logo.startswith("https://") else ""   # ESPN's team picture; blank -> initials
+        teams.append({"id": tid, "name": D.team_label(m) if m else f"Team {tid}", "logo": logo, "rec": f"{w}-{l}-{ti}",
                       "w": w, "pf": r3(pf), "me": tid == cfg["team"], "block": block,
                       "players": [slim(p, standings) for p in players]})
 
