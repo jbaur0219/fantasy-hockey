@@ -266,7 +266,7 @@
      36.9,
      20
     ],
-    "at": 1795239446944,
+    "at": 1795269213375,
     "d": [
      37.0,
      25
@@ -281,13 +281,13 @@
     "pos": "C",
     "tm": "PHI"
    },
-   "gain": 2.63,
+   "gain": 2.82,
    "games": 2,
-   "net": 2.63,
-   "t": 1,
+   "net": 2.82,
+   "t": 0,
    "tier": "make",
    "waiver": false,
-   "why1": "Nazar plays 2 games the rest of this week, Zegras plays 1. Nazar is on CHI's second line and first power-play unit. About +2.6 pts this week."
+   "why1": "Nazar plays 2 games the rest of this week, Zegras plays 1. Nazar is on CHI's second line and first power-play unit. About +2.8 pts this week."
   },
   {
    "add": {
@@ -301,7 +301,7 @@
      31.2,
      21
     ],
-    "at": 1795239446944,
+    "at": 1795269213375,
     "d": [
      27.2,
      20
@@ -316,13 +316,13 @@
     "pos": "RW",
     "tm": "WSH"
    },
-   "gain": 2.51,
+   "gain": 2.6,
    "games": 2,
-   "net": 2.51,
-   "t": 1,
+   "net": 2.6,
+   "t": 0,
    "tier": "make",
    "waiver": false,
-   "why1": "Rinzel plays 2 games the rest of this week, Wilson plays 1. Rinzel is on CHI's top pair and first power-play unit. About +2.5 pts this week."
+   "why1": "Rinzel plays 2 games the rest of this week, Wilson plays 1. Rinzel is on CHI's top pair and first power-play unit. About +2.6 pts this week."
   },
   {
    "add": {
@@ -336,7 +336,7 @@
      37.8,
      24
     ],
-    "at": 1795239446944,
+    "at": 1795269213375,
     "d": [
      35.1,
      24
@@ -354,7 +354,7 @@
    "gain": 1.73,
    "games": 1,
    "net": 1.73,
-   "t": 2,
+   "t": 1,
    "tier": "make",
    "waiver": false,
    "why1": "Lekkerimaki plays 1 game the rest of this week, Andersson plays 0. Lekkerimaki is on VAN's top line and first power-play unit. About +1.7 pts this week."
@@ -371,7 +371,7 @@
      26.2,
      18
     ],
-    "at": 1795239446944,
+    "at": 1795269213375,
     "d": [
      30.8,
      19
@@ -386,15 +386,15 @@
     "pos": "D",
     "tm": "ANA"
    },
-   "gain": 1.39,
+   "gain": 1.44,
    "games": 1,
-   "net": 1.26,
-   "t": 2,
-   "tier": "optional",
+   "net": 1.32,
+   "t": 1,
+   "tier": "make",
    "waiver": false,
    "why1": "Kindel plays 1 game the rest of this week, Mintyukov plays 0. Kindel is on PIT's second line and first power-play unit. About +1.4 pts this week (+1.3 counting what you give up later)."
   }
  ],
  "mp": 8,
- "updated": 1795239446944
+ "updated": 1795269213375
 }
