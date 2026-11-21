@@ -25,9 +25,10 @@
 <div class="controls"><input type="text" id="finderQ" placeholder="Search any player in the league (e.g. Podkolzin)"></div>
 <div class="tfres" id="finderRes"></div><div id="finderOut"></div></div>
 <div class="card"><h2>Trade lab</h2>
-<div class="controls"><label>Trade partner: <select id="tradeTeam"></select></label></div>
-<div class="two"><div><h3>You give</h3><div class="listbox" id="giveList"></div></div><div><h3>You get</h3><div class="listbox" id="getList"></div></div></div>
-<div id="tradeOut" style="margin-top:12px"></div></div></section>
+<div class="tl-partner"><label for="tradeTeam">Trade partner</label><select id="tradeTeam"></select></div>
+<div id="tradeOut"></div>
+<div class="tl-seg" id="tlSeg"><span class="th"></span><button type="button" class="on" data-tls="give">You give <i id="tlGn"></i></button><button type="button" data-tls="get">You get <i id="tlRn"></i></button></div>
+<div class="listbox tl-list" id="giveList"></div><div class="listbox tl-list" id="getList" hidden></div></div></section>
 <section id="t-planner" style="display:none"></section>
 <section id="t-gameplan" style="display:none"></section>
 <section id="t-streams" style="display:none"></section>

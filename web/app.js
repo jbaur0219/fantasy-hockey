@@ -168,31 +168,47 @@ function ownerTeam(id){return D.teams.filter(function(t){return t.players.some(f
 function onBlock(p){var t=ownerTeam(p.id);return !!(t&&!t.me&&t.block&&t.block.indexOf(p.id)>=0);}
 function listHtml(ps){
   return ps.slice().sort(function(a,b){return b.out-a.out;}).map(function(p){
-    return '<label class="opt"><input type="checkbox" value="'+p.id+'"> '+esc(p.n)+' <span class="muted">'+esc(p.pos)+' &middot; '+f(p.out)+(p.slot==='IR'?' &middot; IR':'')+'</span>'+(onBlock(p)?' <span class="tag">on block</span>':'')+'</label>';}).join('');
+    var sub=esc(p.pos)+' &middot; '+esc(p.tm)+(p.slot==='IR'?' &middot; IR':'')+(p.inj&&p.inj!=='ACTIVE'?' &middot; '+esc(p.inj==='DAY_TO_DAY'?'DTD':p.inj):'');
+    return '<label class="opt tl-row"><input type="checkbox" value="'+p.id+'"><span class="tl-av">'+avHtml(p.id,p.tm)+'</span><span class="tl-nm"><b>'+esc(p.n)+'</b><span>'+sub+(onBlock(p)?' <i class="tag">on block</i>':'')+'</span></span><span class="tl-pt">'+f(p.out)+'<i>pts/gm</i></span></label>';}).join('');
 }
 function theTeam(){var id=$('#tradeTeam').value;return D.teams.filter(function(t){return String(t.id)===id;})[0];}
 function checked(sel){return $$(sel+' input:checked').map(function(c){return +c.value;});}
 function tradeTeam(){var t=theTeam();$('#getList').innerHTML=t?listHtml(t.players):'';runTrade();}
 function box(t,v){return '<div class="box"><div class="t">'+t+'</div><div class="v">'+v+'</div></div>';}
 function delta(d){return '<span class="'+(d>0.5?'good':(d<-0.5?'bad':''))+'">'+sgn(d,1)+'</span>';}
+function tlCount(){
+  var g=checked('#giveList').length,r=checked('#getList').length;
+  var a=$('#tlGn'),b=$('#tlRn');if(a)a.textContent=g?g:'';if(b)b.textContent=r?r:'';
+}
+function tlTile(name,b,a,d){
+  var cls=d>0.5?'good':(d<-0.5?'bad':'');
+  return '<div class="tl-tile"><div class="tl-k">'+name+'</div><div class="tl-v">'+f(a,1)+'</div><div class="tl-d '+cls+'">'+sgn(d,1)+' pts/wk</div><div class="tl-s">now '+f(b,1)+'</div></div>';
+}
+function tlNames(ids,list){
+  var n=ids.map(function(id){var p=list.filter(function(x){return x.id===id;})[0];return p?shortName(p.n):'';}).filter(Boolean);
+  return n.length?esc(n.join(', ')):'<span class="muted">nobody yet</span>';
+}
 function runTrade(){
   var t=theTeam(),out=$('#tradeOut');
   var give=checked('#giveList'),get=checked('#getList');
-  if(!t||(!give.length&&!get.length)){out.innerHTML='<div class="muted">Pick players on each side to see how a trade changes both lineups.</div>';return;}
+  tlCount();
+  if(!t||(!give.length&&!get.length)){out.innerHTML='<div class="tl-empty"><b>Build a trade</b><span>Pick players below on each side and the effect on both lineups shows up here.</span></div>';return;}
   var mine=D.mine,theirs=t.players;
   var myAfter=mine.filter(function(p){return give.indexOf(p.id)<0;}).concat(theirs.filter(function(p){return get.indexOf(p.id)>=0;}));
   var thAfter=theirs.filter(function(p){return get.indexOf(p.id)<0;}).concat(mine.filter(function(p){return give.indexOf(p.id)>=0;}));
   var b1=lineupWithFA(mine,1),a1=lineupWithFA(myAfter,1+Math.max(0,give.length-get.length)),b2=lineupWithFA(theirs,1),a2=lineupWithFA(thAfter,1+Math.max(0,get.length-give.length));
-  var d1=a1-b1,d2=a2-b2,v;
-  if(d1>0.5&&d2>0.5)v='Win-win: it helps both lineups, so they might accept.';
-  else if(d1>0.5&&d2<=0.5)v='Helps you but costs them about '+f(-d2,1)+' pts/week, so they may decline.';
-  else if(d1<=0.5&&d2>0.5)v='Helps them more than you. You would lose about '+f(Math.max(0,-d1),1)+' pts/week.';
-  else v='Little change for either side.';
+  var d1=a1-b1,d2=a2-b2,v,vc;
+  if(d1>0.5&&d2>0.5){v='Win-win: it helps both lineups, so they might accept.';vc='ok';}
+  else if(d1>0.5&&d2<=0.5){v='Helps you but costs them about '+f(-d2,1)+' pts/week, so they may decline.';vc='wn';}
+  else if(d1<=0.5&&d2>0.5){v='Helps them more than you. You would lose about '+f(Math.max(0,-d1),1)+' pts/week.';vc='bd';}
+  else{v='Little change for either side.';vc='gy';}
   var size=myAfter.length,note='';
-  if(size>22)note='<div class="warn">You would have '+size+' players and need to drop '+(size-22)+'.</div>';
-  else if(size<22)note='<div class="muted">You would have '+(22-size)+' open roster spot(s).</div>';
-  out.innerHTML='<div class="res">'+box('You: weekly points',f(b1,1)+' to '+f(a1,1)+' '+delta(d1))+box(esc(t.name)+': weekly points',f(b2,1)+' to '+f(a2,1)+' '+delta(d2))+'</div><div class="verdict">'+esc(v)+'</div>'+note
-  +'<div class="muted" style="margin-top:8px">Points per week over the next 4 weeks: each player\'s projected points per game times his team\'s games, using each team\'s best lineup (9 F, 5 D, 1 UTIL, 2 G). It does not know what a manager actually needs, so treat it as a starting point.</div>';
+  if(size>22)note='<div class="tl-note warn">You would have '+size+' players and need to drop '+(size-22)+'.</div>';
+  else if(size<22)note='<div class="tl-note">You would have '+(22-size)+' open roster spot'+(22-size===1?'':'s')+'.</div>';
+  out.innerHTML='<div class="tl-res">'+tlTile('You',b1,a1,d1)+tlTile(esc(t.name),b2,a2,d2)+'</div>'
+    +'<div class="tl-verdict v-'+vc+'">'+esc(v)+'</div>'
+    +'<div class="tl-sum"><div><span>You give</span>'+tlNames(give,mine)+'</div><div><span>You get</span>'+tlNames(get,theirs)+'</div></div>'+note
+    +'<details class="tl-how"><summary>How this is calculated</summary><div class="muted">Points per week over the next 4 weeks: each player\'s projected points per game times his team\'s games, using each team\'s best lineup (9 F, 5 D, 1 UTIL, 2 G). It does not know what a manager actually needs, so treat it as a starting point.</div></details>';
 }
 /* ---------- trading block + trade finder ---------- */
 var TF={id:null,q:''};
@@ -312,6 +328,14 @@ function tradeInit(){
   $('#giveList').innerHTML=listHtml(D.mine);
   sel.addEventListener('change',tradeTeam);
   $('#giveList').addEventListener('change',runTrade);$('#getList').addEventListener('change',runTrade);
+  var seg=$('#tlSeg');
+  if(seg)seg.addEventListener('click',function(e){
+    var b=e.target.closest?e.target.closest('[data-tls]'):null;if(!b)return;
+    var k=b.getAttribute('data-tls');
+    seg.classList.toggle('two',k==='get');
+    $$('button',seg).forEach(function(x){x.classList.toggle('on',x===b);});
+    $('#giveList').hidden=(k!=='give');$('#getList').hidden=(k!=='get');
+  });
   tradeTeam();
   blockRender();finderRender();
   $('#finderQ').addEventListener('input',function(){TF.q=this.value;finderRender();});
