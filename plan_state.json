@@ -266,7 +266,7 @@
      36.9,
      20
     ],
-    "at": 1795232440345,
+    "at": 1795235494539,
     "d": [
      37.0,
      25
@@ -301,7 +301,7 @@
      31.2,
      21
     ],
-    "at": 1795232440345,
+    "at": 1795235494539,
     "d": [
      27.2,
      20
@@ -326,41 +326,6 @@
   },
   {
    "add": {
-    "id": 4697409,
-    "n": "Jake Neighbours",
-    "pos": "LW",
-    "tm": "STL"
-   },
-   "base": {
-    "a": [
-     37.9,
-     22
-    ],
-    "at": 1795232440345,
-    "d": [
-     40.4,
-     24
-    ]
-   },
-   "conf": "optional",
-   "cost": 0.0,
-   "day": "Sat Nov 21",
-   "drop": {
-    "id": 5149155,
-    "n": "Will Smith",
-    "pos": "RW",
-    "tm": "SJ"
-   },
-   "gain": 1.6,
-   "games": 2,
-   "net": 1.6,
-   "t": 1,
-   "tier": "optional",
-   "waiver": false,
-   "why1": "Neighbours plays 2 games the rest of this week, Smith plays 1. Neighbours is on STL's top line and first power-play unit. About +1.6 pts this week."
-  },
-  {
-   "add": {
     "id": 5080159,
     "n": "Jonathan Lekkerimaki",
     "pos": "RW",
@@ -371,7 +336,7 @@
      37.8,
      24
     ],
-    "at": 1795232440345,
+    "at": 1795235494539,
     "d": [
      35.1,
      24
@@ -386,9 +351,9 @@
     "pos": "D",
     "tm": "VGK"
    },
-   "gain": 1.72,
+   "gain": 1.73,
    "games": 1,
-   "net": 1.72,
+   "net": 1.73,
    "t": 2,
    "tier": "make",
    "waiver": false,
@@ -406,14 +371,14 @@
      26.2,
      18
     ],
-    "at": 1795232440345,
+    "at": 1795235494539,
     "d": [
      30.8,
      19
     ]
    },
    "conf": "optional",
-   "cost": 0.144,
+   "cost": 0.127,
    "day": "Sun Nov 22",
    "drop": {
     "id": 5080154,
@@ -423,13 +388,13 @@
    },
    "gain": 1.39,
    "games": 1,
-   "net": 1.24,
+   "net": 1.26,
    "t": 2,
    "tier": "optional",
    "waiver": false,
-   "why1": "Kindel plays 1 game the rest of this week, Mintyukov plays 0. Kindel is on PIT's second line and first power-play unit. About +1.4 pts this week (+1.2 counting what you give up later)."
+   "why1": "Kindel plays 1 game the rest of this week, Mintyukov plays 0. Kindel is on PIT's second line and first power-play unit. About +1.4 pts this week (+1.3 counting what you give up later)."
   }
  ],
  "mp": 8,
- "updated": 1795232440345
+ "updated": 1795235494539
 }
