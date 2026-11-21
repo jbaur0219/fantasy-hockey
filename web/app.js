@@ -179,6 +179,7 @@ function delta(d){return '<span class="'+(d>0.5?'good':(d<-0.5?'bad':''))+'">'+s
 function tlCount(){
   var g=checked('#giveList').length,r=checked('#getList').length;
   var a=$('#tlGn'),b=$('#tlRn');if(a)a.textContent=g?g:'';if(b)b.textContent=r?r:'';
+  var rs=$('#tlReset');if(rs)rs.hidden=!(g||r);
 }
 function tlTile(name,b,a,d){
   var cls=d>0.5?'good':(d<-0.5?'bad':'');
@@ -328,6 +329,11 @@ function tradeInit(){
   $('#giveList').innerHTML=listHtml(D.mine);
   sel.addEventListener('change',tradeTeam);
   $('#giveList').addEventListener('change',runTrade);$('#getList').addEventListener('change',runTrade);
+  var rs=$('#tlReset');
+  if(rs)rs.addEventListener('click',function(){
+    $$('#giveList input:checked,#getList input:checked').forEach(function(c){c.checked=false;});
+    runTrade();
+  });
   var seg=$('#tlSeg');
   if(seg)seg.addEventListener('click',function(e){
     var b=e.target.closest?e.target.closest('[data-tls]'):null;if(!b)return;
