@@ -148,7 +148,7 @@ table.edge{width:100%;border-collapse:collapse;font-size:13px}table.edge th,tabl
 .cb .cbx{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:8px;width:40px;font-size:20px;cursor:pointer}
 .cbl{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:40;background:var(--card);border:1px solid var(--line);border-radius:10px;
 max-height:min(48vh,380px);overflow:auto;box-shadow:0 8px 24px rgba(16,24,40,.25);-webkit-overflow-scrolling:touch}
-.cbl .gh2{position:sticky;top:0;background:var(--soft);color:var(--text);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:6px 10px}
+.cbl .gh2{position:sticky;top:0;z-index:5;background:linear-gradient(var(--soft),var(--soft)),var(--card);color:var(--text);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:6px 10px}
 .cbl .opt2{display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--line);cursor:pointer;font-size:14px}
 .cbl .opt2.act,.cbl .opt2:hover{background:var(--soft)}
 .cbl .opt2 .nm{flex:1;min-width:0}.cbl .opt2 .nm b{display:block;font-weight:600}
@@ -269,8 +269,8 @@ max-height:min(48vh,380px);overflow:auto;box-shadow:0 8px 24px rgba(16,24,40,.25
   --gl-sh:0 10px 30px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3),inset 0 0 0 .5px rgba(255,255,255,.08);
   --lens:rgba(255,255,255,.13)}}
 html{background:var(--bg);-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
-body{background:var(--bg);color:var(--label);font:17px/1.29 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;
-  letter-spacing:-.022em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;transition:background .45s}
+body{background:transparent;color:var(--label);font:17px/1.29 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+  letter-spacing:-.022em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .num,.pc-big,.big,.team .s,.rec-v,.sb-sc,.mono,.lh-t{font-family:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .wrap{max-width:720px;margin:0 auto;padding:0 16px calc(118px + var(--sab));background:var(--bg);min-height:100vh;transform-origin:50% 0}
 .muted{color:var(--label2);font-size:15px}.why{color:var(--label2);font-size:15px}
@@ -377,7 +377,8 @@ svg .k{fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejo
 #bnav.min{justify-content:space-between}
 
 /* ---------- sheet open: the page steps back ---------- */
-html.sheet-on,html.sheet-on body{background:#000}
+body:before{content:'';position:fixed;inset:0;z-index:-1;background:#000;opacity:0;pointer-events:none;transition:opacity .5s var(--soft-spring)}
+html.sheet-on body:before{opacity:1}
 html.sheet-on .wrap{transform:translateY(calc(var(--sp,0) * (var(--sat) + 10px))) scale(calc(1 - var(--sp,0) * .075));
   clip-path:inset(var(--clipy,0px) 0 0 0 round calc(var(--sp,0) * 14px));overflow:hidden}
 html.sh-anim .wrap{transition:transform .5s var(--soft-spring),clip-path .5s var(--soft-spring)}
@@ -734,3 +735,14 @@ td{border-bottom:.5px solid var(--sep)!important}tr:last-child td{border-bottom:
 .rrow{display:flex;align-items:center;gap:10px;min-width:0}.rrow .av{width:40px;height:40px;margin:0}.rrow .rtx{min-width:0}
 .rsrow{flex-wrap:nowrap!important}.rsrow .sr.rpts{width:auto!important;flex-direction:column;align-items:flex-end;gap:0;line-height:1.15}
 .rpts b{font-size:17px}.rpts .muted{font-size:12px}
+
+/* ---------- polish fixes ---------- */
+/* position pills (All / F / D / G): spaced like the other chip rows */
+#rosterPos,#faPos{display:inline-flex;flex-wrap:wrap;gap:8px}
+/* suggestion list: header is opaque and always above rows and headshots */
+.cbl .gh2{z-index:5;background:linear-gradient(var(--fill4),var(--fill4)),var(--card)}
+.cbl .opt2 .av,.cbl .opt2 .av .tl{z-index:0}
+/* schedule table: no pinned first column (scrolled columns used to peek out beside it) */
+.scroll:has(table.edge){margin:0;padding:0}
+.scroll table.edge th:first-child,.scroll table.edge td:first-child{position:static!important;background:none!important;box-shadow:none!important;max-width:none!important;overflow:visible!important}
+table.edge th,table.edge td{padding:8px 4px!important}

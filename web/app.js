@@ -1255,7 +1255,7 @@ function glWrap(c){
 var SH={open:false,closing:0};
 function sheetOpen(){
   var m=document.getElementById('modal'),bx=m.querySelector('.box'),de=document.documentElement;if(!bx)return;
-  clearTimeout(SH.closing);
+  clearTimeout(SH.closing);SH.closing_busy=false;
   var x=bx.querySelector('#mx');if(x){x.innerHTML=SF.xmark;x.className='x gbtn glass';x.setAttribute('aria-label','Close');}
   if(!bx.querySelector('.grab'))bx.insertAdjacentHTML('afterbegin','<div class="grab"></div>');
   var wrap=document.querySelector('.wrap'),y=window.pageYOffset||0;
@@ -1275,12 +1275,32 @@ function sheetClose(){
   de.classList.add('sh-anim');de.style.setProperty('--sp','0');
   if(bx){bx.style.transition='';bx.style.transform='translateY(105%)';}
   m.classList.add('fading');
+  SH.closing_busy=true;
   SH.closing=setTimeout(function(){
+    SH.closing_busy=false;
     m.classList.remove('open','fading');de.classList.remove('sheet-on','sh-anim');
     var w=document.querySelector('.wrap');w.style.transformOrigin='';
     if(bx)bx.style.transform='';
   },RM?0:480);
 }
+/* iOS keeps odd state after the keyboard closes or the app is reopened: the top bar can end up shifted under the status bar,
+   and a closed sheet can leave the "page stepped back" look behind. Put both back to normal. */
+function glReset(){
+  var de=document.documentElement,w=document.querySelector('.wrap'),m=document.getElementById('modal');
+  if(!SH.open&&!SH.closing_busy&&de.classList.contains('sheet-on')){
+    de.classList.remove('sheet-on','sh-anim');de.style.removeProperty('--sp');
+    if(w){w.style.transformOrigin='';w.style.removeProperty('--clipy');}
+    if(m)m.classList.remove('open','fading');
+    document.body.classList.remove('mlock');document.body.style.top='';
+  }
+  var vv=window.visualViewport;
+  if(vv&&(vv.offsetTop>1||vv.pageTop<0)&&!document.body.classList.contains('mlock'))window.scrollTo(window.pageXOffset||0,Math.max(0,window.pageYOffset||0));
+}
+document.addEventListener('visibilitychange',function(){if(!document.hidden)glReset();});
+window.addEventListener('pageshow',glReset);
+document.addEventListener('focusout',function(e){
+  if(e.target&&/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName))setTimeout(function(){glReset();window.scrollTo(window.pageXOffset||0,window.pageYOffset||0);},120);
+});
 function sheetDrag(bx){
   var de=document.documentElement,y0=null,dy=0,t=[],drag=false,H=1;
   function start(y){y0=y;dy=0;t=[[y,performance.now()]];drag=false;H=bx.offsetHeight||1;}
