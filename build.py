@@ -87,6 +87,20 @@ def health_report(site_data, nhl_counts):
             "healthy_plan": lines["state"] == "live" or (lines["state"] == "cached" and (R.STATE["cache_age_h"] or 0) <= 24)}
 
 
+CORE_SECTIONS = ("streams", "gameplan", "planner")   # the move advice; a build missing any of these is degraded
+
+
+def write_health_file(site_data, now_ms):
+    """site/health.json: a small summary the publish check (tools/publish_gate.py) compares with the live site."""
+    h = site_data.get("health") or {}
+    missing = [k for k in CORE_SECTIONS if not site_data.get(k)]
+    out = {"level": h.get("level", "ok"), "items": h.get("items", []), "missing": missing,
+           "core_ok": not missing, "at": now_ms}
+    Path("site/health.json").write_text(json.dumps(out), encoding="utf-8")
+    if missing:
+        print("  DEGRADED: these sections failed: " + ", ".join(missing))
+
+
 def write_notify_payload(site_data, now_ms):
     """The text of the morning push notification, for notify.py."""
     clock = site_data.get("clock")
@@ -259,6 +273,7 @@ def _main():
     Path("site/index.html").write_text(html_text, encoding="utf-8")
     if gamelog is not None:
         Path("site/gamelog.json").write_text(json.dumps(gamelog, separators=(",", ":")), encoding="utf-8")
+    write_health_file(site_data, now_ms)
     try:
         pwa.write_files("site")
         write_notify_payload(site_data, now_ms)

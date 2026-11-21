@@ -727,3 +727,8 @@ td{border-bottom:.5px solid var(--sep)!important}tr:last-child td{border-bottom:
 .wi-verdict{margin-top:12px;font-weight:600}
 .wi-row .av{flex:none}
 .wi-lbl{flex:none}
+
+/* roster: section headers and a headshot on each row */
+.rsec{margin:14px 0 2px;font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted, #6e6e73)}
+.rsec:first-child{margin-top:4px}
+.rrow{display:flex;align-items:center;min-width:0}.rrow .rtx{min-width:0}
