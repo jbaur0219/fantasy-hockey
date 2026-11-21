@@ -11,10 +11,13 @@ week (rosterForCurrentScoringPeriod / rosterForMatchupPeriod), those are passed 
    "games": [{"a": team id, "b": team id, "as": pts, "bs": pts, "ap": proj, "bp": proj, "pa": win chance of a,
               "ad": [pts per day], "bd": [...], "al": games left a, "bl": games left b}],
    "tn": {"EDM": [puck drop ms, "CAR", 0 = away / 1 = home]},
-   "pt": {player id: points today}, "pw": {player id: points this week}}
+   "pt": {player id: points today}, "pw": {player id: points this week},
+   "dp": {day index: {team id: [[player id, slot, points, name, "POS", "TM"], ...]}}}    each past day's real lineup
+slot is F / D / G / UTIL (counted) or BN / IR (did not count). A player is listed when he scored or was in the lineup.
 """
 import math
 
+import analyze as A
 import dashboard as D
 
 
@@ -30,6 +33,49 @@ def _player_pts(side, key):
         v = pe.get("appliedStatTotal")
         if pid is not None and v is not None:
             out[str(pid)] = _r1(v)
+    return out
+
+
+def _entry_row(e, season, abbr):
+    """[player id, slot, points, name, position, team] for one roster entry of one past day, or None."""
+    pe = e.get("playerPoolEntry") or {}
+    pl = pe.get("player") or {}
+    pid = e.get("playerId", pl.get("id"))
+    if pid is None:
+        return None
+    slot = A.slot_name(e.get("lineupSlotId"))
+    v = pe.get("appliedStatTotal")
+    pts = _r1(v)
+    if not pts and slot in ("BN", "IR"):
+        return None                                  # sat on the bench and scored nothing: not worth listing
+    q = A.parse_player(pl, season, slot=slot) if pl else {"name": "?", "pos": "?", "team_id": None}
+    return [pid, slot, pts, q.get("name", "?"), q.get("pos", "?"), abbr.get(q.get("team_id"), "?")]
+
+
+def past_lineups(cfg, league, mp, start, today, abbr, fetch=None):
+    """Each finished day of this matchup week: every team's real lineup that day (who was in a counting slot, who was
+    on the bench) and what each player scored. One ESPN request per day. A day that cannot be read is left out and the
+    page falls back to game logs for it."""
+    fetch = fetch or A.espn_get
+    base = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/fhl/seasons/{cfg['season']}/segments/0/leagues/{cfg['league']}"
+    out = {}
+    for i in range(0, today):
+        try:
+            js = fetch(base, cfg["cookies"], params=[("view", "mMatchup"), ("view", "mMatchupScore"), ("scoringPeriodId", start + i)])
+        except (Exception, SystemExit) as e:         # an extra: one bad day never breaks the build
+            print(f"  lineup for day {i + 1} skipped ({type(e).__name__}: {e})")
+            continue
+        day = {}
+        for m in (js.get("schedule") or []):
+            if m.get("matchupPeriodId") != mp:
+                continue
+            for side in (m.get("home") or {}, m.get("away") or {}):
+                ents = (side.get("rosterForCurrentScoringPeriod") or {}).get("entries") or []
+                rows = [r for r in (_entry_row(e, cfg["season"], abbr) for e in ents) if r]
+                if side.get("teamId") is not None and ents:
+                    day[str(side["teamId"])] = rows
+        if day:
+            out[str(i)] = day
     return out
 
 
@@ -91,5 +137,11 @@ def build(cfg, data, league, standings, now_ms):
 
     me = cfg["team"]
     out.sort(key=lambda g: (0 if me in (g["a"], g["b"]) else 1, abs(g["pa"] - 0.5)))    # yours first, then closest
-    return {"mp": mp, "dates": clock["dates"], "labels": clock["labels"], "today": max(0, min(sp - start, length - 1)),
-            "games": out, "tn": tonight(data, sp), "pt": pt, "pw": pw, "done": not left_periods}
+    today = max(0, min(sp - start, length - 1))
+    try:
+        dp = past_lineups(cfg, league, mp, start, today, abbr)
+    except Exception as e:
+        print(f"  past lineups skipped ({type(e).__name__}: {e})")
+        dp = {}
+    return {"mp": mp, "dates": clock["dates"], "labels": clock["labels"], "today": today,
+            "games": out, "tn": tonight(data, sp), "pt": pt, "pw": pw, "done": not left_periods, "dp": dp}

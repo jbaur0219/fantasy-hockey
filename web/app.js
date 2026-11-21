@@ -2240,39 +2240,58 @@ function muTonight(g,S){
   h+='<div class="muted mu-note">'+(live?'Points are from the last update ('+esc(D.updated)+'). Gray numbers are projections for games that have not started.':'Gray numbers are projected points for tonight. Final points show in the day totals above and on the Week tab.')+'</div>';
   return h;
 }
-/* a past day: who played and what they scored, from the game logs (current rosters) */
+/* a past day: who played and what they scored. With ESPN's lineup for that day (S.dp) it also says who was on the bench, because
+   bench points do not count. Without it (older data, or ESPN would not answer) it falls back to the game logs on today's rosters. */
 function muPastFill(g,S,i){
   var el=document.getElementById('muPast');if(!el)return;
-  if(typeof glLoad!=='function'){el.innerHTML='<div class="muted mu-note">Not available.</div>';return;}
-  glLoad().then(function(d){
+  var dp=S.dp&&S.dp[String(i)];
+  function go(d){
     el=document.getElementById('muPast');if(!el||muShown(S)!==i||MU.tab!=='tn')return;      /* the person moved on while it loaded */
-    if(!d){el.innerHTML='<div class="muted mu-note">Game logs are not available right now, so player points for this day cannot be shown. The team totals above are still right.</div>';return;}
-    var A=muTeam(g.a),B=muTeam(g.b),key=S.dates[i];
+    var A=muTeam(g.a),B=muTeam(g.b),key=S.dates[i],real=!!(dp&&dp[String(g.a)]&&dp[String(g.b)]);
+    function row(id){return glRows(id).filter(function(x){return muEtd(x[0])===key;})[0]||null;}
+    /* one list of {p,r,pts,bench} per team */
     function played(T){
-      return T.players.map(function(p){
-        var r=glRows(p.id).filter(function(x){return muEtd(x[0])===key;})[0];return r?{p:p,r:r}:null;
-      }).filter(Boolean).sort(function(x,y){return y.r[3]-x.r[3];});
+      if(real){
+        return dp[String(T.id)].map(function(e){
+          var k=ALL[e[0]],r=row(e[0]);
+          var q=k?{id:k.id,n:k.n,pos:k.pos,tm:k.tm,grp:k.grp,inj:k.inj}:{id:e[0],n:e[3],pos:e[4],tm:e[5],grp:e[4]==='G'?'G':e[4]==='D'?'D':'F'};
+          var bench=e[1]==='BN'||e[1]==='IR';
+          return {p:q,r:r,pts:e[2],bench:bench,ir:e[1]==='IR'};
+        }).filter(function(x){return x.pts!==0||x.r;}).sort(function(x,y){return y.pts-x.pts;});
+      }
+      return T.players.map(function(p){var r=row(p.id);return r?{p:p,r:r,pts:r[3],bench:false}:null;}).filter(Boolean).sort(function(x,y){return y.pts-x.pts;});
     }
     var pa=played(A),pb=played(B);
+    function cnt(L){return L.filter(function(x){return !x.bench;}).length;}
     var ea=document.getElementById('muPa'),eb=document.getElementById('muPb');
-    if(ea)ea.textContent=pa.length+' played';if(eb)eb.textContent=pb.length+' played';
+    if(ea)ea.textContent=cnt(pa)+' played';if(eb)eb.textContent=cnt(pb)+' played';
     function cell(x,right){
       if(!x)return '<div class="mu-c'+(right?' r':'')+'"></div>';
-      var p=x.p;
-      return '<div class="mu-c'+(right?' r':'')+'"><span class="mu-nm">'+(right?muInj(p):'')+'<a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'+(right?'':muInj(p))+'</span>'
-        +'<span class="mu-g">'+esc(p.pos)+' '+esc(p.tm)+' &middot; '+glOpp(x.r)+'</span></div>';
+      var p=x.p,tag=(x.bench&&!x.ir)?'Bench':'';
+      return '<div class="mu-c'+(x.bench?' off':'')+(right?' r':'')+'"><span class="mu-nm">'+(right?muInj(p):'')+'<a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'+(right?'':muInj(p))+'</span>'
+        +'<span class="mu-g">'+esc(p.pos)+' '+esc(p.tm)+(x.r?' &middot; '+glOpp(x.r):'')+(tag?' &middot; <b class="mu-bt">'+tag+'</b>':'')+'</span></div>';
     }
-    function pts(x){return '<div class="mu-p">'+(x?'<b class="'+(x.r[3]<0?'mu-neg':'')+'">'+f(x.r[3],1)+'</b>':'')+'</div>';}
+    function pts(x){return '<div class="mu-p">'+(x?'<b class="'+(x.bench?'mu-bpts':x.pts<0?'mu-neg':'')+'">'+f(x.pts,1)+'</b>':'')+'</div>';}
+    function block(label,la,lb,sub){
+      var n=Math.max(la.length,lb.length);if(!n)return '';
+      var h='<div class="mu-gh">'+label+(sub?' <span class="mu-gs">'+sub+'</span>':'')+'</div>';
+      for(var k=0;k<n;k++)h+='<div class="mu-lr">'+cell(la[k],false)+pts(la[k])+pts(lb[k])+cell(lb[k],true)+'</div>';
+      return h;
+    }
     var h='';
     [['F','Forwards'],['D','Defense'],['G','Goalies']].forEach(function(gr){
-      var a=pa.filter(function(x){return x.p.grp===gr[0];}),b=pb.filter(function(x){return x.p.grp===gr[0];}),n=Math.max(a.length,b.length);
-      if(!n)return;
-      h+='<div class="mu-gh">'+gr[1]+'</div>';
-      for(var k=0;k<n;k++)h+='<div class="mu-lr">'+cell(a[k],false)+pts(a[k])+pts(b[k])+cell(b[k],true)+'</div>';
+      function pick(L){return L.filter(function(x){return !x.bench&&x.p.grp===gr[0];});}
+      h+=block(gr[1],pick(pa),pick(pb));
     });
-    if(!h)h='<div class="muted mu-note">None of these players had a game on '+esc(dayShort(S.labels[i]))+'.</div>';
-    el.innerHTML=h+'<div class="muted mu-note">Player points come from each player\'s game log on today\'s rosters, so they can differ from the day totals above (bench players, or anyone added or dropped since).</div>';
-  });
+    var ba=pa.filter(function(x){return x.bench;}),bb=pb.filter(function(x){return x.bench;});
+    h+=block('Bench',ba,bb,'did not count');
+    if(!h)h='<div class="muted mu-note">Nobody on these two rosters had a game on '+esc(dayShort(S.labels[i]))+'.</div>';
+    var note=real?'Only players in a lineup spot that day count toward the score. Bench points are shown in gray and left out of the totals.'
+      :'ESPN\'s lineup for this day is not available, so this shows each player\'s game log on today\'s rosters. Anyone who sat on a bench that day is not marked, and the points can differ from the day totals above.';
+    if(!d&&!real)note='Game logs are not available right now, so player points for this day cannot be shown. The team totals above are still right.';
+    el.innerHTML=h+'<div class="muted mu-note">'+note+'</div>';
+  }
+  if(typeof glLoad==='function'){glLoad().then(go,function(){go(null);});}else go(null);
 }
 function muWeek(g,S){
   var A=muTeam(g.a),B=muTeam(g.b),mx=1,h='';

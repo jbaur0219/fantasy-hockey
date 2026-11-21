@@ -830,6 +830,9 @@ button.mu-pick.open .mu-cv{transform:rotate(180deg)}
 .mu-ds.w{font-weight:700;color:var(--label)}
 .mu-ck{display:flex;justify-content:flex-end;color:var(--tint)}.mu-ck svg{width:14px;height:11px}
 .mu-neg{color:var(--red)}
+.mu-gs{font-weight:500;text-transform:none;letter-spacing:0;color:var(--label3);margin-left:4px}
+.mu-bt{font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--orange)}
+.mu-bpts{color:var(--label3)!important;font-weight:500;text-decoration:line-through;text-decoration-thickness:1px}
 @keyframes muDD{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.mu-dd{animation:none}.mu-cv,button.mu-pick{transition:none}}
 .mu-gh{font-size:13px;font-weight:600;text-transform:uppercase;color:var(--label2);margin:16px 2px 2px}
