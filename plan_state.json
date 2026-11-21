@@ -333,10 +333,10 @@
    },
    "base": {
     "a": [
-     31.2,
-     21
+     34.4,
+     22
     ],
-    "at": 1795284288709,
+    "at": 1795302105614,
     "d": [
      35.1,
      24
@@ -361,41 +361,6 @@
   },
   {
    "add": {
-    "id": 4697409,
-    "n": "Jake Neighbours",
-    "pos": "LW",
-    "tm": "STL"
-   },
-   "base": {
-    "a": [
-     37.9,
-     22
-    ],
-    "at": 1795284288709,
-    "d": [
-     27.2,
-     20
-    ]
-   },
-   "conf": "lean",
-   "cost": 0.0,
-   "day": "Sun Nov 22",
-   "drop": {
-    "id": 2970615,
-    "n": "Tom Wilson",
-    "pos": "RW",
-    "tm": "WSH"
-   },
-   "gain": 1.6,
-   "games": 1,
-   "net": 1.6,
-   "t": 1,
-   "tier": "make",
-   "waiver": false,
-   "why1": "Neighbours plays 1 game the rest of this week, Wilson plays 0. Neighbours is on STL's top line and first power-play unit. About +1.6 pts this week."
-  },
-  {
-   "add": {
     "id": 5291947,
     "n": "Ben Kindel",
     "pos": "C",
@@ -406,14 +371,14 @@
      26.2,
      18
     ],
-    "at": 1795284288709,
+    "at": 1795302105614,
     "d": [
      30.8,
      19
     ]
    },
    "conf": "optional",
-   "cost": 0.304,
+   "cost": 0.298,
    "day": "Sun Nov 22",
    "drop": {
     "id": 5080154,
@@ -428,8 +393,43 @@
    "tier": "make",
    "waiver": false,
    "why1": "Kindel plays 1 game the rest of this week, Mintyukov plays 0. Kindel is on PIT's second line and first power-play unit. About +1.4 pts this week (+1.1 counting what you give up later)."
+  },
+  {
+   "add": {
+    "id": 5149204,
+    "n": "Gabe Perreault",
+    "pos": "RW",
+    "tm": "NYR"
+   },
+   "base": {
+    "a": [
+     32.0,
+     22
+    ],
+    "at": 1795302105614,
+    "d": [
+     27.2,
+     20
+    ]
+   },
+   "conf": "optional",
+   "cost": 0.37,
+   "day": "Sun Nov 22",
+   "drop": {
+    "id": 2970615,
+    "n": "Tom Wilson",
+    "pos": "RW",
+    "tm": "WSH"
+   },
+   "gain": 1.43,
+   "games": 1,
+   "net": 1.06,
+   "t": 1,
+   "tier": "make",
+   "waiver": false,
+   "why1": "Perreault plays 1 game the rest of this week, Wilson plays 0. Perreault is on NYR's top line and first power-play unit. About +1.4 pts this week (+1.1 counting what you give up later)."
   }
  ],
  "mp": 8,
- "updated": 1795284288709
+ "updated": 1795302105614
 }
