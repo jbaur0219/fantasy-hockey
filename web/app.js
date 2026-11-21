@@ -1548,7 +1548,8 @@ function uiRecord(){
     h+='<div class="rec">'
       +'<div class="rec-t"><div class="rec-v '+(M.pts>=0?'good':'bad')+'">'+sgn(M.pts,1)+'</div><div class="rec-k">Moves you made ('+M.n+')</div><div class="rec-s">'+M.wins+' of '+M.n+' came out ahead</div></div>'
       +'<div class="rec-t"><div class="rec-v '+(S.pts>0?'warn':'muted')+'">'+sgn(S.pts,1)+'</div><div class="rec-k">Moves you skipped ('+S.n+')</div><div class="rec-s">'+(S.n?'what they would have added':'none yet')+'</div></div></div>';
-    if(st&&st.n)h+='<div class="muted" style="margin:6px 0">Strong calls: '+st.wins+' of '+st.n+' came out ahead ('+sgn(st.pts,1)+' pts).</div>';
+    var cf=[['Strong',st],['Lean',R2.lean],['Optional',R2.optional]].filter(function(c){return c[1]&&c[1].n;});
+    if(cf.length)h+='<div class="muted" style="margin:6px 0">By rating: '+cf.map(function(c){return c[0]+' '+c[1].wins+' of '+c[1].n+' ahead ('+sgn(c[1].pts,1)+' pts)';}).join(' &middot; ')+'</div>';
     var rows=R2.moves.filter(function(r){return r.actual!=null;}).slice(0,8);
     if(rows.length){
       h+='<ul class="pbl rec-l">'+rows.map(function(r){

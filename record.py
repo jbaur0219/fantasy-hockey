@@ -121,5 +121,5 @@ def build(mp, write=True):
 
     rows.reverse()                                    # newest first
     return {"made": summary("done"), "skipped": summary("missed"),
-            "strong": by_conf("strong"), "lean": by_conf("lean"),
+            "strong": by_conf("strong"), "lean": by_conf("lean"), "optional": by_conf("optional"),
             "untracked": sum(1 for r in rows if not r["tracked"]), "moves": rows[:30]}
