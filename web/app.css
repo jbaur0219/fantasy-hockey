@@ -815,12 +815,13 @@ button.mu-pick.past{color:var(--tint)}
 .mu-cv{display:inline-flex;width:10px;height:7px;transition:transform .35s var(--spring)}
 .mu-cv svg{width:100%;height:100%;display:block}
 button.mu-pick.open .mu-cv{transform:rotate(180deg)}
-.mu-dd{background:var(--fill4);border-radius:16px;padding:4px 6px 6px;margin:0 0 4px;animation:muDD .32s var(--spring) both;transform-origin:50% 0}
+.mu-sumw{position:relative}
+.mu-dd{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:30;background:var(--card2);border-radius:18px;padding:4px 6px 6px;box-shadow:0 12px 32px rgba(0,0,0,.35),0 0 0 .5px var(--sep);animation:muDD .32s var(--spring) both;transform-origin:50% 0}
 .mu-dh,.mu-dr{display:grid;grid-template-columns:minmax(0,1fr) 52px 52px 26px;align-items:center;gap:4px}
 .mu-dh{padding:6px 8px 2px;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--label2);text-align:center}
 .mu-dr{width:100%;min-height:44px;padding:0 8px;border:0;border-radius:12px;background:transparent;color:var(--label);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s}
 .mu-dr:active{background:var(--fill3)}
-.mu-dr.sel{background:color-mix(in srgb,var(--tint) 12%,transparent)}
+.mu-dr.sel{background:color-mix(in srgb,var(--tint) 14%,transparent)}
 .mu-dr:disabled{cursor:default;opacity:.4}.mu-dr:disabled:active{background:transparent}
 .mu-dn{display:flex;align-items:baseline;gap:8px;min-width:0}
 .mu-dn b{font-size:16px;font-weight:600;white-space:nowrap}
@@ -839,7 +840,7 @@ button.mu-pick.open .mu-cv{transform:rotate(180deg)}
 .mu-c.off a.pl{color:var(--label2);font-weight:500}
 .mu-g{font-size:11.5px;color:var(--label2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .mu-g.live{color:var(--red);font-weight:600}
-.mu-inj{font-style:normal;font-size:10px;font-weight:700;color:var(--red);margin-left:3px}
+.mu-inj{font-style:normal;font-size:10px;font-weight:700;color:var(--red);margin:0 4px}
 .mu-p{text-align:center;font:600 15px ui-rounded,-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .mu-pj{color:var(--label3);font-weight:500}.mu-dash{color:var(--label3);font-weight:400}
 .mu-c.empty .mu-dash{font-size:13px}

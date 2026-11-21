@@ -12,6 +12,10 @@ D.mine.concat(D.fas).forEach(function(p){ALL[p.id]=p;});
 D.teams.forEach(function(t){t.players.forEach(function(p){if(!ALL[p.id])ALL[p.id]=p;});});
 function plink(p){return '<a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">('+esc(p.pos)+', '+esc(p.tm)+')</span>';}
 function isInj(p){return BAD.indexOf(p.inj)>=0;}
+/* ESPN's status codes in plain words: injLabel = full ("Day-to-day"), injShort = for tight spots ("DTD") */
+var INJ_TXT={DAY_TO_DAY:['Day-to-day','DTD'],OUT:['Out','OUT'],INJURY_RESERVE:['Injured reserve','IR'],SUSPENSION:['Suspended','SUSP']};
+function injLabel(s){if(INJ_TXT[s])return INJ_TXT[s][0];var t=String(s||'').replace(/_/g,' ').toLowerCase();return t.charAt(0).toUpperCase()+t.slice(1);}
+function injShort(s){return INJ_TXT[s]?INJ_TXT[s][1]:injLabel(s);}
 /* weekly value over the next 4 weeks (per-game outlook x team games / 4), so one week's schedule never decides a trade */
 function val(p){var g=(D.g28&&D.g28[p.tm]!=null)?D.g28[p.tm]/4:p.g7;return p.grp==='G'?(p.out||0)*g*(p.sp||0.5):(p.out||0)*g;}
 function lineup(players){
@@ -129,7 +133,7 @@ function rosterRow(p){
   if(p.rl&&p.rl!=='Not listed')bits.push(esc(rlTxt(p.rl)));
   if(p.gl!=null)bits.push(p.gl+' game'+(p.gl===1?'':'s')+' left');
   var trend=(p.rec!=null&&p.ppg!=null&&p.gp>=6)?(p.rec-p.ppg>=0.4?' <span class="good">hot</span>':(p.rec-p.ppg<=-0.4?' <span class="warn">cold</span>':'')):'';
-  var inj=(p.inj&&p.inj!=='ACTIVE')?' <span class="bad">'+esc(p.inj.replace(/_/g,' ').toLowerCase())+'</span>':'';
+  var inj=(p.inj&&p.inj!=='ACTIVE')?' <span class="bad">'+esc(injLabel(p.inj).toLowerCase())+'</span>':'';
   var av=(typeof avHtml==='function')?avHtml(p.id,p.tm):'';
   return '<div class="srow rsrow"><div class="sm rrow">'+av+'<div class="rtx"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a>'+inj+trend+'<div class="muted">'+bits.join(' &middot; ')+'</div></div></div>'
     +'<div class="sr rpts"><b>'+f(p.out,1)+'</b><span class="muted">'+(p.grp==='G'?'per start':'per game')+'</span></div></div>';
@@ -168,7 +172,7 @@ function ownerTeam(id){return D.teams.filter(function(t){return t.players.some(f
 function onBlock(p){var t=ownerTeam(p.id);return !!(t&&!t.me&&t.block&&t.block.indexOf(p.id)>=0);}
 function listHtml(ps){
   return ps.slice().sort(function(a,b){return b.out-a.out;}).map(function(p){
-    var sub=esc(p.pos)+' &middot; '+esc(p.tm)+(p.slot==='IR'?' &middot; IR':'')+(p.inj&&p.inj!=='ACTIVE'?' &middot; '+esc(p.inj==='DAY_TO_DAY'?'DTD':p.inj):'');
+    var sub=esc(p.pos)+' &middot; '+esc(p.tm)+(p.slot==='IR'?' &middot; IR':'')+(p.inj&&p.inj!=='ACTIVE'?' &middot; '+esc(injShort(p.inj)):'');
     return '<label class="opt tl-row"><input type="checkbox" value="'+p.id+'"><span class="tl-av">'+avHtml(p.id,p.tm)+'</span><span class="tl-nm"><b>'+esc(p.n)+'</b><span>'+sub+(onBlock(p)?' <i class="tag">on block</i>':'')+'</span></span><span class="tl-pt">'+f(p.out)+'<i>pts/gm</i></span></label>';}).join('');
 }
 function theTeam(){var id=$('#tradeTeam').value;return D.teams.filter(function(t){return String(t.id)===id;})[0];}
@@ -376,7 +380,7 @@ function modal(p){
   h+='</div>';
   if(p.slot==='FA')h+='<div style="margin-top:10px">Versus your weakest '+p.grp+': <b class="'+(up(p)>=0.2?'good':(up(p)<0?'bad':''))+'">'+sgn(up(p))+'</b> pts/game</div>';
   if(p.fl&&p.fl.length)h+='<ul style="margin-top:10px">'+p.fl.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>';
-  if(p.inj&&p.inj!=='ACTIVE')h+='<div class="warn" style="margin-top:8px">Status: '+esc(p.inj)+'</div>';
+  if(p.inj&&p.inj!=='ACTIVE')h+='<div class="warn" style="margin-top:8px">Status: '+esc(injLabel(p.inj))+'</div>';
   var m=$('#modal');m.innerHTML='<div class="box">'+h+'</div>';m.classList.add('open');
   $('#mx').addEventListener('click',closeModal);
 }
@@ -1533,7 +1537,7 @@ function ltRole(p){if(!p.rl||p.grp==='G')return null;var N={F1:'top line',F2:'se
 function ltAssess(y,x){
   var G=D.gameplan||{},fut=G.fut;if(!fut||!y||!x)return null;
   var wk=Math.round((G.fut_days||21)/7),d=y.n.split(' ').pop(),a=x.n.split(' ').pop(),L=[];
-  if(y.inj==='OUT'||y.inj==='INJURY_RESERVE'||y.inj==='SUSPENSION')return {v:'none',pts:0,lines:[d+' is '+y.inj.replace('_',' ').toLowerCase()+', so he isn\'t scoring for you now.']};
+  if(y.inj==='OUT'||y.inj==='INJURY_RESERVE'||y.inj==='SUSPENSION')return {v:'none',pts:0,lines:[d+' is '+injLabel(y.inj).toLowerCase()+', so he isn\'t scoring for you now.']};
   var py=ltPg(y),px=ltPg(x),gy=fut[y.tm]||0,gx=fut[x.tm]||0,fl=(LT.REPL[y.grp]||1.45)*(y.grp==='G'?0.5:1);
   var c=Math.max(0,py*gy-Math.max(px,fl)*gx)*(LT.FIX+(1-LT.FIX)*ltGone(y));
   if(Math.abs(py-px)<0.05)L.push('Per game from here on, they\'re about even ('+d+' '+f(py,2)+', '+a+' '+f(px,2)+'), with hot and cold streaks taken out.');
@@ -1790,7 +1794,7 @@ function modal(p){
   var h='<div class="mhead">'+(typeof avHtml==='function'?avHtml(p.id,p.tm):'')
     +'<div class="pc-id"><b>'+esc(p.n)+'</b><div class="muted">'+sub.join(' &middot; ')+'</div></div>'
     +'<button class="x" id="mx">&times;</button></div>';
-  if(p.inj&&p.inj!=='ACTIVE')h+='<div class="pc-inj">Status: '+esc(p.inj)+'</div>';
+  if(p.inj&&p.inj!=='ACTIVE')h+='<div class="pc-inj">Status: '+esc(injLabel(p.inj))+'</div>';
   var pct=UI.pct==='gl'?'gl':'ov';CMP.on=false;
   h+='<div class="pcseg'+(pct==='gl'?' two':'')+'" role="tablist"><i class="th"></i><button type="button" role="tab" data-pct="ov"'+(pct==='ov'?' class="on"':'')+'>Overview</button><button type="button" role="tab" data-pct="gl"'+(pct==='gl'?' class="on"':'')+'>Game log</button></div><div id="pcOv"'+(pct==='gl'?' hidden':'')+'>';
 
@@ -2025,7 +2029,7 @@ function cmpSide(p,k){
   return '<div class="cm-p">'+avHtml(p.id,p.tm)+'<a class="pl cm-n" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'
     +'<div class="cm-s">'+esc(p.pos)+' &middot; '+esc(p.tm)+(p.rl&&p.rl!=='Not listed'?' &middot; '+esc(rlTxt(p.rl)):'')+'</div>'
     +'<div class="cm-tag'+(cmpMine(p)?' mine':'')+'">'+esc(cmpWho(p))+'</div>'
-    +(p.inj&&p.inj!=='ACTIVE'?'<div class="cm-inj">'+esc(p.inj)+'</div>':'')
+    +(p.inj&&p.inj!=='ACTIVE'?'<div class="cm-inj">'+esc(injLabel(p.inj))+'</div>':'')
     +'<button type="button" class="cm-chg" data-cmchg="'+k+'">Change</button></div>';
 }
 function cmpForm(a,b){
@@ -2176,7 +2180,7 @@ function muStatus(p,S){
   if(now<g[0]+3*3600e3)return {on:true,t:opp+' &middot; <b class="mu-live">Live</b>',live:true};
   return {on:true,t:opp+' &middot; Final'};
 }
-function muInj(p){return (p.inj&&p.inj!=='ACTIVE')?' <i class="mu-inj">'+esc(p.inj==='DAY_TO_DAY'?'DTD':p.inj==='OUT'?'O':p.inj.charAt(0))+'</i>':'';}
+function muInj(p){return (p.inj&&p.inj!=='ACTIVE')?' <i class="mu-inj">'+esc(injShort(p.inj))+'</i>':'';}
 function muPts(p,st,S){
   var v=S.pt?S.pt[p.id]:undefined;
   if(v!=null&&(st.on&&!st.up||v!==0))return '<b>'+f(v,1)+'</b>';
@@ -2224,10 +2228,9 @@ function muTonight(g,S){
   var A=muTeam(g.a),B=muTeam(g.b),t=Math.min(S.today,S.dates.length-1),sh=muShown(S),i=sh==null?t:sh,past=sh!=null;
   function playing(T){return T.players.filter(function(p){return ['F','D','G','UTIL'].indexOf(p.slot)>=0&&muStatus(p,S).on;}).length;}
   var pill=past?esc(dayShort(S.labels[i])):(S.done?'Last day':'Today');
-  var h='<div class="mu-sum"><div><b>'+(g.ad[i]==null?'0.0':f(g.ad[i],1))+'</b><span id="muPa">'+(past?'':playing(A)+' playing')+'</span></div>'
+  var h='<div class="mu-sumw"><div class="mu-sum"><div><b>'+(g.ad[i]==null?'0.0':f(g.ad[i],1))+'</b><span id="muPa">'+(past?'':playing(A)+' playing')+'</span></div>'
     +'<button type="button" class="mu-sk mu-pick'+(MU.dd?' open':'')+(past?' past':'')+'" data-mud="tg" aria-haspopup="listbox" aria-expanded="'+(MU.dd?'true':'false')+'" aria-label="Choose a day. Showing '+pill+'">'+pill+'<span class="mu-cv">'+MU_CV+'</span></button>'
-    +'<div><b>'+(g.bd[i]==null?'0.0':f(g.bd[i],1))+'</b><span id="muPb">'+(past?'':playing(B)+' playing')+'</span></div></div>';
-  h+=muDayMenu(g,S,t,i);
+    +'<div><b>'+(g.bd[i]==null?'0.0':f(g.bd[i],1))+'</b><span id="muPb">'+(past?'':playing(B)+' playing')+'</span></div></div>'+muDayMenu(g,S,t,i)+'</div>';
   if(past){return h+'<div id="muPast"><div class="gl-wait"><span class="spin"></span>Loading</div></div>';}
   h+=muGroup('Forwards',muSlots(A,'F',S),muSlots(B,'F',S),S)+muGroup('Defense',muSlots(A,'D',S),muSlots(B,'D',S),S)
     +muGroup('Utility',muSlots(A,'UTIL',S),muSlots(B,'UTIL',S),S)+muGroup('Goalies',muSlots(A,'G',S),muSlots(B,'G',S),S);
