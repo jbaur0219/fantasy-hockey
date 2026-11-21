@@ -931,3 +931,18 @@ button.mu-pick.open .mu-cv{transform:rotate(180deg)}
 body.nophoto .mono>img{display:none}
 .mono.mono-s{width:26px;height:26px;font-size:10px;flex:none;box-shadow:none}
 .tm-c{display:inline-flex;align-items:center;gap:8px}
+
+/* the page never rubber-bands (that bounce dragged the fixed top bar down on iOS); only the content stretches, see BAND in app.js */
+html,body{overscroll-behavior:none}
+.wrap.band-back{transition:transform .6s var(--soft-spring)}
+.wrap.band-kick{transition:transform .11s cubic-bezier(.2,.7,.4,1)}
+.wrap.band-back .lh-t,.wrap.band-kick .lh-t{transition:transform .6s var(--soft-spring)}
+
+/* iPhone annoyances: typing in a box under 16px zooms the whole app in (and shifts the bars); a double tap zooms;
+   a long press on a button selects its text or pops the image menu */
+@media (pointer:coarse){
+  input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:16px!important}
+}
+html{touch-action:manipulation}
+button,.chip-btn,.mu-tile,#bnav,#gnav,[data-go],[data-mu],h2{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+img{-webkit-touch-callout:none;-webkit-user-drag:none}

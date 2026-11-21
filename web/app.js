@@ -1186,6 +1186,7 @@ function glBuild(){
   var nb=document.createElement('div');nb.id='gnav';
   nb.innerHTML='<div class="gn-edge"></div><div class="gn-row"><div class="gn-side"></div><div class="gn-t" id="gnT">Today</div><div class="gn-side gn-r"></div></div>';
   document.body.appendChild(nb);
+  var rf=document.getElementById('rfbar');if(rf&&rf.parentNode!==document.body)document.body.appendChild(rf);
   var rb=document.getElementById('rfbtn');
   if(rb){rb.className='gbtn glass';rb.removeAttribute('style');rb.innerHTML=SF.refresh;rb.setAttribute('aria-label','Refresh data');nb.querySelector('.gn-r').appendChild(rb);}
   /* tab bar: capsule + detached search button (iOS 26) */
@@ -1241,13 +1242,67 @@ function glTabDrag(cap){
    coming back to the app), so the top bar floats mid-screen. visualViewport says by how much; every fixed bar follows it. */
 var PIN={y:0};
 function glPin(){
-  var vv=window.visualViewport,y=vv?vv.offsetTop:0;
-  if(!isFinite(y)||Math.abs(y)<1||(typeof SH!=='undefined'&&SH.open))y=0;
+  var vv=window.visualViewport,y=vv?vv.offsetTop:0,ae=document.activeElement;
+  var typing=ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName);
+  if(!typing||!isFinite(y)||Math.abs(y)<1||(typeof SH!=='undefined'&&SH.open))y=0;   /* never follow a bounce or zoom, only the keyboard */
   y=Math.round(y);
   if(y===PIN.y)return;
   PIN.y=y;document.documentElement.style.setProperty('--vvy',y+'px');
 }
 if(window.visualViewport){window.visualViewport.addEventListener('scroll',glPin);window.visualViewport.addEventListener('resize',glPin);}
+
+/* Page edges. The page itself never rubber-bands any more (html{overscroll-behavior:none}): on iOS that bounce is what
+   dragged the fixed top bar and its blur down the screen, and sometimes left it stuck there. Instead only the content
+   stretches at the top and bottom, under bars that stay put, and a fast flick into an edge gives a small spring. */
+var BAND={y0:null,x0:0,ax:0,on:false,base:0,inner:false,lt:0,ly:0,v:0,t:0};
+function bandMax(){return Math.max(0,document.documentElement.scrollHeight-window.innerHeight);}
+function bandOff(){return (typeof SH!=='undefined'&&(SH.open||SH.closing_busy))||document.documentElement.classList.contains('sheet-on')||document.body.classList.contains('mlock');}
+function bandInner(el){
+  for(;el&&el!==document.body&&el!==document.documentElement;el=el.parentElement){
+    if(el.id==='modal')return true;
+    var oy=getComputedStyle(el).overflowY;if((oy==='auto'||oy==='scroll')&&el.scrollHeight>el.clientHeight+1)return true;
+  }
+  return false;
+}
+function bandSet(px,mode){
+  var w=document.querySelector('.wrap');if(!w)return;
+  w.classList.toggle('band-back',mode==='back');w.classList.toggle('band-kick',mode==='kick');
+  w.style.transform=Math.abs(px)>=0.5?'translate3d(0,'+px.toFixed(1)+'px,0)':'';
+  var t=document.getElementById('lhT');if(t)t.style.transform=px>0?'scale('+Math.min(1.1,1+px/900).toFixed(4)+')':'';
+  clearTimeout(BAND.t);if(mode==='back')BAND.t=setTimeout(function(){w.classList.remove('band-back');},650);
+}
+function bandRubber(d){var H=window.innerHeight||800,a=Math.abs(d),r=(1-1/(a*0.55/H+1))*H;return d<0?-r:r;}
+document.addEventListener('touchstart',function(e){
+  BAND.y0=null;if(RM||e.touches.length!==1||bandOff())return;
+  BAND.y0=e.touches[0].clientY;BAND.x0=e.touches[0].clientX;BAND.ax=0;BAND.on=false;BAND.ly=BAND.y0;BAND.inner=bandInner(e.target);
+},{passive:true});
+document.addEventListener('touchmove',function(e){
+  if(BAND.y0==null||BAND.inner||e.touches.length!==1)return;
+  var y=e.touches[0].clientY,dy=y-BAND.y0,dx=e.touches[0].clientX-BAND.x0;
+  if(!BAND.ax){if(Math.abs(dy)<6&&Math.abs(dx)<6)return;BAND.ax=Math.abs(dy)>Math.abs(dx)?1:-1;}
+  if(BAND.ax<0)return;                                                  /* sideways swipe (tables, chips) */
+  var sy=window.pageYOffset||0;
+  if(!BAND.on){
+    var down=y>BAND.ly;BAND.ly=y;
+    if(sy<=0.5&&down)BAND.on=1;else if(sy>=bandMax()-1&&!down)BAND.on=-1;else return;
+    BAND.base=y;return;
+  }
+  BAND.ly=y;var d=y-BAND.base;
+  if(d*BAND.on<=0){BAND.on=false;bandSet(0);return;}                    /* finger came back past the edge: scroll normally */
+  bandSet(bandRubber(d));
+},{passive:true});
+function bandEnd(){if(BAND.on){BAND.on=false;bandSet(0,'back');}BAND.y0=null;}
+document.addEventListener('touchend',bandEnd,{passive:true});document.addEventListener('touchcancel',bandEnd,{passive:true});
+/* momentum: a quick flick that runs into the top or bottom gets a short spring instead of a dead stop */
+window.addEventListener('scroll',function(){
+  var y=window.pageYOffset||0,now=performance.now(),dt=now-BAND.lt;
+  if(dt>0&&dt<120)BAND.v=BAND.v*0.4+(y-BAND.lpy)/dt*0.6;else BAND.v=0;
+  BAND.lt=now;BAND.lpy=y;
+  if(RM||BAND.y0!=null||bandOff()||Math.abs(BAND.v)<0.9)return;
+  var max=bandMax(),k=Math.min(26,Math.abs(BAND.v)*11);
+  if(y<=0.5&&BAND.v<0){BAND.v=0;bandSet(k,'kick');setTimeout(function(){bandSet(0,'back');},110);}
+  else if(y>=max-1&&BAND.v>0){BAND.v=0;bandSet(-k,'kick');setTimeout(function(){bandSet(0,'back');},110);}
+},{passive:true});
 /* scroll: collapse the large title into the nav bar; minimize the tab bar going down, restore going up */
 var GS={y:0,raf:0,acc:0};
 function glScroll(){
@@ -1261,7 +1316,7 @@ function glScroll(){
     var t=document.getElementById('lhT'),lim=t.offsetTop+t.offsetHeight-48;
     nb.classList.toggle('scrolled',y>lim);
     nb.classList.toggle('edge',y>4);
-    if(!RM&&y<0)t.style.transform='scale('+Math.min(1.12,1-y/700)+')';else t.style.transform='';
+    if(!BAND.on&&!(document.querySelector('.wrap')||{}).style.transform)t.style.transform='';
     /* tab bar */
     if(y<60){GS.acc=0;tb.classList.remove('min');}
     else if(dy>0){GS.acc=Math.max(0,GS.acc)+dy;if(GS.acc>40)tb.classList.add('min');}
