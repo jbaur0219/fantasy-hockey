@@ -946,3 +946,9 @@ html,body{overscroll-behavior:none}
 html{touch-action:manipulation}
 button,.chip-btn,.mu-tile,#bnav,#gnav,[data-go],[data-mu],h2{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 img{-webkit-touch-callout:none;-webkit-user-drag:none}
+
+/* minimized circle: the hidden label still held its space under the icon and pushed it up, so collapse it and the gap too */
+#bnav .tbcap button{transition:color .25s,opacity .3s,flex-grow .55s var(--soft-spring),gap .4s var(--soft-spring)}
+#bnav .tbcap button span{display:block;max-height:14px;transition:opacity .25s,max-height .4s var(--soft-spring)}
+#bnav.min .tbcap button{gap:0}
+#bnav.min .tbcap button span{max-height:0;overflow:hidden}
