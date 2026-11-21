@@ -29,6 +29,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,6 +50,16 @@ jobs:
           FH_KEEP: ${{ github.event.inputs.keep }}
           ESPN_S2: ${{ secrets.ESPN_2 }}
           SWID: ${{ secrets.SWID }}
+      - name: Never replace a good live page with a broken build
+        id: gate
+        if: github.event.inputs.mode != 'preview'
+        run: python tools/publish_gate.py
+      - name: Tell the phone the last good update was kept
+        if: steps.gate.outputs.publish == 'false'
+        continue-on-error: true
+        run: pip install pywebpush && python notify.py held_alert.json
+        env:
+          PUSH_CONFIG: ${{ secrets.PUSH_CONFIG }}
       - name: Save the preview to the branch
         if: github.event.inputs.mode == 'preview'
         run: |
@@ -82,13 +94,13 @@ jobs:
             site/
             snapshot.json.gz
       - uses: actions/upload-pages-artifact@v3
-        if: github.event.inputs.mode != 'preview'
+        if: github.event.inputs.mode != 'preview' && steps.gate.outputs.publish != 'false'
         with:
           path: site/
 
   deploy:
     needs: build
-    if: github.event.inputs.mode != 'preview'
+    if: github.event.inputs.mode != 'preview' && needs.build.outputs.publish != 'false'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

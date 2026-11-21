@@ -727,3 +727,10 @@ td{border-bottom:.5px solid var(--sep)!important}tr:last-child td{border-bottom:
 .wi-verdict{margin-top:12px;font-weight:600}
 .wi-row .av{flex:none}
 .wi-lbl{flex:none}
+
+/* roster: section headers and a headshot on each row */
+.rsec{margin:14px 0 2px;font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted, #6e6e73)}
+.rsec:first-child{margin-top:4px}
+.rrow{display:flex;align-items:center;gap:10px;min-width:0}.rrow .av{width:40px;height:40px;margin:0}.rrow .rtx{min-width:0}
+.rsrow{flex-wrap:nowrap!important}.rsrow .sr.rpts{width:auto!important;flex-direction:column;align-items:flex-end;gap:0;line-height:1.15}
+.rpts b{font-size:17px}.rpts .muted{font-size:12px}

@@ -75,7 +75,7 @@ var cOut={h:'Proj/gm',v:function(p){return p.out;},num:1,r:function(p){return f(
 var cGP={h:'GP',v:function(p){return p.gp;},num:1};
 var cG7={h:'Games left',v:function(p){return p.gl!=null?p.gl:p.g7;},num:1};
 var cTOI={h:'TOI',v:function(p){return p.toi;},num:1,fmt:function(x){return f(x,1);}};var cPP={h:'PP min',v:function(p){return p.pp;},num:1,fmt:function(x){return f(x,1);}};var cXG={h:'G vs xG',v:function(p){return p.gx;},num:1,r:function(p){return p.gx==null?'-':'<span class="'+(p.gx>=2?'warn':(p.gx<=-2?'good':''))+'">'+sgn(p.gx,1)+'</span>';}};var cRole={h:'Role',v:function(p){return p.rl||'';},r:function(p){return p.rl?('<span class="'+(p.cls==='core'?'good':(p.cls==='watch'?'warn':(p.cls==='streamer'?'muted':'')))+'">'+esc(p.rl)+'</span>'+(p.cls?' <span class="muted">'+esc(p.cls)+'</span>':'')):'-';}};var cFlags={h:'Flags',v:function(p){return (p.fl||[]).join('; ');},r:flagsHtml};
-var rosterCols=[cName,{h:'Slot',v:function(p){return p.slot;}},cGP,cPPG,{h:'Exp',v:function(p){return p.exp;},num:1,fmt:f},cProj,cOut,cG7,cRole,cTOI,cPP,cXG,cFlags];
+var rosterCols=[cName,{h:'Slot',v:function(p){return p.slot;}},cGP,cPPG,{h:'Luck-adj',v:function(p){return p.exp;},num:1,fmt:f},cProj,cOut,cG7,cRole,cTOI,cPP,cXG,cFlags];
 var faCols=[cName,cOut,{h:'vs your worst',v:function(p){return up(p);},num:1,r:function(p){var u=up(p);return '<span class="'+(u>=0.2?'good':(u<0?'bad':''))+'">'+sgn(u)+'</span>';}},
   cPPG,cProj,cGP,cG7,cRole,cTOI,cPP,cXG,{h:'Owned',v:function(p){return p.own;},num:1,r:function(p){return p.own==null?'-':f(p.own,0)+'%';}},{h:'Adds',v:function(p){return p.own_chg;},num:1,r:function(p){return pcTrend(p)||'<span class="muted">-</span>';}},
   {h:'Status',v:function(p){return p.st||'';}},cFlags];
@@ -92,7 +92,7 @@ function overview(){
   if(!D.goalies.length)h+='<div class="muted">No goalies on your roster.</div>';
   D.goalies.forEach(function(g){
     var p=g.p;
-    h+='<div class="g"><div class="gh"><b>'+plink(p)+'</b><span class="muted">'+f(p.out)+' pts/start outlook'+(p.svp?' &middot; save % '+f(p.svp,3):'')+'</span></div>';
+    h+='<div class="g"><div class="gh"><b>'+plink(p)+'</b><span class="muted">'+f(p.out)+' projected pts per start'+(p.svp?' &middot; save % '+f(p.svp,3):'')+'</span></div>';
     if(!g.rows.length)h+='<div class="muted">No games in the next few days.</div>';
     else{h+='<div class="chips">';
       g.rows.forEach(function(r){
@@ -105,9 +105,9 @@ function overview(){
   h+='<div class="card"><h2>Suggested moves</h2>';
   if(D.moves.length){
     h+=mkTable([{h:'Add',v:function(m){return m.add.n;},r:function(m){return plink(m.add);}},
-      {h:'Outlook',v:function(m){return m.add.out;},num:1,fmt:f},{h:'Games (7d)',v:function(m){return m.add.g7;},num:1},
+      {h:'Proj/gm',v:function(m){return m.add.out;},num:1,fmt:f},{h:'Games (7d)',v:function(m){return m.add.g7;},num:1},
       {h:'Drop',v:function(m){return m.drop.n;},r:function(m){return plink(m.drop);}},
-      {h:'Outlook',v:function(m){return m.drop.out;},num:1,fmt:f},
+      {h:'Proj/gm',v:function(m){return m.drop.out;},num:1,fmt:f},
       {h:'Gain/game',v:function(m){return m.gain;},num:1,r:function(m){return '<span class="good">'+sgn(m.gain)+'</span>';}},
       {h:'Gain (7d)',v:function(m){return m.wk;},num:1,r:function(m){return '<span class="good">'+sgn(m.wk,1)+'</span>';}}],D.moves);
     h+='<div class="muted">Players with very few games and no ESPN projection can look better than they are. Check small samples before acting.</div>';
@@ -123,23 +123,31 @@ function overview(){
 /* ---------- roster ---------- */
 var R={pos:'All',q:'',view:'list'};
 var SLOTN={F:'Forward slot',D:'Defense slot',G:'Goalie slot',UTIL:'UTIL slot',BN:'Bench',IR:'Injured reserve'};
+function rosterRow(p){
+  var bits=[esc(p.pos)+' '+esc(p.tm)];
+  if(p.slot==='BN')bits.push('Bench');
+  if(p.rl&&p.rl!=='Not listed')bits.push(esc(rlTxt(p.rl)));
+  if(p.gl!=null)bits.push(p.gl+' game'+(p.gl===1?'':'s')+' left');
+  var trend=(p.rec!=null&&p.ppg!=null&&p.gp>=6)?(p.rec-p.ppg>=0.4?' <span class="good">hot</span>':(p.rec-p.ppg<=-0.4?' <span class="warn">cold</span>':'')):'';
+  var inj=(p.inj&&p.inj!=='ACTIVE')?' <span class="bad">'+esc(p.inj.replace(/_/g,' ').toLowerCase())+'</span>':'';
+  var av=(typeof avHtml==='function')?avHtml(p.id,p.tm):'';
+  return '<div class="srow rsrow"><div class="sm rrow">'+av+'<div class="rtx"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a>'+inj+trend+'<div class="muted">'+bits.join(' &middot; ')+'</div></div></div>'
+    +'<div class="sr rpts"><b>'+f(p.out,1)+'</b><span class="muted">'+(p.grp==='G'?'per start':'per game')+'</span></div></div>';
+}
 function rosterList(rows){
-  var ord={F:0,D:1,G:2},inl=function(p){return p.slot==='BN'||p.slot==='IR'?1:0;};
-  rows=rows.slice().sort(function(a,b){return (ord[a.grp]-ord[b.grp])||(b.out-a.out);});
-  return rows.map(function(p){
-    var bits=[esc(p.pos)+' '+esc(p.tm),esc(SLOTN[p.slot]||p.slot)];
-    if(p.rl&&p.rl!=='Not listed')bits.push(esc(p.rl.replace(/^F(\d)/,'Line $1').replace(/^D(\d)/,'Pair $1')));
-    if(p.gl!=null)bits.push(p.gl+' game'+(p.gl===1?'':'s')+' left this week');
-    var trend=(p.rec!=null&&p.ppg!=null&&p.gp>=6)?(p.rec-p.ppg>=0.4?' <span class="good">hot</span>':(p.rec-p.ppg<=-0.4?' <span class="warn">cold</span>':'')):'';
-    var inj=(p.inj&&p.inj!=='ACTIVE')?' <span class="bad">'+esc(p.inj.replace(/_/g,' ').toLowerCase())+'</span>':'';
-    return '<div class="srow"><div class="sm"><a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a>'+inj+trend+'<div class="muted">'+bits.join(' &middot; ')+'</div></div>'
-      +'<div class="sr"><span><b>'+f(p.out,1)+'</b> <span class="muted">'+(p.grp==='G'?'pts/start':'pts/game')+'</span></span></div></div>';}).join('');
+  var bench=function(p){return p.slot==='BN'?1:0;},by=function(a,b){return (bench(a)-bench(b))||(b.out-a.out);};
+  var secs=[['Forwards',function(p){return p.grp==='F'&&p.slot!=='IR';}],['Defense',function(p){return p.grp==='D'&&p.slot!=='IR';}],
+            ['Goalies',function(p){return p.grp==='G'&&p.slot!=='IR';}],['Injured reserve',function(p){return p.slot==='IR';}]];
+  return secs.map(function(sc){
+    var rs=rows.filter(sc[1]).sort(by);
+    return rs.length?'<div class="rsec">'+sc[0]+' <span class="muted">'+rs.length+'</span></div>'+rs.map(rosterRow).join(''):'';
+  }).join('');
 }
 function rosterRender(){
   chips('#rosterPos',['All','F','D','G'],R.pos,function(v){R.pos=v;rosterRender();});
   var rows=D.mine.filter(function(p){return (R.pos==='All'||p.grp===R.pos)&&(!R.q||p.n.toLowerCase().indexOf(R.q)>=0);});
   var tg='<div class="controls"><button type="button" class="chip-btn'+(R.view==='list'?' on':'')+'" data-rv="list">Simple</button><button type="button" class="chip-btn'+(R.view==='table'?' on':'')+'" data-rv="table">All stats</button></div>';
-  if(R.view==='list'){$('#rosterTbl').innerHTML=tg+rosterList(rows)+'<div class="muted" style="margin-top:8px">Projected points per game going forward (per start for goalies). Tap a name for the full card.</div>';return;}
+  if(R.view==='list'){$('#rosterTbl').innerHTML=tg+rosterList(rows)+'<div class="muted" style="margin-top:8px">The number on the right is projected points per game from here on (per start for goalies). Tap a name for the full card.</div>';return;}
   $('#rosterTbl').innerHTML=tg+mkTable(rosterCols,rows);wireSort($('#rosterTbl'));
 }
 document.addEventListener('click',function(e){var b=e.target.closest?e.target.closest('[data-rv]'):null;if(b){R.view=b.getAttribute('data-rv');rosterRender();}});
@@ -332,7 +340,7 @@ function closeModal(){if(typeof sheetClose==='function')sheetClose();else $('#mo
 function modal(p){
   function cell(k,v){return '<div class="cell"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>';}
   var h='<div class="mhead">'+avHtml(p.id,p.tm)+'<b>'+esc(p.n)+'</b><span class="muted">'+esc(p.pos)+' &middot; '+esc(p.tm)+' &middot; '+esc(p.slot==='FA'?(p.st||'Free agent'):p.slot)+'</span><button class="x" id="mx">&times;</button></div><div class="grid">';
-  h+=cell('Outlook (pts/gm)',f(p.out))+cell('Actual PPG',f(p.ppg))+cell('Luck-adjusted',f(p.exp))+cell('ESPN projection',f(p.proj))+cell('Last 15 days',f(p.rec))+cell('Games (7d)',p.g7)+cell('Games played',p.gp)+(p.rl?cell('Line / PP role',esc(p.rl)):'')+(p.tr!=null?cell('Ice time, last 5 vs season',sgn(p.tr,1)+' min'):'')+(p.toi!=null?cell('Ice time/gm',f(p.toi,1)+' min'):'')+(p.pp!=null?cell('PP time/gm',f(p.pp,1)+' min'):'')+(p.ixg!=null?cell('Expected goals',f(p.ixg,1)):'')+(p.gx!=null?cell('Goals vs xG',sgn(p.gx,1)):'')+(p.gsax!=null?cell('Goals saved vs exp.',sgn(p.gsax,1)):'')+(p.qs!=null?cell('Quality starts',f(p.qs*100,0)+'%'):'')+cell('Rostered',p.own==null?'-':f(p.own,0)+'%');
+  h+=cell('Projected pts/game',f(p.out))+cell('Points per game',f(p.ppg))+cell('Luck-adjusted',f(p.exp))+cell('ESPN projection',f(p.proj))+cell('Last 15 days',f(p.rec))+cell('Games (7d)',p.g7)+cell('Games played',p.gp)+(p.rl?cell('Line / PP role',esc(p.rl)):'')+(p.tr!=null?cell('Ice time, last 5 vs season',sgn(p.tr,1)+' min'):'')+(p.toi!=null?cell('Ice time/gm',f(p.toi,1)+' min'):'')+(p.pp!=null?cell('PP time/gm',f(p.pp,1)+' min'):'')+(p.ixg!=null?cell('Expected goals',f(p.ixg,1)):'')+(p.gx!=null?cell('Goals vs xG',sgn(p.gx,1)):'')+(p.gsax!=null?cell('Goals saved vs exp.',sgn(p.gsax,1)):'')+(p.qs!=null?cell('Quality starts',f(p.qs*100,0)+'%'):'')+cell('Rostered',p.own==null?'-':f(p.own,0)+'%');
   if(p.grp==='G')h+=cell('Wins',p.w)+cell('Goals against',p.ga)+cell('Save %',p.svp==null?'-':f(p.svp,3))+cell('Start chance',p.sp==null?'-':Math.round(p.sp*100)+'%');
   else h+=cell('Goals',p.g)+cell('Assists',p.a)+cell('PP points',p.ppp)+cell('Shots',p.sog)+cell('Shooting %',p.shp==null?'-':f(p.shp*100,0)+'%')+cell('Hits',p.hit)+cell('Blocks',p.blk);
   h+='</div>';
@@ -397,7 +405,7 @@ function marginalHtml(pl){
   var h='<div style="margin-top:14px"><b>Marginal options</b> <span class="muted">(real but below the bar; use a spare move only if you want to)</span></div>';
   M.forEach(function(m,i){
     h+='<div class="step"><div class="num" style="background:var(--gray)">'+(i+1)+'</div><div><div><b>'+esc(m.day)+'</b>: add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' game'+(m.games===1?'':'s')+' left)</span>'+(m.waiver?' <span class="warn">on waivers, claim the day before</span>':'')+'</div>'
-    +'<div>drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+') &middot; '+sgn(m.gain,1)+' pts this week, '+sgn(m.net,1)+' after what you give up (bar: '+f(m.need,1)+')</span></div>'+reasonsHtml(m)+'</div></div>';});
+    +'<div>drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+') &middot; '+sgn(m.gain,1)+' pts this week, '+sgn(m.net,1)+' after what you give up (needs '+f(m.need,1)+')</span></div>'+reasonsHtml(m)+'</div></div>';});
   return h;
 }
 function reasonsHtml(m){
@@ -414,7 +422,7 @@ function auditHtml(){
   if(!A2.length)return h+'<div class="good" style="margin-top:6px">No skater on your roster has a weak or slipping role right now.</div></div>';
   A2.forEach(function(a){
     h+='<div class="step"><div class="num" style="background:'+(a.cls==='watch'?'var(--amber)':'var(--gray)')+'">'+(a.cls==='watch'?'!':'S')+'</div><div>'
-    +'<div><a class="pl" data-id="'+a.id+'">'+esc(a.n)+'</a> <span class="muted">('+esc(a.pos)+', '+esc(a.tm)+', '+esc(a.slot)+')</span> <b>'+esc(a.rl)+'</b> <span class="'+(a.cls==='watch'?'warn':'muted')+'">'+(a.cls==='watch'?'watch: role has slipped':'streamer: replaceable role')+'</span></div>'
+    +'<div><a class="pl" data-id="'+a.id+'">'+esc(a.n)+'</a> <span class="muted">('+esc(a.pos)+', '+esc(a.tm)+', '+esc(a.slot)+')</span> <b>'+esc(rlTxt(a.rl))+'</b> <span class="'+(a.cls==='watch'?'warn':'muted')+'">'+(a.cls==='watch'?'watch: role has slipped':'streamer: replaceable role')+'</span></div>'
     +'<ul class="why">'+a.why.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>';
     if(a.repl&&a.repl.length)h+='<div class="why"><b>Better options:</b> '+a.repl.map(function(r){return '<a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> ('+esc(r.rl||'')+', '+esc(r.tm)+', '+r.gl+' gm left, about '+f(r.e,1)+' pts this week)';}).join(' &middot; ')+'</div>';
     h+='</div></div>';});
@@ -431,7 +439,7 @@ function wiDay(act){
 }
 function wiFind(L,id){return L.filter(function(x){return String(x.id)===String(id);})[0];}
 function wiLine(p,label){
-  var bits=[esc(p.tm)];if(p.rl)bits.push(esc(p.rl.replace(/\s*-\s*/g,' · ')));
+  var bits=[esc(p.tm)];if(p.rl)bits.push(esc(rlTxt(p.rl)));
   return '<div class="wi-row"><span class="wi-lbl">'+label+'</span>'+avHtml(p.id,p.tm)+'<div class="wi-nm"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a>'
     +'<span class="muted">'+bits.join(' · ')+'</span></div><div class="wi-pt"><b>'+f(p.e,1)+'</b><span class="muted">'+p.gl+' gm</span></div></div>';
 }
@@ -519,7 +527,7 @@ function wiOptions(kind){
 }
 function wiOptHtml(p,kind){
   var av=(typeof avHtml==='function')?avHtml(p.id,p.tm):'';
-  return '<div class="opt2" data-pick="'+kind+'" data-id="'+p.id+'">'+av+'<div class="nm"><b>'+esc(p.n)+'</b><span>'+esc(p.pos)+' &middot; '+esc(p.tm)+(p.rl?' &middot; '+esc(p.rl):'')+' &middot; '+p.gl+' gm left</span></div><div class="pt">'+f(p.e,1)+' pts</div></div>';
+  return '<div class="opt2" data-pick="'+kind+'" data-id="'+p.id+'">'+av+'<div class="nm"><b>'+esc(p.n)+'</b><span>'+esc(p.pos)+' &middot; '+esc(p.tm)+(p.rl?' &middot; '+esc(rlTxt(p.rl)):'')+' &middot; '+p.gl+' gm left</span></div><div class="pt">'+f(p.e,1)+' pts</div></div>';
 }
 function wiListHtml(kind){
   var gs=wiOptions(kind),h='';
@@ -621,7 +629,7 @@ function weekHtml(){
     if(!L.length)return;
     h+='<div style="margin-top:10px"><b>'+(g==='F'?'Forwards':'Defensemen')+'</b></div>';
     L.forEach(function(r){
-      h+='<div style="margin-top:6px"><a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> <span class="muted">'+esc(r.pos)+' '+esc(r.tm)+(r.rl?' ['+esc(r.rl)+']':'')+'</span> &middot; <b>'+f(r.e,1)+' pts</b> &middot; '+r.gl+' game'+(r.gl===1?'':'s')+(r.w?' <span class="warn">(waivers)</span>':'')+'<div class="why">'+esc(r.opps)+'</div></div>';
+      h+='<div style="margin-top:6px"><a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> <span class="muted">'+esc(r.pos)+' '+esc(r.tm)+(r.rl?' &middot; '+esc(rlTxt(r.rl)):'')+'</span> &middot; <b>'+f(r.e,1)+' pts</b> &middot; '+r.gl+' game'+(r.gl===1?'':'s')+(r.w?' <span class="warn">(waivers)</span>':'')+'<div class="why">'+esc(r.opps)+'</div></div>';
     });
   });
   return h+'</div>';
@@ -633,7 +641,7 @@ function auditHtml4(){
   if(!A2.length)h+='<div class="good" style="margin-top:6px">No skater on your roster is underperforming, on a light schedule, or losing role right now.</div>';
   A2.forEach(function(a,i){
     h+='<div class="step"><div class="num" style="background:'+(a.sev>=3?'var(--amber)':'var(--gray)')+'">'+(i+1)+'</div><div>'
-    +'<div><a class="pl" data-id="'+a.id+'">'+esc(a.n)+'</a> <span class="muted">('+esc(a.pos)+', '+esc(a.tm)+', '+esc(a.slot)+')</span> '+(a.rl?'<b>'+esc(a.rl)+'</b> ':'')
+    +'<div><a class="pl" data-id="'+a.id+'">'+esc(a.n)+'</a> <span class="muted">('+esc(a.pos)+', '+esc(a.tm)+', '+esc(a.slot)+')</span> '+(a.rl?'<b>'+esc(rlTxt(a.rl))+'</b> ':'')
     +a.tags.map(function(t){return '<span class="'+(t.k==='under'||t.k==='role'?'warn':'muted')+'">'+esc(t.t)+'</span>';}).join(' &middot; ')+'</div>'
     +'<ul class="why">'+a.why.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>';
     if(a.repl&&a.repl.length)h+='<div class="why"><b>Better options this week:</b> '+a.repl.map(function(r){return '<a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> ('+esc(r.rl||'')+', '+esc(r.tm)+', '+r.gl+' gm, about '+f(r.e,1)+' pts vs '+f(a.e,1)+')';}).join(' &middot; ')+'</div>';
@@ -664,10 +672,10 @@ function streamsRender(){
     h+='<div class="chip" style="min-width:270px"><div class="d">'+esc(d)+'</div>';
     if(!list.length)h+='<div class="m muted">No games</div>';
     list.forEach(function(r){
-      h+='<div class="m"><a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> <span class="muted">'+esc(r.pos)+' '+esc(r.tm)+'</span>'+(r.rl?' <span class="muted">['+esc(r.rl)+']</span>':'')+' '+(r.h?'vs':'@')+' '+esc(r.o)+' <span class="'+(r.tag==='weak'?'good':(r.tag==='strong'?'warn':'muted'))+'">'+(r.tag==='weak'?'soft':(r.tag==='strong'?'tough':'avg'))+'</span> &middot; <b>'+f(r.e,1)+'</b> &middot; '+r.gl+' gm left'+(r.w?' <span class="warn">(waivers)</span>':'')+'</div>';});
+      h+='<div class="m"><a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> <span class="muted">'+esc(r.pos)+' '+esc(r.tm)+'</span>'+(r.rl?' <span class="muted">'+esc(rlTxt(r.rl))+'</span>':'')+' '+(r.h?'vs':'@')+' '+esc(r.o)+' <span class="'+(r.tag==='weak'?'good':(r.tag==='strong'?'warn':'muted'))+'">'+(r.tag==='weak'?'soft':(r.tag==='strong'?'tough':'avg'))+'</span> &middot; <b>'+f(r.e,1)+'</b> &middot; '+r.gl+' gm left'+(r.w?' <span class="warn">(waivers)</span>':'')+'</div>';});
     h+='</div>';});
   if(LK.first()>=S.days.length)h+='<div class="muted">Every game day left in this matchup week has started, so there is nothing left to add for. Next week\'s streams appear after the next refresh.</div>';
-  h+='</div><div class="muted" style="margin-top:8px">Expected points for that day (outlook adjusted for opponent strength and home ice). Players whose teams play more games this week score higher in the move plan above.</div></div>';
+  h+='</div><div class="muted" style="margin-top:8px">Expected points for that day (projected points adjusted for opponent strength and home ice). Players whose teams play more games this week score higher in the move plan above.</div></div>';
   $('#t-streams').innerHTML=h;
   chips('#stPos',['All','F','D'],ST.pos,function(v){ST.pos=v;streamsRender();});
 }
@@ -699,7 +707,7 @@ function gameplanRender(){
   else{
     var cnt={strong:0,lean:0,optional:0};P.moves.forEach(function(m){cnt[cfOf(m)]++;});
     h+='<div class="verdict">'+(cnt.strong?cnt.strong+' Strong move'+(cnt.strong===1?'':'s')+' (do '+(cnt.strong===1?'it':'them')+'). ':'No Strong move this week. ')
-      +(cnt.lean?cnt.lean+' Lean (worth it if you have moves to spare). ':'')+(cnt.optional?cnt.optional+' Optional (small edge, fine to skip). ':'')
+      +(cnt.lean?cnt.lean+' Lean (worth it if you have moves to spare). ':'')+(cnt.optional?cnt.optional+' Optional (small gain, fine to skip). ':'')
       +(P.unused?P.unused+' move'+(P.unused===1?'':'s')+' stay unused because nothing else adds points.':'')+'</div>';
   }
   h+='</div>';
@@ -714,7 +722,7 @@ function gameplanRender(){
   h+='</tbody></table></div><div class="muted" style="margin-top:8px">F, D and G show how many of your players have a game that day against the slots you can fill (9 forwards, 5 defensemen, 2 goalies, plus 1 UTIL). Empty slots are where a streamer scores for you. Points are expected fantasy points from your best lineup each day.</div></div>';
   h+='<div class="card"><h2>Best stream targets for the week</h2><div class="chips">'
   +gpTargets(P.targets.F,'Forwards')+gpTargets(P.targets.D,'Defensemen')+gpTargets(P.targets.G,'Goalies')+'</div>'
-  +'<div class="muted" style="margin-top:8px">Ranked by total expected points over the rest of the matchup (games left x outlook, adjusted for opponent and home ice; goalies include their chance to start). These are the best adds if you want a stream, whether or not they made the move list above. Players already in the plan are tagged.</div></div>';
+  +'<div class="muted" style="margin-top:8px">Ranked by total expected points over the rest of the matchup (games left x projected points per game, adjusted for opponent and home ice; goalies include their chance to start). These are the best adds if you want a stream, whether or not they made the move list above. Players already in the plan are tagged.</div></div>';
   $('#t-gameplan').innerHTML=h;
 }
 
@@ -846,7 +854,7 @@ var VIEWS=[
    {id:'streams',label:'Streams',cards:[['Best skater streams by day'],['Best adds for the rest of this week'],['Streaming goalies by day'],['Best stream targets for the week',1]]}]},
  {id:'roster',label:'Roster',subs:[
    {id:'team',label:'My team',cards:[['My roster']]},
-   {id:'week',label:'Schedule',cards:[['Schedule edge'],['Your week at a glance'],['Games per team, rest of this matchup',1]]}]},
+   {id:'week',label:'Schedule',cards:[['Schedule advantage'],['Your week at a glance'],['Games per team, rest of this matchup',1]]}]},
  {id:'players',label:'Players',subs:[{id:'main',label:'Players',cards:[['Free agents and waivers']]}]},
  {id:'league',label:'League',subs:[
    {id:'table',label:'Standings',cards:[['Standings and power rankings']]},
@@ -980,7 +988,7 @@ function uiPut(title,html,home){
   if(old)old.parentNode.replaceChild(c,old);else box.appendChild(c);
 }
 function stRow(r,sub,pts,unit){
-  return '<div class="srow"><div class="sm"><a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> <span class="muted">'+esc(r.pos||'G')+' '+esc(r.tm)+(r.rl?' ['+esc(r.rl)+']':'')+'</span><div class="muted">'+sub+'</div></div>'
+  return '<div class="srow"><div class="sm"><a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> <span class="muted">'+esc(r.pos||'G')+' '+esc(r.tm)+(r.rl?' &middot; '+esc(rlTxt(r.rl)):'')+'</span><div class="muted">'+sub+'</div></div>'
     +'<div class="sr"><span><b>'+pts+'</b> <span class="muted">'+unit+'</span></span><button type="button" class="chip-btn" data-sw="'+r.id+'">Try swap</button></div></div>';
 }
 function uiStreams(){
@@ -1030,7 +1038,7 @@ function uiStreams(){
       if(!L.length)h+='<div class="muted">No games</div>';
       L.forEach(function(r){h+=stRow(r,(r.h?'vs ':'@ ')+esc(r.o)+' <span class="'+(r.tag==='weak'?'good':(r.tag==='strong'?'warn':'muted'))+'">'+(r.tag==='weak'?'easy opponent':(r.tag==='strong'?'hard opponent':'average opponent'))+'</span> &middot; '+r.gl+' gm left'+(r.w?' <span class="warn">&middot; waivers</span>':''),f(r.e,1),'pts');});
     });
-    h+='<div class="muted" style="margin-top:8px">Expected points for that day: outlook adjusted for opponent strength and home ice.</div>';
+    h+='<div class="muted" style="margin-top:8px">Expected points for that day: projected points adjusted for opponent strength and home ice.</div>';
   }
   uiPut('Streams',h,{v:'moves',s:'streams',c:0});
 }
@@ -1414,7 +1422,7 @@ function uiToday(){
 }
 
 /* ---------- Confidence, move cards and the "Keep him" list ---------- */
-var CONF={strong:['Strong','Do it'],lean:['Lean','Worth it if you have moves to spare'],optional:['Optional','Small edge, fine to skip']};
+var CONF={strong:['Strong','Do it'],lean:['Lean','Worth it if you have moves to spare'],optional:['Optional','Small gain, fine to skip']};
 function cfOf(m){return m.conf||(m.tier==='make'?'lean':'optional');}
 function cfPill(m){var c=cfOf(m);return '<span class="cf cf-'+c+'">'+CONF[c][0]+'</span>';}
 var KP=(function(){
@@ -1464,6 +1472,9 @@ var LT={SMALL:0.5,REAL:2.0,FIX:0.35,REPL:{F:1.45,D:1.5,G:1.0},
   lbl:{none:['No long-term cost','start'],small:['Small long-term cost','risky'],real:['Real long-term cost','bench']}};
 function ltPg(p){var o=p.out||0;return p.grp==='G'?o*(p.sp||0.5):o;}
 function ltGone(p){if(p.own==null)return 0.5;var g=(p.own-20)/60;if((p.own_chg||0)>=2)g+=0.1;return Math.max(0.05,Math.min(0.95,g));}
+/* Line role in plain words: 'F2 - PP1' -> 'Line 2 · PP1', 'D1' -> 'Pair 1', 'G1' -> 'Starter' */
+function rlTxt(rl){if(!rl)return '';var N={'Off lines':'Not on current lines','Not listed':'Role unknown','no role':'No set role',G1:'Starter',G2:'Backup'};if(N[rl])return N[rl];
+  return String(rl).split('-').map(function(s){s=s.trim();var m=/^([FD])(\d)$/.exec(s);return m?(m[1]==='F'?'Line ':'Pair ')+m[2]:s;}).filter(Boolean).join(' · ');}
 function ltRole(p){if(!p.rl||p.grp==='G')return null;var N={F1:'top line',F2:'second line',F3:'third line',F4:'fourth line',D1:'top pair',D2:'second pair',D3:'third pair',PP1:'first power play',PP2:'second power play'};
   var w=p.rl.split('-').map(function(s){return s.trim();}).filter(Boolean).map(function(s){return N[s]||s;});return w.length?w.join(' and '):null;}
 function ltAssess(y,x){
@@ -1569,7 +1580,7 @@ function uiHelp(){
     ['Games left','Games his NHL team still plays in this Monday-to-Sunday matchup (days that have started do not count).'],
     ['Line 1 / Pair 2 / PP1','His current even-strength line (forwards) or pair (defense), and power-play unit, from DailyFaceoff.com.'],
     ['UTIL','The one lineup spot that takes any forward or defenseman.'],
-    ['Strong / Lean / Optional','How sure the plan is about a move. Strong = do it: a clear gain, usually backed by extra games. Lean = a real gain, worth it if you have moves to spare. Optional = a small edge, fine to skip. Only Strong moves go in the morning alert.'],
+    ['Strong / Lean / Optional','How sure the plan is about a move. Strong = do it: a clear gain, usually backed by extra games. Lean = a real gain, worth it if you have moves to spare. Optional = a small gain, fine to skip. Only Strong moves go in the morning alert.'],
     ['Keep','Tap Keep on any suggested drop and that player is never suggested as a drop for the rest of the matchup week. The plan picks the next best drop instead.'],
     ['Track record','Each suggested move is scored after its games: points the added player scored minus the dropped player, from that day to the end of the week. Moves you skipped are scored too.'],
     ['Long-term cost','What a stream costs you after this week. It compares the two players per game with hot and cold streaks taken out, over their teams\' games in the next 3 weeks, and counts more when the player you drop is widely rostered (someone will likely claim him). No / Small / Real is shown on every move and in Try a swap. Every move\'s gain already has it taken off.'],
@@ -1650,7 +1661,7 @@ function uiEdge(){
     h+='<td>'+(r.fa.length?r.fa.map(function(p){return '<a class="pl" data-id="'+p.id+'" data-noav="1">'+esc(shortName(p.n))+'</a> <span class="muted">'+esc(p.pos)+(p.w?' W':'')+'</span>';}).join('<br>'):'<span class="muted">none</span>')+'</td></tr>';
   });
   h+='</tbody></table></div>';
-  uiPut('Schedule edge',h,{v:'roster',s:'week',c:0});
+  uiPut('Schedule advantage',h,{v:'roster',s:'week',c:0});
 }
 
 var _mo=null,_msy=0;
@@ -1742,7 +1753,7 @@ function modal(p){
   /* quick tiles */
   var t='';
   if(p.gl!=null)t+=tile(p.gl,'Games left this week');else if(p.g7!=null)t+=tile(p.g7,'Games, next 7 days');
-  if(p.rl&&p.rl!=='Not listed')t+=tile(esc(p.rl),'Line / power play');
+  if(p.rl&&p.rl!=='Not listed')t+=tile(esc(rlTxt(p.rl)),'Line / power play');
   if(isG){if(p.sp!=null)t+=tile(Math.round(p.sp*100)+'%','Start chance');}
   else if(p.toi!=null)t+=tile(f(p.toi,1)+' min','Ice time / game');
   t+=pcToday(p);
@@ -1959,7 +1970,7 @@ function cmpRow(r){
 }
 function cmpSide(p,k){
   return '<div class="cm-p">'+avHtml(p.id,p.tm)+'<a class="pl cm-n" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'
-    +'<div class="cm-s">'+esc(p.pos)+' &middot; '+esc(p.tm)+(p.rl&&p.rl!=='Not listed'?' &middot; '+esc(p.rl):'')+'</div>'
+    +'<div class="cm-s">'+esc(p.pos)+' &middot; '+esc(p.tm)+(p.rl&&p.rl!=='Not listed'?' &middot; '+esc(rlTxt(p.rl)):'')+'</div>'
     +'<div class="cm-tag'+(cmpMine(p)?' mine':'')+'">'+esc(cmpWho(p))+'</div>'
     +(p.inj&&p.inj!=='ACTIVE'?'<div class="cm-inj">'+esc(p.inj)+'</div>':'')
     +'<button type="button" class="cm-chg" data-cmchg="'+k+'">Change</button></div>';

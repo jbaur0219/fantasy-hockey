@@ -285,7 +285,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
               "kept": (xi, t, yi) in keep}
         mv["ga"] = mv["games"]
         mv["gd"] = sum(1 for i in range(t, ndays) if y["v"][i] > 0) if y["p"]["inj"] not in A.BAD_INJURY else 0
-        mv["conf"] = confidence(mv, y["p"], healthy)
+        mv["conf"] = confidence(mv, y["p"], healthy, x["p"])
         mv["why1"] = headline(mv, x["p"], y["p"])
         if reasons:
             mv["why_add"] = STR._why_add(x, ents, y, t, ndays, days, game, standings)
@@ -305,7 +305,12 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
 # ---------------------------------------------------------------------------
 # Confidence, the one-line reason, and other drops for the same add
 # ---------------------------------------------------------------------------
-def confidence(mv, drop_p, healthy):
+def day_to_day(p):
+    """Listed as hurt but not ruled out (ESPN's DAY_TO_DAY): he may or may not play."""
+    return bool(p) and p.get("inj") not in ("ACTIVE", None) and p.get("inj") not in A.BAD_INJURY
+
+
+def confidence(mv, drop_p, healthy, add_p=None):
     """'strong', 'lean' or 'optional'. Strong = clearly worth a move; the morning alert only names Strong moves."""
     if mv["tier"] != "make":
         return "optional"
@@ -319,6 +324,8 @@ def confidence(mv, drop_p, healthy):
         c = "optional"
     if c == "strong" and not healthy:
         c = "lean"                        # line or goalie data was missing: never call a move a sure thing
+    if c == "strong" and day_to_day(add_p):
+        c = "lean"                        # the player you'd add might not play: never a sure thing
     return c
 
 
@@ -344,6 +351,8 @@ def headline(mv, xp, yp):
         role = STR._role_text(xp)
         if role and role != "no line role":
             why += f" {a} is on {xp['tm']}'s {role}."
+    if day_to_day(xp):
+        why += f" {a} is day-to-day, so check he's playing before you add him."
     pay = f" About {mv['gain']:+.1f} pts this week"
     pay += f" ({mv['net']:+.1f} counting what you give up later)." if mv.get("cost", 0) >= 0.05 else "."
     return why + pay
@@ -372,7 +381,7 @@ def alternatives(M, final, m, days, ndays, healthy):
               "waiver": M.pool[xi]["waiver"], "tier": "make" if net >= b["bar"] else "optional"}
         mv["ga"] = mv["games"]
         mv["gd"] = sum(1 for i in range(t, ndays) if b["v"][i] > 0) if yp["inj"] not in A.BAD_INJURY else 0
-        mv["conf"] = confidence(mv, yp, healthy)
+        mv["conf"] = confidence(mv, yp, healthy, xp)
         mv["why1"] = headline(mv, xp, yp)
         mv["lt"] = LT.assess(yp, xp, M.fut, c)
         out.append(mv)

@@ -22,6 +22,13 @@ class Confidence(unittest.TestCase):
     def test_never_strong_on_bad_data(self):
         self.assertEqual(C.confidence(self.mv(5.0), {"inj": "ACTIVE"}, False), "lean")
 
+    def test_never_strong_when_add_is_day_to_day(self):
+        ok = {"inj": "ACTIVE"}
+        self.assertEqual(C.confidence(self.mv(5.0), ok, True, {"inj": "DAY_TO_DAY"}), "lean")
+        self.assertEqual(C.confidence(self.mv(5.0), ok, True, {"inj": "ACTIVE"}), "strong")
+        self.assertEqual(C.confidence(self.mv(5.0), ok, True, None), "strong")
+        self.assertEqual(C.confidence(self.mv(1.2), ok, True, {"inj": "DAY_TO_DAY"}), "optional")
+
 
 class TrackRecord(unittest.TestCase):
     def test_scores_and_freezes(self):
