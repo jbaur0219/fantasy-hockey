@@ -807,6 +807,30 @@ table.edge th,table.edge td{padding:8px 4px!important}
 .mu-sum b{font:700 22px/1.1 ui-rounded,-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .mu-sum span{font-size:12px;color:var(--label2);margin-top:2px}
 .mu-sk{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--label2)}
+/* day picker: the centre label is a button with a down arrow; it opens a list of every day in the matchup */
+button.mu-pick{display:inline-flex;align-items:center;gap:6px;min-height:44px;margin:-8px -6px;padding:0 12px;border:0;border-radius:22px;background:transparent;font-family:inherit;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:background .2s,color .2s,transform .25s var(--spring)}
+button.mu-pick:active{transform:scale(.94);background:var(--fill3)}
+button.mu-pick.past{color:var(--tint)}
+.mu-cv{display:inline-flex;width:10px;height:7px;transition:transform .35s var(--spring)}
+.mu-cv svg{width:100%;height:100%;display:block}
+button.mu-pick.open .mu-cv{transform:rotate(180deg)}
+.mu-dd{background:var(--fill4);border-radius:16px;padding:4px 6px 6px;margin:0 0 4px;animation:muDD .32s var(--spring) both;transform-origin:50% 0}
+.mu-dh,.mu-dr{display:grid;grid-template-columns:minmax(0,1fr) 52px 52px 26px;align-items:center;gap:4px}
+.mu-dh{padding:6px 8px 2px;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--label2);text-align:center}
+.mu-dr{width:100%;min-height:44px;padding:0 8px;border:0;border-radius:12px;background:transparent;color:var(--label);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s}
+.mu-dr:active{background:var(--fill3)}
+.mu-dr.sel{background:color-mix(in srgb,var(--tint) 12%,transparent)}
+.mu-dr:disabled{cursor:default;opacity:.4}.mu-dr:disabled:active{background:transparent}
+.mu-dn{display:flex;align-items:baseline;gap:8px;min-width:0}
+.mu-dn b{font-size:16px;font-weight:600;white-space:nowrap}
+.mu-dn i{font-style:normal;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--tint)}
+.mu-ds{text-align:center;font:500 15px ui-rounded,-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--label2)}
+.mu-ds.w{font-weight:700;color:var(--label)}
+.mu-ck{display:flex;justify-content:flex-end;color:var(--tint)}.mu-ck svg{width:14px;height:11px}
+.mu-neg{color:var(--red)}
+@keyframes muDD{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.mu-dd{animation:none}.mu-cv,button.mu-pick{transition:none}}
 .mu-gh{font-size:13px;font-weight:600;text-transform:uppercase;color:var(--label2);margin:16px 2px 2px}
 .mu-lr{display:grid;grid-template-columns:minmax(0,1fr) 40px 40px minmax(0,1fr);align-items:center;gap:4px;padding:8px 0;border-bottom:.5px solid var(--sep)}
 .mu-c{display:flex;flex-direction:column;min-width:0}

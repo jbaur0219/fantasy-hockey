@@ -2138,7 +2138,7 @@ gameplanRender();
 /* =====================================================================================================
    MATCHUPS: every game in the league this week, and a head-to-head sheet for each one
    ===================================================================================================== */
-var MU={tab:'tn',open:-1};
+var MU={tab:'tn',open:-1,day:null,dd:false};   /* day = index of a past matchup day being viewed (null = today); dd = day picker open */
 function muTeam(id){for(var i=0;i<D.teams.length;i++)if(D.teams[i].id===id)return D.teams[i];return {id:id,name:'Team '+id,rec:'',players:[]};}
 function muInit(n){var w=String(n||'?').replace(/[^A-Za-z0-9 ]/g,' ').trim().split(/\s+/).filter(Boolean);if(!w.length)return '?';return (w[0].charAt(0)+(w[1]?w[1].charAt(0):w[0].charAt(1)||'')).toUpperCase();}
 function muHue(id){return ((+id||1)*67+200)%360;}
@@ -2202,10 +2202,33 @@ function muSlots(t,slot,S){
   return t.players.filter(function(p){return p.slot===slot;}).sort(function(x,y){
     var a=muStatus(x,S).on?1:0,b=muStatus(y,S).on?1:0;return (b-a)||((y.out||0)-(x.out||0));});
 }
+function muEtd(ms){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ms));}catch(e){return '';}}
+/* the past day on screen, or null when it is today */
+function muShown(S){var t=Math.min(S.today,S.dates.length-1);return (MU.day!=null&&MU.day>=0&&MU.day<t)?MU.day:null;}
+var MU_CV='<svg viewBox="0 0 12 8" aria-hidden="true"><path d="M1.5 1.5L6 6l4.5-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+var MU_CK='<svg viewBox="0 0 14 11" aria-hidden="true"><path d="M1.5 5.5l3.8 3.8L12.5 1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+/* the day picker: every day of the matchup with both teams' points; days that have not happened yet are grayed out */
+function muDayMenu(g,S,t,i){
+  if(!MU.dd)return '';
+  var A=muTeam(g.a),B=muTeam(g.b);
+  var h='<div class="mu-dd" role="listbox" aria-label="Matchup day"><div class="mu-dh"><span></span><span>'+esc(muInit(A.name))+'</span><span>'+esc(muInit(B.name))+'</span><span></span></div>';
+  S.dates.forEach(function(d,k){
+    var fut=k>t,a=fut?null:g.ad[k],b=fut?null:g.bd[k],tag=k===t?(S.done?'Last day':'Today'):'';
+    function sc(v,o){return '<span class="mu-ds'+(v!=null&&o!=null&&v>o?' w':'')+'">'+(v==null?'&ndash;':f(v,1))+'</span>';}
+    h+='<button type="button" class="mu-dr'+(k===i?' sel':'')+(fut?' fut':'')+'" data-mud="'+k+'"'+(fut?' disabled':'')+' role="option" aria-selected="'+(k===i?'true':'false')+'">'
+      +'<span class="mu-dn"><b>'+esc(dayShort(S.labels[k]))+'</b>'+(tag?'<i>'+tag+'</i>':'')+'</span>'+sc(a,b)+sc(b,a)+'<span class="mu-ck">'+(k===i?MU_CK:'')+'</span></button>';
+  });
+  return h+'</div>';
+}
 function muTonight(g,S){
-  var A=muTeam(g.a),B=muTeam(g.b),t=Math.min(S.today,S.dates.length-1);
+  var A=muTeam(g.a),B=muTeam(g.b),t=Math.min(S.today,S.dates.length-1),sh=muShown(S),i=sh==null?t:sh,past=sh!=null;
   function playing(T){return T.players.filter(function(p){return ['F','D','G','UTIL'].indexOf(p.slot)>=0&&muStatus(p,S).on;}).length;}
-  var h='<div class="mu-sum"><div><b>'+(g.ad[t]==null?'0.0':f(g.ad[t],1))+'</b><span>'+playing(A)+' playing</span></div><div class="mu-sk">'+(S.done?'Last day':'Today')+'</div><div><b>'+(g.bd[t]==null?'0.0':f(g.bd[t],1))+'</b><span>'+playing(B)+' playing</span></div></div>';
+  var pill=past?esc(dayShort(S.labels[i])):(S.done?'Last day':'Today');
+  var h='<div class="mu-sum"><div><b>'+(g.ad[i]==null?'0.0':f(g.ad[i],1))+'</b><span id="muPa">'+(past?'':playing(A)+' playing')+'</span></div>'
+    +'<button type="button" class="mu-sk mu-pick'+(MU.dd?' open':'')+(past?' past':'')+'" data-mud="tg" aria-haspopup="listbox" aria-expanded="'+(MU.dd?'true':'false')+'" aria-label="Choose a day. Showing '+pill+'">'+pill+'<span class="mu-cv">'+MU_CV+'</span></button>'
+    +'<div><b>'+(g.bd[i]==null?'0.0':f(g.bd[i],1))+'</b><span id="muPb">'+(past?'':playing(B)+' playing')+'</span></div></div>';
+  h+=muDayMenu(g,S,t,i);
+  if(past){return h+'<div id="muPast"><div class="gl-wait"><span class="spin"></span>Loading</div></div>';}
   h+=muGroup('Forwards',muSlots(A,'F',S),muSlots(B,'F',S),S)+muGroup('Defense',muSlots(A,'D',S),muSlots(B,'D',S),S)
     +muGroup('Utility',muSlots(A,'UTIL',S),muSlots(B,'UTIL',S),S)+muGroup('Goalies',muSlots(A,'G',S),muSlots(B,'G',S),S);
   var bn=muGroup('Bench',muSlots(A,'BN',S),muSlots(B,'BN',S),S);
@@ -2213,6 +2236,40 @@ function muTonight(g,S){
   var live=S.pt&&Object.keys(S.pt).length;
   h+='<div class="muted mu-note">'+(live?'Points are from the last update ('+esc(D.updated)+'). Gray numbers are projections for games that have not started.':'Gray numbers are projected points for tonight. Final points show in the day totals above and on the Week tab.')+'</div>';
   return h;
+}
+/* a past day: who played and what they scored, from the game logs (current rosters) */
+function muPastFill(g,S,i){
+  var el=document.getElementById('muPast');if(!el)return;
+  if(typeof glLoad!=='function'){el.innerHTML='<div class="muted mu-note">Not available.</div>';return;}
+  glLoad().then(function(d){
+    el=document.getElementById('muPast');if(!el||muShown(S)!==i||MU.tab!=='tn')return;      /* the person moved on while it loaded */
+    if(!d){el.innerHTML='<div class="muted mu-note">Game logs are not available right now, so player points for this day cannot be shown. The team totals above are still right.</div>';return;}
+    var A=muTeam(g.a),B=muTeam(g.b),key=S.dates[i];
+    function played(T){
+      return T.players.map(function(p){
+        var r=glRows(p.id).filter(function(x){return muEtd(x[0])===key;})[0];return r?{p:p,r:r}:null;
+      }).filter(Boolean).sort(function(x,y){return y.r[3]-x.r[3];});
+    }
+    var pa=played(A),pb=played(B);
+    var ea=document.getElementById('muPa'),eb=document.getElementById('muPb');
+    if(ea)ea.textContent=pa.length+' played';if(eb)eb.textContent=pb.length+' played';
+    function cell(x,right){
+      if(!x)return '<div class="mu-c'+(right?' r':'')+'"></div>';
+      var p=x.p;
+      return '<div class="mu-c'+(right?' r':'')+'"><span class="mu-nm">'+(right?muInj(p):'')+'<a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'+(right?'':muInj(p))+'</span>'
+        +'<span class="mu-g">'+esc(p.pos)+' '+esc(p.tm)+' &middot; '+glOpp(x.r)+'</span></div>';
+    }
+    function pts(x){return '<div class="mu-p">'+(x?'<b class="'+(x.r[3]<0?'mu-neg':'')+'">'+f(x.r[3],1)+'</b>':'')+'</div>';}
+    var h='';
+    [['F','Forwards'],['D','Defense'],['G','Goalies']].forEach(function(gr){
+      var a=pa.filter(function(x){return x.p.grp===gr[0];}),b=pb.filter(function(x){return x.p.grp===gr[0];}),n=Math.max(a.length,b.length);
+      if(!n)return;
+      h+='<div class="mu-gh">'+gr[1]+'</div>';
+      for(var k=0;k<n;k++)h+='<div class="mu-lr">'+cell(a[k],false)+pts(a[k])+pts(b[k])+cell(b[k],true)+'</div>';
+    });
+    if(!h)h='<div class="muted mu-note">None of these players had a game on '+esc(dayShort(S.labels[i]))+'.</div>';
+    el.innerHTML=h+'<div class="muted mu-note">Player points come from each player\'s game log on today\'s rosters, so they can differ from the day totals above (bench players, or anyone added or dropped since).</div>';
+  });
 }
 function muWeek(g,S){
   var A=muTeam(g.a),B=muTeam(g.b),mx=1,h='';
@@ -2256,10 +2313,11 @@ function muBody(){
   b.innerHTML=MU.tab==='wk'?muWeek(g,S):muTonight(g,S);
   var sg=document.getElementById('muSeg');if(sg){sg.classList.toggle('two',MU.tab==='wk');$$('button',sg).forEach(function(x){x.classList.toggle('on',x.getAttribute('data-mut')===MU.tab);});}
   if(MU.tab==='wk')muTopFill(g,S);
+  else if(muShown(S)!=null)muPastFill(g,S,muShown(S));
 }
 function muOpen(i){
   var S=D.sb,g=S&&S.games[i];if(!g)return;
-  MU.open=i;
+  MU.open=i;MU.day=null;MU.dd=false;MU.tab='tn';
   var A=muTeam(g.a),B=muTeam(g.b),w=muWin(g);
   var h='<div class="mhead"><div class="pc-id"><b>Week '+esc(S.mp)+'</b><span class="muted">'+muDayTxt(S)+' &middot; updated '+esc(D.updated)+'</span></div><button class="x" id="mx">&times;</button></div>';
   function side(t,sc,pr){return '<div class="sb-tm">'+muMono(t)+'<div class="sb-n">'+esc(t.name)+'</div><div class="sb-r">'+esc(t.rec)+' &middot; proj '+f(pr,0)+'</div></div>';}
@@ -2274,7 +2332,15 @@ function muOpen(i){
 document.addEventListener('click',function(e){
   var t=e.target;if(!t||!t.closest)return;
   var a=t.closest('[data-mu]');if(a){muOpen(+a.getAttribute('data-mu'));return;}
-  var b=t.closest('[data-mut]');if(b){MU.tab=b.getAttribute('data-mut');muBody();var bx=document.querySelector('#modal .box');return;}
+  var b=t.closest('[data-mut]');if(b){MU.tab=b.getAttribute('data-mut');MU.dd=false;muBody();return;}
+  var d=t.closest('[data-mud]');
+  if(d){
+    var S=D.sb,v=d.getAttribute('data-mud');
+    if(v==='tg')MU.dd=!MU.dd;
+    else if(S&&!d.disabled){var k=+v;MU.day=(k>=Math.min(S.today,S.dates.length-1))?null:k;MU.dd=false;}
+    muBody();return;
+  }
+  if(MU.dd&&document.getElementById('muBody')&&!t.closest('.mu-dd')){MU.dd=false;muBody();}      /* a tap anywhere else closes the picker */
 });
 
 /* ---------- Auto-update: the open app reloads itself when new data or new app code is live ---------- */
