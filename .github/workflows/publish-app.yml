@@ -71,6 +71,7 @@ jobs:
       - name: Build the app around the live data
         if: steps.live.outputs.ok == 'true'
         run: |
+          pip install -q -r requirements.txt
           python site_builder.py shell site
           python -c "import pwa; pwa.write_files('site')"
           ls -la site
