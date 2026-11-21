@@ -1237,9 +1237,21 @@ function glTabDrag(cap){
   window.addEventListener('pointerup',end);window.addEventListener('pointercancel',function(){if(x0==null)return;ln.classList.remove('held','drag');x0=null;glLens();});
   cap.addEventListener('click',function(e){if(cap._sup&&Date.now()-cap._sup<400){e.stopPropagation();e.preventDefault();}},true);
 }
+/* iOS can leave the visible screen offset from the page the fixed bars are laid out on (after a sheet closes, the keyboard, or
+   coming back to the app), so the top bar floats mid-screen. visualViewport says by how much; every fixed bar follows it. */
+var PIN={y:0};
+function glPin(){
+  var vv=window.visualViewport,y=vv?vv.offsetTop:0;
+  if(!isFinite(y)||Math.abs(y)<1||(typeof SH!=='undefined'&&SH.open))y=0;
+  y=Math.round(y);
+  if(y===PIN.y)return;
+  PIN.y=y;document.documentElement.style.setProperty('--vvy',y+'px');
+}
+if(window.visualViewport){window.visualViewport.addEventListener('scroll',glPin);window.visualViewport.addEventListener('resize',glPin);}
 /* scroll: collapse the large title into the nav bar; minimize the tab bar going down, restore going up */
 var GS={y:0,raf:0,acc:0};
 function glScroll(){
+  glPin();
   if(GS.raf)return;
   GS.raf=requestAnimationFrame(function(){
     GS.raf=0;
@@ -1317,11 +1329,13 @@ function sheetClose(){
     m.classList.remove('open','fading');de.classList.remove('sheet-on','sh-anim');
     var w=document.querySelector('.wrap');w.style.transformOrigin='';
     if(bx)bx.style.transform='';
+    glPin();setTimeout(glPin,250);
   },RM?0:480);
 }
 /* iOS keeps odd state after the keyboard closes or the app is reopened: the top bar can end up shifted under the status bar,
    and a closed sheet can leave the "page stepped back" look behind. Put both back to normal. */
 function glReset(){
+  glPin();
   var de=document.documentElement,w=document.querySelector('.wrap'),m=document.getElementById('modal');
   if(!SH.open&&!SH.closing_busy&&de.classList.contains('sheet-on')){
     de.classList.remove('sheet-on','sh-anim');de.style.removeProperty('--sp');

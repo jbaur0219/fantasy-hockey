@@ -921,3 +921,6 @@ button.mu-pick.open .mu-cv{transform:rotate(180deg)}
 .tl-ph{display:flex;align-items:center;justify-content:space-between;min-height:28px}
 .tl-reset{border:0;background:var(--fill3);color:var(--tint);font:600 14px/1 -apple-system,system-ui,sans-serif;height:28px;padding:0 13px;border-radius:100px;cursor:pointer;transition:transform .4s var(--spring)}
 .tl-reset:active{transform:scale(.92)}.tl-reset[hidden]{display:none}
+
+/* fixed bars stay glued to the visible screen even if iOS offsets it (see glPin in app.js) */
+#gnav,#bnav,#rfbar,.gn-edge.bot{translate:0 var(--vvy,0px)}
