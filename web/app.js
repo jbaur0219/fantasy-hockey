@@ -329,9 +329,9 @@ function leagueRender(){
   rows.sort(function(a,b){return b.power-a.power;});rows.forEach(function(r,i){r.pr=i+1;});
   rows.sort(function(a,b){return (b.w-a.w)||(b.pf-a.pf);});
   $('#leagueTbl').innerHTML=mkTable([{h:'Team',v:function(r){return r.name;}},{h:'W-L-T',v:function(r){return r.w;},num:1,r:function(r){return esc(r.rec);}},
-    {h:'Points for',v:function(r){return r.pf;},num:1,fmt:function(x){return f(x,1);}},
-    {h:'Strength (pts/wk)',v:function(r){return r.power;},num:1,fmt:function(x){return f(x,0);}},
-    {h:'Strength rank',v:function(r){return r.pr;},num:1}],rows);
+    {h:'PF',v:function(r){return r.pf;},num:1,fmt:function(x){return f(x,1);}},
+    {h:'Strength',v:function(r){return r.power;},num:1,fmt:function(x){return f(x,0);}},
+    {h:'Rank',v:function(r){return r.pr;},num:1}],rows);
   wireSort($('#leagueTbl'));
 }
 

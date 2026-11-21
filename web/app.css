@@ -746,3 +746,16 @@ td{border-bottom:.5px solid var(--sep)!important}tr:last-child td{border-bottom:
 .scroll:has(table.edge){margin:0;padding:0}
 .scroll table.edge th:first-child,.scroll table.edge td:first-child{position:static!important;background:none!important;box-shadow:none!important;max-width:none!important;overflow:visible!important}
 table.edge th,table.edge td{padding:8px 4px!important}
+
+/* tables (all of them): no gutter padding on the scroller, so a scrolled column can never show beside the pinned first column;
+   headers may wrap so tables fit the phone width instead of scrolling sideways; long names get an ellipsis */
+.scroll,.scroll:has(table.edge){margin:0!important;padding:0!important}
+.scroll th{white-space:normal;line-height:1.15;vertical-align:bottom;padding-left:6px;padding-right:6px}
+.scroll td:first-child,.scroll th:first-child{max-width:40vw;overflow:hidden;text-overflow:ellipsis;z-index:2}
+.scroll td:first-child{white-space:nowrap}
+#leagueTbl td,#leagueTbl th{padding-left:5px;padding-right:5px}
+#leagueTbl td:first-child{max-width:44vw}
+.scroll table{min-width:0}
+#leagueTbl table{font-size:14px}#leagueTbl td:first-child{max-width:36vw}#leagueTbl td:last-child,#leagueTbl th:last-child{min-width:0}
+#leagueTbl td,#leagueTbl th{padding-left:4px;padding-right:4px}#leagueTbl td:first-child{max-width:31vw}
+#leagueTbl td:first-child{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.2}
