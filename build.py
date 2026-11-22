@@ -304,7 +304,7 @@ def _main():
         Path("site/pool.json").write_text(json.dumps(pool, separators=(",", ":"), ensure_ascii=True), encoding="utf-8")
     write_health_file(site_data, now_ms)
     try:
-        st = LG.write_files(RC.STATE["rows"], "site", now_ms)   # lifetime stats page, stats.json and moves.csv
+        st = LG.write_files(RC.STATE["rows"], "history", now_ms)   # back-end lifetime stats (not published)
         print(f"  lifetime stats: {st['suggested']} suggested, {st['scored']} scored, "
               f"made moves {st['made']['pts']:+.1f} pts")
     except Exception as e:                                  # the stats page is an extra: never fail the build over it

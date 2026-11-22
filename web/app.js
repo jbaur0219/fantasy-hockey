@@ -1702,7 +1702,6 @@ function uiRecord(){
           +' <span class="muted">(expected '+sgn(r.expected||0,1)+(r.final?'':', so far')+')</span></li>';}).join('')+'</ul>';
     }
     h+='<div class="muted" style="margin-top:6px">Points the added player scored minus the dropped player, from the move\'s day to the end of that week. Hockey is noisy, so judge it over a few weeks, not one move.</div>';
-    h+='<div class="muted" style="margin-top:6px"><a href="stats.html">Lifetime stats</a> &middot; <a href="moves.csv">Download every move (Excel)</a></div>';
   }
   uiPut('Track record',h,{v:'today',s:'main',c:0});
 }
