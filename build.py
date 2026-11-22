@@ -28,6 +28,7 @@ import enrich as E
 import gamelog as GL
 import gameplan as GP
 import keep as KP
+import ledger as LG
 import netcache as NC
 import planner as PL
 import playercard as PC
@@ -302,6 +303,12 @@ def _main():
     if pool is not None:
         Path("site/pool.json").write_text(json.dumps(pool, separators=(",", ":"), ensure_ascii=True), encoding="utf-8")
     write_health_file(site_data, now_ms)
+    try:
+        st = LG.write_files(RC.STATE["rows"], "site", now_ms)   # lifetime stats page, stats.json and moves.csv
+        print(f"  lifetime stats: {st['suggested']} suggested, {st['scored']} scored, "
+              f"made moves {st['made']['pts']:+.1f} pts")
+    except Exception as e:                                  # the stats page is an extra: never fail the build over it
+        print(f"  lifetime stats skipped ({type(e).__name__}: {e})")
     try:
         pwa.write_files("site")
         write_notify_payload(site_data, now_ms)

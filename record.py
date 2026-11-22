@@ -20,7 +20,7 @@ import analyze as A
 
 LOG_FILE = Path(__file__).with_name("history") / "moves.jsonl"
 RESULTS_FILE = Path(__file__).with_name("history") / "results.json"
-STATE = {"tot": {}}
+STATE = {"tot": {}, "rows": []}
 
 
 def install(data, season):
@@ -101,7 +101,8 @@ def build(mp, write=True):
                 results[k] = sc               # the week is over: freeze it
                 changed = True
                 final = sc
-        rows.append({"mp": e.get("mp"), "day": e.get("day"), "result": e.get("result"), "add": e["add"], "drop": e["drop"],
+        rows.append({"mp": e.get("mp"), "day": e.get("day"), "logged": e.get("logged"), "result": e.get("result"),
+                     "add": e["add"], "drop": e["drop"],
                      "expected": e.get("net") if e.get("net") is not None else e.get("expected_gain"),
                      "conf": e.get("conf"), "why1": e.get("why1"),
                      "actual": sc["actual"] if sc else None, "ga": sc["ga"] if sc else None, "gd": sc["gd"] if sc else None,
@@ -119,6 +120,7 @@ def build(mp, write=True):
         rs = [r for r in rows if r["conf"] == c and r["actual"] is not None]
         return {"n": len(rs), "pts": round(sum(r["actual"] for r in rs), 1), "wins": sum(1 for r in rs if r["actual"] > 0)}
 
+    STATE["rows"] = list(rows)                        # every move, oldest first: the lifetime stats (ledger.py) read these
     rows.reverse()                                    # newest first
     return {"made": summary("done"), "skipped": summary("missed"),
             "strong": by_conf("strong"), "lean": by_conf("lean"), "optional": by_conf("optional"),

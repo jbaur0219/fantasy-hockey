@@ -54,7 +54,7 @@ jobs:
           mkdir -p site
           BASE="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
           ok=true
-          for f in data.json version.json health.json gamelog.json pool.json; do
+          for f in data.json version.json health.json gamelog.json pool.json stats.json stats.html moves.csv; do
             curl -fsS "$BASE/$f?t=$(date +%s)" -o "site/$f" || { echo "could not fetch $f"; rm -f "site/$f"; [ "$f" = data.json ] && ok=false; }
           done
           python3 -c "import json;json.load(open('site/data.json'))" 2>/dev/null || ok=false
@@ -83,7 +83,7 @@ jobs:
           HAD=$(python3 -c "import json;print(json.load(open('site/version.json')).get('data'))")
           if [ -n "$NOW" ] && [ "$NOW" != "$HAD" ]; then
             echo "new data went live while this ran ($HAD -> $NOW); using it"
-            for f in data.json health.json gamelog.json pool.json; do curl -fsS "$BASE/$f?t=$(date +%s)" -o "site/$f" || true; done
+            for f in data.json health.json gamelog.json pool.json stats.json stats.html moves.csv; do curl -fsS "$BASE/$f?t=$(date +%s)" -o "site/$f" || true; done
             python3 -c "import json,site_builder as S;S.write_version('site',$NOW);print(open('site/version.json').read())"
           fi
       - uses: actions/upload-pages-artifact@v3
