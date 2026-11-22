@@ -336,7 +336,7 @@
      38.4,
      22
     ],
-    "at": 1795328268456,
+    "at": 1795354215057,
     "d": [
      35.1,
      25
@@ -354,10 +354,45 @@
    "gain": 2.38,
    "games": 1,
    "net": 2.38,
-   "t": 1,
+   "t": 0,
    "tier": "make",
    "waiver": false,
    "why1": "Rinzel plays 1 game the rest of this week, Andersson plays 0. Rinzel is on CHI's top pair and first power-play unit. About +2.4 pts this week."
+  },
+  {
+   "add": {
+    "id": 5188534,
+    "n": "Nikita Tolopilo",
+    "pos": "G",
+    "tm": "VAN"
+   },
+   "base": {
+    "a": [
+     7.0,
+     1
+    ],
+    "at": 1795354215057,
+    "d": [
+     23.6,
+     12
+    ]
+   },
+   "conf": "strong",
+   "cost": 0.0,
+   "day": "Sun Nov 22",
+   "drop": {
+    "id": 3939714,
+    "n": "Adin Hill",
+    "pos": "G",
+    "tm": "VGK"
+   },
+   "gain": 2.31,
+   "games": 1,
+   "net": 2.31,
+   "t": 0,
+   "tier": "make",
+   "waiver": false,
+   "why1": "Tolopilo plays 1 game the rest of this week, Hill plays 0. About +2.3 pts this week."
   },
   {
    "add": {
@@ -371,7 +406,7 @@
      32.0,
      22
     ],
-    "at": 1795328268456,
+    "at": 1795354215057,
     "d": [
      29.4,
      21
@@ -389,7 +424,7 @@
    "gain": 1.44,
    "games": 1,
    "net": 1.44,
-   "t": 1,
+   "t": 0,
    "tier": "make",
    "waiver": false,
    "why1": "Perreault plays 1 game the rest of this week, Wilson plays 0. Perreault is on NYR's top line and first power-play unit. About +1.4 pts this week."
@@ -406,14 +441,14 @@
      27.8,
      19
     ],
-    "at": 1795328268456,
+    "at": 1795354215057,
     "d": [
      31.9,
      20
     ]
    },
    "conf": "optional",
-   "cost": 0.088,
+   "cost": 0.097,
    "day": "Sun Nov 22",
    "drop": {
     "id": 5080154,
@@ -423,8 +458,8 @@
    },
    "gain": 1.41,
    "games": 1,
-   "net": 1.32,
-   "t": 1,
+   "net": 1.31,
+   "t": 0,
    "tier": "make",
    "waiver": false,
    "why1": "Kindel plays 1 game the rest of this week, Mintyukov plays 0. Kindel is on PIT's second line and first power-play unit. About +1.4 pts this week (+1.3 counting what you give up later)."
@@ -441,14 +476,14 @@
      14.4,
      6
     ],
-    "at": 1795328268456,
+    "at": 1795354215057,
     "d": [
      27.0,
      15
     ]
    },
    "conf": "optional",
-   "cost": 0.551,
+   "cost": 0.574,
    "day": "Sun Nov 22",
    "drop": {
     "id": 4233648,
@@ -458,13 +493,13 @@
    },
    "gain": 1.8,
    "games": 1,
-   "net": 1.25,
-   "t": 1,
+   "net": 1.23,
+   "t": 0,
    "tier": "optional",
    "waiver": false,
    "why1": "Mailloux plays 1 game the rest of this week, Yamamoto plays 0. Mailloux is on STL's top pair and second power-play unit. About +1.8 pts this week (+1.2 counting what you give up later)."
   }
  ],
  "mp": 8,
- "updated": 1795328268456
+ "updated": 1795354215057
 }
