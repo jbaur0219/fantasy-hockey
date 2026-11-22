@@ -10,3 +10,7 @@ matchup_week,day,logged_date,status,rating,add,drop,expected_pts,actual_pts,fina
 8,Thu Nov 19,2026-11-19,skipped,optional,Jared Spurgeon,Pavel Mintyukov,1.02,2.3,no,yes
 8,Sat Nov 21,2026-11-21,made,strong,Frank Nazar,Trevor Zegras,2.82,2.5,no,yes
 8,Sat Nov 21,2026-11-21,skipped,strong,Sam Rinzel,Tom Wilson,2.6,5.0,no,yes
+8,Sun Nov 22,2026-11-22,made,optional,Ben Kindel,Pavel Mintyukov,1.31,0.0,no,yes
+8,Sun Nov 22,2026-11-22,skipped,strong,Nikita Tolopilo,Adin Hill,2.31,0.0,no,yes
+8,Sun Nov 22,2026-11-22,skipped,optional,Gabe Perreault,Tom Wilson,1.44,0.0,no,yes
+8,Sun Nov 22,2026-11-22,skipped,optional,Logan Mailloux,Kailer Yamamoto,1.23,0.0,no,yes
