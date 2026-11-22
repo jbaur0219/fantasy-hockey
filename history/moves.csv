@@ -1,0 +1,12 @@
+matchup_week,day,logged_date,status,rating,add,drop,expected_pts,actual_pts,final,scored
+8,Mon Nov 16,2026-11-17,made,,Kailer Yamamoto,Trevor Connelly,4.58,,no,no
+8,Mon Nov 16,2026-11-17,skipped,,Kaiden Guhle,Trevor Zegras,2.85,,no,no
+8,Tue Nov 17,2026-11-17,skipped,,Frank Nazar,Tom Wilson,2.45,,no,no
+8,Tue Nov 17,2026-11-17,skipped,,Sam Rinzel,Rasmus Andersson,2.16,,no,no
+8,Tue Nov 17,2026-11-17,skipped,,Victor Eklund,Will Smith,1.29,,no,no
+8,Wed Nov 18,2026-11-18,skipped,lean,Connor Brown,Will Smith,1.75,2.4,no,yes
+8,Wed Nov 18,2026-11-18,skipped,optional,Kaiden Guhle,Zach Benson,0.47,-1.2,no,yes
+8,Thu Nov 19,2026-11-19,skipped,strong,Filip Chytil,Trevor Zegras,2.29,1.7,no,yes
+8,Thu Nov 19,2026-11-19,skipped,optional,Jared Spurgeon,Pavel Mintyukov,1.02,2.3,no,yes
+8,Sat Nov 21,2026-11-21,made,strong,Frank Nazar,Trevor Zegras,2.82,2.5,no,yes
+8,Sat Nov 21,2026-11-21,skipped,strong,Sam Rinzel,Tom Wilson,2.6,5.0,no,yes
