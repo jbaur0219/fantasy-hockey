@@ -1060,3 +1060,10 @@ input,textarea,[contenteditable=true]{-webkit-user-select:text;user-select:text;
 .flip{transition:transform .45s var(--soft-spring)!important}
 /* "updates are paused" note (ESPN sign-in expired) */
 #signbar .card{margin:12px 0 0!important}#signbar .cin{font-size:15px}
+
+/* Schedule advantage: your teams + back-to-backs (replaces the old Games per team table) */
+table.edge tr.mine td{background:color-mix(in srgb,var(--tint) 11%,transparent)}
+table.edge tr.mine td:first-child{border-radius:10px 0 0 10px;padding-left:8px!important}
+table.edge tr.mine td:last-child{border-radius:0 10px 10px 0}
+table.edge .own{font-size:11px;font-weight:600;color:var(--tint)}
+table.edge i.b2b{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--orange);margin-left:3px;vertical-align:middle}

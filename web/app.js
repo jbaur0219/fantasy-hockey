@@ -418,17 +418,6 @@ function plannerRender(){
     list.forEach(function(s){h+='<div class="m"><a class="pl" data-id="'+s.id+'">'+esc(s.n)+'</a> '+(s.h?'vs':'@')+' '+esc(s.o)+' &middot; win '+Math.round(s.p*100)+'% &middot; '+sgn(s.e,1)+(s.st?' &middot; '+esc(s.st):'')+'</div>';});
     h+='</div>';});
   h+='</div><div class="muted" style="margin-top:8px">Free-agent goalies who start at least 30% of their team games. Expected points use team strength, home ice and save %. Starters are only confirmed for today, so check tomorrow morning before adding.</div></div>';
-  var mineBy={};act.forEach(function(p){mineBy[p.tm]=(mineBy[p.tm]||0)+1;});
-  var trows=P.teams.map(function(t){
-    var tot=t.g.filter(Boolean).length,b2b=0;
-    for(var i=1;i<t.g.length;i++){if(t.g[i]&&t.g[i-1])b2b++;}
-    return {tm:t.tm,g:t.g,total:tot,b2b:b2b,mine:mineBy[t.tm]||0,me:!!mineBy[t.tm]};});
-  trows.sort(function(a,b){return (b.total-a.total)||a.tm.localeCompare(b.tm);});
-  var cols=[{h:'Team',v:function(r){return r.tm;}}];
-  P.days.forEach(function(d,i){cols.push({h:d,v:function(r){return r.g[i]?1:0;},num:1,r:function(r){var c=r.g[i];return c?'<span class="gcell">'+(c[1]?'vs':'@')+' '+esc(c[0])+'</span>':'<span class="muted">-</span>';}});});
-  cols.push({h:'Games',v:function(r){return r.total;},num:1},{h:'Back-to-backs',v:function(r){return r.b2b;},num:1},{h:'My players',v:function(r){return r.mine;},num:1});
-  h+='<div class="card"><h2>Games per team, rest of this matchup</h2>'+mkTable(cols,trows)
-    +'<div class="muted">Bold rows are teams you own players on. More games means more points, and back-to-backs often mean a backup goalie in the second game.</div></div>';
   $('#t-planner').innerHTML=h;
   $$('#t-planner table').forEach(function(t){wireSort(t.parentNode);});
 }
@@ -909,7 +898,7 @@ var VIEWS=[
    {id:'streams',label:'Streams',cards:[['Best skater streams by day'],['Best adds for the rest of this week'],['Streaming goalies by day'],['Best stream targets for the week',1]]}]},
  {id:'roster',label:'Roster',subs:[
    {id:'team',label:'My team',cards:[['My roster']]},
-   {id:'week',label:'Schedule',cards:[['Schedule advantage'],['Your week at a glance'],['Games per team, rest of this matchup',1]]}]},
+   {id:'week',label:'Schedule',cards:[['Schedule advantage'],['Your week at a glance']]}]},
  {id:'players',label:'Players',subs:[{id:'main',label:'Players',cards:[['Free agents and waivers']]}]},
  {id:'league',label:'League',subs:[
    {id:'games',label:'Matchups',cards:[['Matchups']]},
@@ -1847,16 +1836,18 @@ function uiLineup(){
 UI.edgeWin=UI.edgeWin||0;
 function uiEdge(){
   var E=D.edge;if(!E||!E.length)return;
-  var w=E[Math.min(UI.edgeWin,E.length-1)],h='<div class="stchips">';
+  var w=E[Math.min(UI.edgeWin,E.length-1)],h='<div class="stchips">',mineBy={};
+  (D.mine||[]).forEach(function(p){if(p.slot!=='IR'&&!isInj(p))mineBy[p.tm]=(mineBy[p.tm]||0)+1;});
   E.forEach(function(x,i){h+='<button type="button" class="chip-btn'+(i===UI.edgeWin?' on':'')+'" data-ew="'+i+'">'+esc(x.label)+'</button>';});
-  h+='</div><div class="muted" style="margin:6px 0">Teams ranked by games and opponent strength (3 easy games beat 3 average ones). Green = weak opponent, red = strong. @ = away. Best free-agent skaters from each team are on the right.</div>';
+  h+='</div><div class="muted" style="margin:6px 0">Teams ranked by games and opponent strength (3 easy games beat 3 average ones). Green = weak opponent, red = strong. @ = away. Shaded rows are teams you own players on (&times;N = how many). A dot marks the second game of a back-to-back. Best free-agent skaters from each team are on the right.</div>';
   h+='<div class="scroll"><table class="edge"><thead><tr><th>Team</th><th>GP</th>';
   w.days.forEach(function(d){h+='<th>'+esc(d)+'</th>';});
   h+='<th>Best adds</th></tr></thead><tbody>';
   w.rows.forEach(function(r){
     var by={};r.opps.forEach(function(o){by[o.d]=o;});
-    h+='<tr><td><b>'+esc(r.tm)+'</b></td><td><b>'+r.g+'</b></td>';
-    w.days.forEach(function(d){var o=by[d];h+='<td>'+(o?'<span class="'+(o.t==='weak'?'good':o.t==='strong'?'bad':'muted')+'">'+(o.h?'':'@')+esc(o.o)+'</span>':'')+'</td>';});
+    var n=mineBy[r.tm]||0;
+    h+='<tr'+(n?' class="mine"':'')+'><td><b>'+esc(r.tm)+'</b>'+(n?' <span class="own">&times;'+n+'</span>':'')+'</td><td><b>'+r.g+'</b></td>';
+    w.days.forEach(function(d,di){var o=by[d],b2b=o&&di>0&&by[w.days[di-1]];h+='<td>'+(o?'<span class="'+(o.t==='weak'?'good':o.t==='strong'?'bad':'muted')+'">'+(o.h?'':'@')+esc(o.o)+'</span>'+(b2b?'<i class="b2b"></i>':''):'')+'</td>';});
     h+='<td>'+(r.fa.length?r.fa.map(function(p){return '<a class="pl" data-id="'+p.id+'" data-noav="1">'+esc(shortName(p.n))+'</a> <span class="muted">'+esc(p.pos)+(p.w?' W':'')+'</span>';}).join('<br>'):'<span class="muted">none</span>')+'</td></tr>';
   });
   h+='</tbody></table></div>';
