@@ -2879,6 +2879,16 @@ function psInit(){
 
 streamsRender();
 LK.start();
+/* ---------- no pinch zoom, double-tap zoom, text selection or image drag (iOS ignores the viewport tag) ---------- */
+(function(){
+  var stop=function(e){e.preventDefault();};
+  ['gesturestart','gesturechange','gestureend'].forEach(function(t){document.addEventListener(t,stop,{passive:false});});
+  document.addEventListener('touchmove',function(e){if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});
+  document.addEventListener('dblclick',stop,{passive:false});
+  document.addEventListener('selectstart',function(e){if(!(e.target.closest&&e.target.closest('input,textarea,[contenteditable=true]')))e.preventDefault();});
+  document.addEventListener('dragstart',stop);
+  document.addEventListener('contextmenu',function(e){if(!(e.target.closest&&e.target.closest('input,textarea')))e.preventDefault();});
+})();
 appStart();
 uiStart();try{psInit();}catch(e){}showTab((location.hash||'').slice(1));
 updStart();lvStart();

@@ -1037,3 +1037,10 @@ body.nophoto .ps-r+.ps-r:before{left:16px}
 .mu-ghost{position:absolute;left:0;right:0;top:0;pointer-events:none}
 .mu-page .sb,.mu-page .wp-bar .a{animation:none}     /* pages swap under your finger: no entrance animation */
 .mu-page{display:flow-root}
+
+/* ---------- feel like an app, not a website ---------- */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:pan-x pan-y}
+html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+*{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+img,svg,a{-webkit-user-drag:none;user-drag:none}
+input,textarea,[contenteditable=true]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
