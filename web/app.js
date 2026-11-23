@@ -400,11 +400,11 @@ function plannerRender(){
   }).filter(function(r){return !LK.closed(r.i);});
   h+='<div class="card"><h2>Your week at a glance</h2>'+mkTable([
     {h:'Day',v:function(r){return r.i;},r:function(r){return esc(r.d);}},
-    {h:'Forwards playing (9 slots)',v:function(r){return r.F;},num:1},
-    {h:'Defense playing (5 slots)',v:function(r){return r.D;},num:1},
-    {h:'Goalies playing',v:function(r){return r.G;},num:1},
-    {h:'Empty slots',v:function(r){return r.empty;},num:1,r:function(r){return '<span class="'+(r.empty>=4?'bad':(r.empty>=2?'warn':'good'))+'">'+r.empty+'</span>';}}],rows)
-    +'<div class="muted">Empty slots are days when you cannot fill every lineup spot with a healthy player who has a game. Those are the best days for a streaming pickup.</div></div>';
+    {h:'Fwd',v:function(r){return r.F;},num:1},
+    {h:'Def',v:function(r){return r.D;},num:1},
+    {h:'Goalies',v:function(r){return r.G;},num:1},
+    {h:'Empty',v:function(r){return r.empty;},num:1,r:function(r){return '<span class="'+(r.empty>=4?'bad':(r.empty>=2?'warn':'good'))+'">'+r.empty+'</span>';}}],rows)
+    +'<div class="muted">Fwd, Def and Goalies are how many of your players have a game (you start 9 forwards, 5 defense). Empty slots are days when you cannot fill every lineup spot with a healthy player who has a game. Those are the best days for a streaming pickup.</div></div>';
   h+='<div class="card"><h2>Moves and waivers</h2>';
   if(P.moves_used==null)h+='<div>Your league allows '+P.limit+' adds per matchup. ESPN shows how many you have used on your roster page.</div>';
   else h+='<div><span class="big">'+P.moves_used+' / '+P.limit+'</span> <span class="muted">adds used this matchup</span></div>';
