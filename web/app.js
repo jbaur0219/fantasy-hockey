@@ -790,7 +790,7 @@ var LK=(function(){
     for(var i=0;i<n;i++){if(closed(i)&&C.lock[i]&&C.lock[i]>C.built)staleSince=1;}
     var ti=C.dates.indexOf(etDate(Date.now())),started=ti>=0&&closed(ti);
     var msg=(started?'<b>Today\'s games have started, so adds are locked.</b> ':'<b>Earlier days in this matchup week are already over.</b> ')+(fi<n?'Everything below is for '+esc(C.labels[fi])+' onward.':'Every game day left in this matchup week has started.');
-    if(staleSince)msg+=' <span class="muted">This page was built before puck drop. A fresh build starts automatically within about 15 minutes of the first game, and the tabs already skip the closed day.</span>';
+    if(staleSince)msg+=' <span class="muted">This was made before puck drop. It updates itself within about 15 minutes of the first game, and the tabs already skip the locked day.</span>';
     el.innerHTML='<div class="card" style="margin:8px 0;border-left:4px solid var(--amber)">&#128274; '+msg+'</div>';
   }
   function start(){
@@ -892,6 +892,7 @@ function appStart(){
 
 /* ---------- UI layer: grouped tabs, headshots, collapsible cards ---------- */
 var UI={view:'today',sub:{},open:{},booted:false,photos:true};
+try{UI.open=JSON.parse(localStorage.getItem('fh_open')||'{}')||{};}catch(e){UI.open={};}
 var ICON={
   today:'<svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
   moves:'<svg viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg>',
@@ -921,9 +922,20 @@ VIEWS.forEach(function(v){VMAP[v.id]=v;v.sm={};v.subs.forEach(function(s){v.sm[s
 var HOME={overview:'today/main',roster:'roster/team',free:'players/main',trade:'league/trade',planner:'roster/week',gameplan:'moves/plan',streams:'moves/streams',league:'league/table'};
 var LEGACY={overview:'today',gameplan:'moves/plan',streams:'moves/streams',planner:'roster/week',free:'players',trade:'league/trade'};
 
+/* Pictures come from ESPN's image resizer at the size they are shown (about 3x for the iPhone screen). The full-size
+   files are 20-50 times bigger, and the phone decodes them while you scroll. If the resizer ever fails, the original is
+   tried once, then initials (players) or nothing (team logo). */
+var ESPN_RS='https://a.espncdn.com/combiner/i?img=';
+window.avErr=avErr;                      /* used by the pictures' onerror, which runs outside this script's scope */
+function avErr(i){
+  var f=i.getAttribute('data-full');
+  if(f){i.removeAttribute('data-full');i.src=f;return;}
+  if(i.className==='tl')i.style.display='none';else i.parentNode.className+=' nf';
+}
 function avHtml(id,tm){
-  var logo=(tm&&/^[A-Za-z]{2,4}$/.test(tm)&&tm!=='FA')?'<img class="tl" src="https://a.espncdn.com/i/teamlogos/nhl/500/'+String(tm).toLowerCase()+'.png" loading="lazy" alt="" onerror="this.style.display=\'none\'">':'';
-  return '<span class="av"><img src="https://a.espncdn.com/i/headshots/nhl/players/full/'+id+'.png" loading="lazy" alt="" onerror="this.parentNode.className+=\' nf\'">'+logo+'</span>';
+  var lp='/i/teamlogos/nhl/500/'+String(tm||'').toLowerCase()+'.png',hp='/i/headshots/nhl/players/full/'+id+'.png';
+  var logo=(tm&&/^[A-Za-z]{2,4}$/.test(tm)&&tm!=='FA')?'<img class="tl" src="'+ESPN_RS+lp+'&w=60&h=60&scale=crop" data-full="https://a.espncdn.com'+lp+'" loading="lazy" decoding="async" alt="" onerror="avErr(this)">':'';
+  return '<span class="av"><img src="'+ESPN_RS+hp+'&w=300&h=218&scale=crop" data-full="https://a.espncdn.com'+hp+'" loading="lazy" decoding="async" alt="" onerror="avErr(this)">'+logo+'</span>';
 }
 var decQ=false;
 function shortName(n){var s=String(n||'').trim().split(/\s+/);return s.length<2?n:s[0].charAt(0)+'. '+s.slice(1).join(' ');}
@@ -1002,6 +1014,34 @@ function uiLayout(){
   uiBadge();
   if(!decQ){decQ=true;setTimeout(uiDecorate,0);}
 }
+/* Open or close a section like iOS: the size changes in one step, then the sections below slide into place (transform only,
+   so the GPU does it) and the body fades. Animating the height instead re-laid-out the whole page on every frame. */
+function cardToggle(c){
+  var closing=!c.classList.contains('closed'),t=c.getAttribute('data-ut');
+  UI.open[t]=!closing;uiSaveOpen();
+  clearTimeout(c._ft);c.classList.remove('closing','opening');
+  if(c._fl){c._fl.forEach(function(e){e.classList.remove('flip');e.style.transform='';});c._fl=null;}
+  if(RM||!c.offsetParent){c.classList.toggle('closed',closing);return;}
+  var fol=[],vh=window.innerHeight||800;
+  for(var n=c.nextElementSibling;n;n=n.nextElementSibling)fol.push(n);
+  var ft=document.querySelector('.ufoot');if(ft)fol.push(ft);
+  var before=fol.map(function(e){return e.getBoundingClientRect().top;});
+  if(closing)c.classList.add('closed','closing');else{c.classList.remove('closed');c.classList.add('opening');}
+  var moved=[];
+  fol.forEach(function(e,i){
+    var a=e.getBoundingClientRect().top,d=before[i]-a;
+    if(Math.abs(d)<1||Math.min(a,before[i])>vh+40)return;               /* off screen either way: nothing to see */
+    e.style.transform='translateY('+d.toFixed(1)+'px)';moved.push(e);
+  });
+  if(moved.length){
+    void c.offsetWidth;                                                 /* start the slide from where they were */
+    moved.forEach(function(e){e.classList.add('flip');e.style.transform='';});
+  }
+  c._fl=moved;
+  c._ft=setTimeout(function(){c.classList.remove('closing','opening');moved.forEach(function(e){e.classList.remove('flip');});c._fl=null;},470);
+}
+/* which sections you opened or closed survives the app reloading itself */
+function uiSaveOpen(){try{localStorage.setItem('fh_open',JSON.stringify(UI.open));}catch(e){}}
 function showTab(n){
   n=String(n||'').replace(/^#/,'');
   var parts=n.split('/'),v=parts[0],s=parts[1];
@@ -1115,7 +1155,7 @@ function uiPlaybook(){
   var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,S=D.streams,WP=D.weekplan||{};
   if(!P||!S)return;
   var h='',fi=LK.first(),done=WP.done||[],missed=WP.missed||[],ch=WP.changes||[];
-  h+='<div class="muted" style="margin-bottom:6px">One plan for the whole site: the Today screen, this page and the morning alert (Strong moves only) all use these moves. '
+  h+='<div class="muted" style="margin-bottom:6px">One plan for the whole app: the Today screen, this page and the morning alert (Strong moves only) all use these moves. '
     +'Each update keeps a planned move unless a clearly better one comes up, and says what changed.</div>';
   if(WP.saved===false)h+='<div class="why warn" style="margin-bottom:6px">Some data was missing in this update, so this plan was not saved as the week\'s plan. The next good update replaces it.</div>';
   if(ch.length)h+='<div class="pbh">Changed since the last update</div><ul class="pbl">'+ch.map(function(c){
@@ -1278,7 +1318,10 @@ if(window.visualViewport){window.visualViewport.addEventListener('scroll',glPin)
    dragged the fixed top bar and its blur down the screen, and sometimes left it stuck there. Instead only the content
    stretches at the top and bottom, under bars that stay put, and a fast flick into an edge gives a small spring. */
 var BAND={y0:null,x0:0,ax:0,on:false,base:0,inner:false,lt:0,ly:0,v:0,t:0};
-function bandMax(){return Math.max(0,document.documentElement.scrollHeight-window.innerHeight);}
+/* the page height is kept up to date by a ResizeObserver, so touches and scrolls never force a layout just to read it */
+function bandMax(){if(BAND.max==null||!window.ResizeObserver)BAND.max=Math.max(0,document.documentElement.scrollHeight-window.innerHeight);return BAND.max;}
+(function(){function upd(){BAND.max=null;}window.addEventListener('resize',upd,{passive:true});
+  if(window.ResizeObserver){var ro=new ResizeObserver(upd),go=function(){var w=document.querySelector('.wrap');if(w)ro.observe(w);else setTimeout(go,200);};go();}})();
 function bandOff(){return (typeof SH!=='undefined'&&(SH.open||SH.closing_busy))||document.documentElement.classList.contains('sheet-on')||document.body.classList.contains('mlock');}
 function bandInner(el){
   for(;el&&el!==document.body&&el!==document.documentElement;el=el.parentElement){
@@ -1297,17 +1340,19 @@ function bandSet(px,mode){
 function bandRubber(d){var H=window.innerHeight||800,a=Math.abs(d),r=(1-1/(a*0.55/H+1))*H;return d<0?-r:r;}
 document.addEventListener('touchstart',function(e){
   BAND.y0=null;if(RM||e.touches.length!==1||bandOff())return;
-  BAND.y0=e.touches[0].clientY;BAND.x0=e.touches[0].clientX;BAND.ax=0;BAND.on=false;BAND.ly=BAND.y0;BAND.inner=bandInner(e.target);
+  BAND.y0=e.touches[0].clientY;BAND.x0=e.touches[0].clientX;BAND.ax=0;BAND.on=false;BAND.ly=BAND.y0;BAND.inner=null;BAND.tg=e.target;
 },{passive:true});
 document.addEventListener('touchmove',function(e){
-  if(BAND.y0==null||BAND.inner||e.touches.length!==1)return;
+  if(BAND.y0==null||BAND.inner===true||e.touches.length!==1)return;
   var y=e.touches[0].clientY,dy=y-BAND.y0,dx=e.touches[0].clientX-BAND.x0;
   if(!BAND.ax){if(Math.abs(dy)<6&&Math.abs(dx)<6)return;BAND.ax=Math.abs(dy)>Math.abs(dx)?1:-1;}
   if(BAND.ax<0)return;                                                  /* sideways swipe (tables, chips) */
   var sy=window.pageYOffset||0;
   if(!BAND.on){
     var down=y>BAND.ly;BAND.ly=y;
-    if(sy<=0.5&&down)BAND.on=1;else if(sy>=bandMax()-1&&!down)BAND.on=-1;else return;
+    if(sy<=0.5&&down)BAND.on=1;else if(!down&&sy>=bandMax()-1)BAND.on=-1;else return;
+    if(BAND.inner==null)BAND.inner=bandInner(BAND.tg);                  /* only now: is the finger in a scroll box of its own? */
+    if(BAND.inner){BAND.on=false;return;}
     BAND.base=y;return;
   }
   BAND.ly=y;var d=y-BAND.base;
@@ -1339,7 +1384,7 @@ function glScroll(){
     var t=document.getElementById('lhT'),lim=t.offsetTop+t.offsetHeight-48;
     nb.classList.toggle('scrolled',y>lim);
     nb.classList.toggle('edge',y>4);
-    if(!BAND.on&&!(document.querySelector('.wrap')||{}).style.transform)t.style.transform='';
+    if(t.style.transform&&!BAND.on&&!(document.querySelector('.wrap')||{}).style.transform)t.style.transform='';
     /* tab bar */
     if(y<60){GS.acc=0;tb.classList.remove('min');}
     else if(dy>0){GS.acc=Math.max(0,GS.acc)+dy;if(GS.acc>40)tb.classList.add('min');}
@@ -1379,6 +1424,8 @@ function glWrap(c){
 
 /* ---------- sheet (player card) ---------- */
 var SH={open:false,closing:0};
+function spSet(v){var w=document.querySelector('.wrap'),m=document.getElementById('modal');
+  [w,m].forEach(function(e){if(!e)return;if(v==null)e.style.removeProperty('--sp');else e.style.setProperty('--sp',String(v));});}
 function sheetOpen(){
   var m=document.getElementById('modal'),bx=m.querySelector('.box'),de=document.documentElement;if(!bx)return;
   clearTimeout(SH.closing);SH.closing_busy=false;
@@ -1388,23 +1435,23 @@ function sheetOpen(){
   if(!SH.open){wrap.style.transformOrigin='50% '+y+'px';wrap.style.setProperty('--clipy',y+'px');}
   SH.open=true;
   de.classList.add('sheet-on','sh-anim');
-  if(RM){de.style.setProperty('--sp','1');return;}
+  if(RM){spSet(1);return;}
   bx.style.transition='none';bx.style.transform='translateY(100%)';void bx.offsetWidth;
   bx.style.transition='';bx.style.transform='';
-  de.style.setProperty('--sp','0');void bx.offsetWidth;requestAnimationFrame(function(){de.style.setProperty('--sp','1');});
+  spSet(0);void bx.offsetWidth;requestAnimationFrame(function(){spSet(1);});
   if(!bx._dr){bx._dr=1;sheetDrag(bx);}
 }
 function sheetClose(){
   var m=document.getElementById('modal'),bx=m.querySelector('.box'),de=document.documentElement;
   if(!SH.open){m.classList.remove('open');return;}
   SH.open=false;
-  de.classList.add('sh-anim');de.style.setProperty('--sp','0');
+  de.classList.add('sh-anim');spSet(0);
   if(bx){bx.style.transition='';bx.style.transform='translateY(105%)';}
   m.classList.add('fading');
   SH.closing_busy=true;
   SH.closing=setTimeout(function(){
     SH.closing_busy=false;
-    m.classList.remove('open','fading');de.classList.remove('sheet-on','sh-anim');
+    m.classList.remove('open','fading');de.classList.remove('sheet-on','sh-anim');spSet(null);
     var w=document.querySelector('.wrap');w.style.transformOrigin='';
     if(bx)bx.style.transform='';
     glPin();setTimeout(glPin,250);
@@ -1416,7 +1463,7 @@ function glReset(){
   glPin();
   var de=document.documentElement,w=document.querySelector('.wrap'),m=document.getElementById('modal');
   if(!SH.open&&!SH.closing_busy&&de.classList.contains('sheet-on')){
-    de.classList.remove('sheet-on','sh-anim');de.style.removeProperty('--sp');
+    de.classList.remove('sheet-on','sh-anim');spSet(null);
     if(w){w.style.transformOrigin='';w.style.removeProperty('--clipy');}
     if(m)m.classList.remove('open','fading');
     document.body.classList.remove('mlock');document.body.style.top='';
@@ -1441,7 +1488,7 @@ function sheetDrag(bx){
     dy=d;t.push([y,performance.now()]);if(t.length>5)t.shift();
     var tr=dy>=0?dy:-Math.pow(-dy,0.72);
     bx.style.transform='translateY('+tr+'px)';
-    de.style.setProperty('--sp',String(Math.max(0,Math.min(1,1-Math.max(0,dy)/H))));
+    spSet(Math.max(0,Math.min(1,1-Math.max(0,dy)/H)).toFixed(3));
   }
   function end(){
     if(y0==null)return;y0=null;
@@ -1449,7 +1496,7 @@ function sheetDrag(bx){
     var a=t[0],b=t[t.length-1],v=(b&&a&&b[1]>a[1])?(b[0]-a[0])/(b[1]-a[1]):0;
     bx.style.transition='';de.classList.add('sh-anim');
     if(dy>H*0.28||v>0.45){sheetClose();}
-    else{bx.style.transform='';de.style.setProperty('--sp','1');}
+    else{bx.style.transform='';spSet(1);}
   }
   bx.addEventListener('touchstart',function(e){if(e.touches.length===1)start(e.touches[0].clientY,e.touches[0].clientX);},{passive:true});
   bx.addEventListener('touchmove',function(e){move(e.touches[0].clientY,e,e.touches[0].clientX);},{passive:false});
@@ -1516,7 +1563,7 @@ function uiToday(){
   }
   h+='<div id="livebox">'+lvHtml()+'</div>';
   /* problems only: the data line is silent when everything is fine */
-  var warn=age>12?'The automatic update may have failed ('+Math.round(age)+' h old). Tap refresh, or check ESPN before making moves.'
+  var warn=age>12?'This hasn\u2019t updated in '+Math.round(age)+' hours. Tap refresh, or check ESPN before making moves.'
     :((H.level&&H.level!=='ok'&&H.items&&H.items.length)?H.items[0]+(H.level==='bad'?' Nothing is marked Strong until it is back.':''):'');
   if(fi>=n){
     h+='<div class="sec"><div class="grp"><div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">You\'re set for this week</div><div class="row-s">Every game day has started. Next week\'s plan shows up after the next update.</div></div></div></div></div>';
@@ -1854,7 +1901,7 @@ function uiStart(){uiModalWatch();
       b=t.closest('[data-sw]');
     if(b){WI.add=b.getAttribute('data-sw');WI.addQ='';if(typeof streamsRender==='function')streamsRender();showTab('moves/swap');return;}
     var h=t.closest('.card.collapsible > h2');
-    if(h){var c=h.parentNode;c.classList.toggle('closed');UI.open[c.getAttribute('data-ut')]=!c.classList.contains('closed');}
+    if(h){cardToggle(h.parentNode);}
   });
 }
 
@@ -2035,7 +2082,7 @@ function glPane(p,all){
   var isG=p.grp==='G',unit=isG?'pts/start':'pts/game';
   if(!GLG.d){
     if(GLG.p&&!GLG.done)return '<div class="gl-wait"><span class="spin"></span>Loading recent games&hellip;</div>';
-    return '<div class="gl-none">The game log isn’t in this build yet. It shows up after the next data refresh.</div>';
+    return '<div class="gl-none">The game log isn’t here yet. It shows up with the next update, usually within 20 minutes.</div>';
   }
   var rows=glRows(p.id);
   if(!rows.length)return '<div class="gl-none">No games played in the last few weeks.</div>';
@@ -2597,21 +2644,41 @@ document.addEventListener('click',function(e){
 });
 
 /* ---------- Auto-update: the open app reloads itself when new data or new app code is live ---------- */
-/* The published app has window.FH_CODE (see site_builder.LOADER). It asks version.json every 15 s while open and
-   whenever it comes back to the screen. When something changed it waits for a quiet moment (no sheet open, not
-   typing, no touch for 5 s, or the app is in the background), then reloads and keeps your tab and scroll. */
-var UPD={t:0,busy:false,want:null,tm:null};
+/* The published app has window.FH_CODE (see site_builder.LOADER). It asks version.json every 15 s while open and whenever it
+   comes back to the screen.
+   - New data never reloads the page you are reading. It is put in right after you open the app (within 2 minutes, once you
+     have not touched the screen for 4 s) or while the app is in the background. Otherwise it waits for that.
+   - New app code goes in at the next quiet moment (no sheet open, not typing, no touch for 5 s), or in the background.
+   Before reloading it fetches what the new page needs (data.json, or the new app files), so the reload itself is instant,
+   and it keeps your tab, scroll and open sections. */
+var UPD={t:0,busy:false,want:null,tm:null,vis:Date.now(),going:false};
 function updQuiet(){
   if(document.hidden)return true;
   var m=document.getElementById('modal');if(m&&m.classList.contains('open'))return false;
   var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return false;
-  return Date.now()-UPD.t>5000;
+  var idle=Date.now()-UPD.t;
+  if(UPD.want&&UPD.want.k==='data')return Date.now()-UPD.vis<120000&&idle>4000;
+  return idle>5000;
+}
+function updPrep(){                                           /* fetch what the new page needs, so the reload shows it at once */
+  var w=UPD.want,keep=function(txt){if(txt){try{sessionStorage.setItem('fh_pre',txt);}catch(e){}}};
+  if(w.k==='data')return fetch('data.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(keep).catch(function(){});
+  var el=document.getElementById('data');if(el&&el.textContent)keep(el.textContent);
+  var c=w.v.slice(1);
+  return Promise.all(['js','css'].map(function(x){return fetch('app.'+c+'.'+x).catch(function(){});})).catch(function(){});
 }
 function updApply(){
-  if(!UPD.want)return;
-  if(!updQuiet()){clearTimeout(UPD.tm);UPD.tm=setTimeout(updApply,3000);return;}
-  try{sessionStorage.setItem('fh_upd',JSON.stringify({k:UPD.want.k,v:UPD.want.v,y:window.pageYOffset||0}));}catch(e){}
-  location.reload();
+  if(!UPD.want||UPD.going)return;
+  clearTimeout(UPD.tm);
+  if(!updQuiet()){UPD.tm=setTimeout(updApply,3000);return;}
+  UPD.going=true;
+  var done=false,go=function(){
+    if(done)return;done=true;
+    if(!updQuiet()){UPD.going=false;try{sessionStorage.removeItem('fh_pre');}catch(e){}UPD.tm=setTimeout(updApply,3000);return;}   /* you touched it meanwhile */
+    try{sessionStorage.setItem('fh_upd',JSON.stringify({k:UPD.want.k,v:UPD.want.v,y:window.pageYOffset||0}));}catch(e){}
+    location.reload();
+  };
+  updPrep().then(go,go);setTimeout(go,6000);
 }
 function updCheck(){
   if(UPD.busy||UPD.want||!window.FH_CODE)return;            /* the one-file test page has nothing to check */
@@ -2626,13 +2693,15 @@ function updCheck(){
     UPD.want=w;updApply();
   }).catch(function(){UPD.busy=false;});
 }
+/* the Refresh and Keep buttons: their update was asked for, so put it in now (still keeping tab and scroll) */
+window.FHUpdateNow=function(){UPD.vis=Date.now();UPD.t=0;try{sessionStorage.removeItem('fh_tried');}catch(e){}UPD.want=null;UPD.busy=false;updCheck();};
 function updStart(){
   ['pointerdown','touchstart','keydown','scroll'].forEach(function(ev){document.addEventListener(ev,function(){UPD.t=Date.now();},{passive:true,capture:true});});
-  document.addEventListener('visibilitychange',function(){if(!document.hidden)updCheck();else if(UPD.want)updApply();});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden){UPD.vis=Date.now();updCheck();}else if(UPD.want)updApply();});
   setInterval(function(){if(!document.hidden)updCheck();},15000);
   setTimeout(updCheck,3000);
   var s=null;try{s=JSON.parse(sessionStorage.getItem('fh_upd')||'null');sessionStorage.removeItem('fh_upd');if(s)sessionStorage.setItem('fh_tried',s.v);}catch(e){}
-  if(s){if(s.y)setTimeout(function(){window.scrollTo(0,s.y);},80);kpToast(s.k==='code'?'The app was just updated.':'Updated with the latest data.');}
+  if(s){if(s.y){window.scrollTo(0,s.y);requestAnimationFrame(function(){if(Math.abs((window.pageYOffset||0)-s.y)>2)window.scrollTo(0,s.y);});}kpToast(s.k==='code'?'The app was just updated.':'Updated with the latest data.');}
 }
 
 /* ---------- Live: tonight's games and roughly how many points your starters have scored so far ----------

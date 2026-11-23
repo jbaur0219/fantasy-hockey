@@ -8,7 +8,7 @@
 <div class="tabs">
 <button id="nav-overview">Overview</button><button id="nav-roster">My roster</button>
 <button id="nav-free">Free agents</button><button id="nav-trade">Trade lab</button><button id="nav-planner">Planner</button><button id="nav-gameplan">Game Plan</button><button id="nav-streams">Streams</button><button id="nav-league">League</button></div>
-<div id="appbar"></div><div id="lockbar" role="status" aria-live="polite"></div><noscript><div class="card">This page needs JavaScript turned on.</div></noscript>
+<div id="appbar"></div><div id="signbar"></div><div id="lockbar" role="status" aria-live="polite"></div><noscript><div class="card">This page needs JavaScript turned on.</div></noscript>
 <section id="t-overview"></section>
 <section id="t-roster" style="display:none"><div class="card"><h2>My roster</h2>
 <div class="controls"><span id="rosterPos"></span><input type="text" id="rosterQ" placeholder="Search players"></div>
@@ -42,7 +42,13 @@ var btn=document.getElementById('rfbtn'),msg=document.getElementById('rfmsg'),fg
 if(!btn)return;
 function tok(){try{return localStorage.getItem(KEY)||'';}catch(e){return '';}}
 function setTok(v){try{if(v)localStorage.setItem(KEY,v);else localStorage.removeItem(KEY);}catch(e){}fg.style.display=tok()?'inline':'none';}
-function say(t,bad){msg.textContent=t;msg.style.color=bad?'#d33':'';}
+/* the floating pill shows while there is a message; a finished message goes away by itself */
+var sayT=0;function say(t,bad,stay){clearTimeout(sayT);msg.textContent=t;msg.style.color=bad?'var(--red)':'';if(t&&!stay)sayT=setTimeout(function(){msg.textContent='';},bad?7000:3500);}
+var SIGN='ESPN sign-in expired, so the app can\u2019t update. In Railway, open Variables and paste fresh ESPN_S2 and SWID cookies.';
+function signNote(on){var el=document.getElementById('signbar');if(!el)return;
+  el.innerHTML=on?'<div class="card"><div class="cin"><b>Updates are paused</b><div class="muted" style="margin-top:4px">'+SIGN+' Until then you are seeing the last update.</div></div></div>':'';}
+/* when a refresh you asked for finishes, let the app put the new data in the usual way (keeps your tab and scroll) */
+function showNew(){if(window.FHUpdateNow)window.FHUpdateNow();else location.reload();}
 function api(path,opt){opt=opt||{};opt.headers={'Authorization':'Bearer '+tok(),'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};return fetch('https://api.github.com/repos/'+OWNER+'/'+REPO+path,opt);}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 setTok(tok());
@@ -56,27 +62,30 @@ async function srvRun(inputs,quiet,auto){
   if(busy)return false;
   busy=true;if(!auto)btn.disabled=true;
   try{
-    if(!auto)say(quiet?'Updating the plan with your keep list...':'Starting refresh...');
+    if(!auto)say(quiet?'Updating the plan with your keep list\u2026':'Checking for new data\u2026',false,true);
     var r=await fetch('api/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:inputs.reason||'manual-button',keep:inputs.keep||null,force:!auto})});
-    if(!r.ok){if(!auto)say('Could not start the refresh (HTTP '+r.status+').',true);return false;}
+    if(!r.ok){if(!auto)say('Couldn\u2019t reach the server. Try again in a moment.',true);return false;}
     var j=await r.json();
-    if(j.state==='fresh'||j.state==='recent'){if(!auto)say('Already up to date.');return true;}
-    if(!auto)say('Building...');   /* the automatic on-open update is silent: you see the page right away and it swaps itself when ready */
+    if(j.state==='fresh'||j.state==='recent'){
+      if(!auto){var st=await sget();if(st&&st.login_expired){signNote(true);say(SIGN,true);}else say(j.state==='fresh'?'Already up to date.':'Updated a moment ago.');}
+      return true;}
+    if(!auto)say('Getting the latest from ESPN\u2026 about 30 seconds',false,true);   /* the automatic on-open update is silent: you see the page right away and it swaps itself when ready */
     var s=null;
     for(var i=0;i<120;i++){await sleep(3000);s=await sget();if(s&&!s.building)break;}
+    if(s)signNote(!!s.login_expired);
     if(auto){try{document.dispatchEvent(new Event('visibilitychange'));}catch(e){}return true;}
-    if(s&&!s.building&&s.last_error&&!auto){say('The update failed, so you are still seeing the last good one.',true);return true;}
-    if(auto){say('');try{document.dispatchEvent(new Event('visibilitychange'));}catch(e){}return true;}   /* the app's own update check reloads it */
-    if(s&&!s.building){say('Done. Reloading...');location.reload();return true;}
-    say('Still running after 6 minutes. Reload in a bit.',true);
-  }catch(e){if(!auto)say('Something went wrong: '+e.message,true);}
+    if(s&&!s.building&&s.login_expired){say(SIGN,true);return true;}
+    if(s&&!s.building&&s.last_error){say('That update didn\u2019t work, so you\u2019re still seeing the last good one. It will try again soon.',true);return true;}
+    if(s&&!s.building){say('Updated.');showNew();return true;}
+    say('Still working on it. The app will update itself when it\u2019s done.',false);
+  }catch(e){if(!auto)say('Couldn\u2019t reach the server. Check your signal and try again.',true);}
   finally{busy=false;btn.disabled=false;}
   return true;
 }
 function openRefresh(){if(SRV!==true||busy||document.hidden||Date.now()-lastOpen<60000)return;lastOpen=Date.now();srvRun({reason:'on-open'},true,true);}
 sget().then(function(s){
   if(!s||s.ok!==true)return;
-  SRV=true;fg.style.display='none';openRefresh();
+  SRV=true;fg.style.display='none';signNote(!!s.login_expired);openRefresh();
   document.addEventListener('visibilitychange',openRefresh);
 });
 async function run(inputs,quiet){
