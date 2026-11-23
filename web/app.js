@@ -1839,14 +1839,14 @@ function uiEdge(){
   var w=E[Math.min(UI.edgeWin,E.length-1)],h='<div class="stchips">',mineBy={};
   (D.mine||[]).forEach(function(p){if(p.slot!=='IR'&&!isInj(p))mineBy[p.tm]=(mineBy[p.tm]||0)+1;});
   E.forEach(function(x,i){h+='<button type="button" class="chip-btn'+(i===UI.edgeWin?' on':'')+'" data-ew="'+i+'">'+esc(x.label)+'</button>';});
-  h+='</div><div class="muted" style="margin:6px 0">Teams ranked by games and opponent strength (3 easy games beat 3 average ones). Green = weak opponent, red = strong. @ = away. Shaded rows are teams you own players on (&times;N = how many). A dot marks the second game of a back-to-back. Best free-agent skaters from each team are on the right.</div>';
+  h+='</div><div class="muted" style="margin:6px 0">Teams ranked by games and opponent strength (3 easy games beat 3 average ones). Green = weak opponent, red = strong. @ = away. Blue teams are ones you own players on. A dot marks the second game of a back-to-back. Best free-agent skaters from each team are on the right.</div>';
   h+='<div class="scroll"><table class="edge"><thead><tr><th>Team</th><th>GP</th>';
   w.days.forEach(function(d){h+='<th>'+esc(d)+'</th>';});
   h+='<th>Best adds</th></tr></thead><tbody>';
   w.rows.forEach(function(r){
     var by={};r.opps.forEach(function(o){by[o.d]=o;});
     var n=mineBy[r.tm]||0;
-    h+='<tr'+(n?' class="mine"':'')+'><td><b>'+esc(r.tm)+'</b>'+(n?' <span class="own">&times;'+n+'</span>':'')+'</td><td><b>'+r.g+'</b></td>';
+    h+='<tr><td><b'+(n?' class="own"':'')+'>'+esc(r.tm)+'</b></td><td><b>'+r.g+'</b></td>';
     w.days.forEach(function(d,di){var o=by[d],b2b=o&&di>0&&by[w.days[di-1]];h+='<td>'+(o?'<span class="'+(o.t==='weak'?'good':o.t==='strong'?'bad':'muted')+'">'+(o.h?'':'@')+esc(o.o)+'</span>'+(b2b?'<i class="b2b"></i>':''):'')+'</td>';});
     h+='<td>'+(r.fa.length?r.fa.map(function(p){return '<a class="pl" data-id="'+p.id+'" data-noav="1">'+esc(shortName(p.n))+'</a> <span class="muted">'+esc(p.pos)+(p.w?' W':'')+'</span>';}).join('<br>'):'<span class="muted">none</span>')+'</td></tr>';
   });
