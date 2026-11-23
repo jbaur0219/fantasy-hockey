@@ -388,6 +388,24 @@ def stale_alert():
           "check the server logs.")
 
 
+FRESH_MIN = float(os.environ.get("FRESH_MIN") or 20)
+
+
+def keep_fresh():
+    """Waking hours: rebuild in the background when the data is older than FRESH_MIN, so opening the app is instant."""
+    from zoneinfo import ZoneInfo
+    hr = datetime.now(ZoneInfo("America/New_York")).hour
+    if hr < 7 and hr >= 1:                        # sleep 1am-7am ET
+        return
+    age = data_age_min()
+    with LOCK:
+        if ST["building"] or ST["queued"]:
+            return
+        since = (time.time() - ST["last_start"]) / 60
+    if (age is None or age >= FRESH_MIN) and since >= FRESH_MIN / 2:
+        log(f"keep-fresh: data is {age if age is None else round(age)} min old -> {request_build('auto-fresh')}")
+
+
 def code_changed():
     """True when the deployed code differs from the code that made the live site (stamp kept on the volume)."""
     import hashlib
@@ -418,6 +436,10 @@ def loop():
             scheduler.main()
         except Exception as e:                    # a bad check never stops the loop
             log(f"scheduler check failed: {type(e).__name__}: {e}")
+        try:
+            keep_fresh()
+        except Exception as e:
+            log(f"keep-fresh check failed: {e}")
         try:
             stale_alert()
         except Exception as e:

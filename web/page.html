@@ -61,9 +61,10 @@ async function srvRun(inputs,quiet,auto){
     if(!r.ok){if(!auto)say('Could not start the refresh (HTTP '+r.status+').',true);return false;}
     var j=await r.json();
     if(j.state==='fresh'||j.state==='recent'){if(!auto)say('Already up to date.');return true;}
-    say(auto?'Getting the latest data...':'Building...');
+    if(!auto)say('Building...');   /* the automatic on-open update is silent: you see the page right away and it swaps itself when ready */
     var s=null;
     for(var i=0;i<120;i++){await sleep(3000);s=await sget();if(s&&!s.building)break;}
+    if(auto){try{document.dispatchEvent(new Event('visibilitychange'));}catch(e){}return true;}
     if(s&&!s.building&&s.last_error&&!auto){say('The update failed, so you are still seeing the last good one.',true);return true;}
     if(auto){say('');try{document.dispatchEvent(new Event('visibilitychange'));}catch(e){}return true;}   /* the app's own update check reloads it */
     if(s&&!s.building){say('Done. Reloading...');location.reload();return true;}
