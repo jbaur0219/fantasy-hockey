@@ -48,7 +48,38 @@ function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 setTok(tok());
 fg.addEventListener('click',function(e){e.preventDefault();setTok('');say('Token removed from this browser.');});
 var busy=false;
+/* On the always-on server (api/status answers) the buttons ask the server directly: no GitHub token. On GitHub Pages
+   there is no api/, so everything below the SRV checks is the old token path, unchanged. */
+var SRV=null,lastOpen=0;
+function sget(){return fetch('api/status',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});}
+async function srvRun(inputs,quiet,auto){
+  if(busy)return false;
+  busy=true;if(!auto)btn.disabled=true;
+  try{
+    if(!auto)say(quiet?'Updating the plan with your keep list...':'Starting refresh...');
+    var r=await fetch('api/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:inputs.reason||'manual-button',keep:inputs.keep||null,force:!auto})});
+    if(!r.ok){if(!auto)say('Could not start the refresh (HTTP '+r.status+').',true);return false;}
+    var j=await r.json();
+    if(j.state==='fresh'||j.state==='recent'){if(!auto)say('Already up to date.');return true;}
+    say(auto?'Getting the latest data...':'Building...');
+    var s=null;
+    for(var i=0;i<120;i++){await sleep(3000);s=await sget();if(s&&!s.building)break;}
+    if(s&&!s.building&&s.last_error&&!auto){say('The update failed, so you are still seeing the last good one.',true);return true;}
+    if(auto){say('');try{document.dispatchEvent(new Event('visibilitychange'));}catch(e){}return true;}   /* the app's own update check reloads it */
+    if(s&&!s.building){say('Done. Reloading...');location.reload();return true;}
+    say('Still running after 6 minutes. Reload in a bit.',true);
+  }catch(e){if(!auto)say('Something went wrong: '+e.message,true);}
+  finally{busy=false;btn.disabled=false;}
+  return true;
+}
+function openRefresh(){if(SRV!==true||busy||document.hidden||Date.now()-lastOpen<60000)return;lastOpen=Date.now();srvRun({reason:'on-open'},true,true);}
+sget().then(function(s){
+  if(!s||s.ok!==true)return;
+  SRV=true;fg.style.display='none';openRefresh();
+  document.addEventListener('visibilitychange',openRefresh);
+});
 async function run(inputs,quiet){
+  if(SRV===true)return srvRun(inputs,quiet,false);
   if(busy)return false;
   if(!tok()){
     if(quiet)return false;
@@ -82,6 +113,6 @@ async function run(inputs,quiet){
   return true;
 }
 /* used by the Keep button: quiet = never prompt for a token; returns true when an update was started */
-window.FHRefresh=function(inputs,quiet){if(!tok()||busy)return false;run(inputs,quiet);return true;};
+window.FHRefresh=function(inputs,quiet){if(SRV===true){if(busy)return false;srvRun(inputs,true,false);return true;}if(!tok()||busy)return false;run(inputs,quiet);return true;};
 btn.addEventListener('click',function(){run({reason:'manual-button'},false);});
 })();</script></body></html>

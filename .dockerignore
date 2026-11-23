@@ -1,0 +1,11 @@
+.git
+.github
+data
+site
+preview
+tests
+__pycache__
+*.pyc
+full.html
+snapshot.json.gz
+notify_payload.json

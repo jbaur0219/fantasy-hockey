@@ -43,7 +43,7 @@ function fromCache(key) { return caches.match(key).then(function (m) { return m 
 self.addEventListener('fetch', function (e) {
   var r = e.request, u = new URL(r.url);
   if (r.method !== 'GET' || u.origin !== self.location.origin) return;
-  if (/version\.json$/.test(u.pathname)) return;
+  if (/version\.json$/.test(u.pathname) || /\/api\//.test(u.pathname)) return;
   var key = keyOf(r.url);
   if (/\/app\.[0-9a-f]+\.(js|css)$|\.png$/.test(u.pathname)) {
     e.respondWith(caches.match(key).then(function (m) {
