@@ -1,5 +1,5 @@
 {
- "updated": 1795399448328,
+ "updated": 1795400968233,
  "since": "2026-11-17",
  "suggested": 15,
  "scored": 10,
@@ -15,27 +15,27 @@
  },
  "skipped": {
   "n": 8,
-  "pts": -0.6,
+  "pts": 3.1,
   "wins": 6,
   "win_pct": 75,
-  "avg": -0.07,
+  "avg": 0.39,
   "expected": 13.1
  },
  "all": {
   "n": 10,
-  "pts": 6.5,
+  "pts": 10.2,
   "wins": 8,
   "win_pct": 80,
-  "avg": 0.65,
+  "avg": 1.02,
   "expected": 17.2
  },
  "by_rating": {
   "strong": {
    "n": 4,
-   "pts": 6.9,
+   "pts": 9.0,
    "wins": 3,
    "win_pct": 75,
-   "avg": 1.73,
+   "avg": 2.25,
    "expected": 10.0
   },
   "lean": {
@@ -48,10 +48,10 @@
   },
   "optional": {
    "n": 5,
-   "pts": -2.8,
+   "pts": -1.2,
    "wins": 4,
    "win_pct": 80,
-   "avg": -0.56,
+   "avg": -0.24,
    "expected": 5.5
   }
  },
@@ -69,10 +69,10 @@
    },
    "all": {
     "n": 10,
-    "pts": 6.5,
+    "pts": 10.2,
     "wins": 8,
     "win_pct": 80,
-    "avg": 0.65,
+    "avg": 1.02,
     "expected": 17.2
    }
   }
@@ -86,7 +86,7 @@
    "add": "Logan Mailloux",
    "drop": "Kailer Yamamoto",
    "expected": 1.23,
-   "actual": 0.2,
+   "actual": 1.8,
    "final": false
   },
   {
@@ -163,7 +163,7 @@
    "add": "Filip Chytil",
    "drop": "Trevor Zegras",
    "expected": 2.29,
-   "actual": 1.7,
+   "actual": 3.8,
    "final": false
   },
   {
