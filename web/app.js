@@ -830,7 +830,13 @@ var APPKEY='BIUUEZQFmDcAdIOkdRLbYzUa0dwE69zLw65PNAYcu_K_j1Hi70WwzW8yXtJG3MtBN0_q
 function appStandalone(){return window.navigator.standalone===true||(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches);}
 function appB64(s){var p='='.repeat((4-s.length%4)%4),b=(s+p).replace(/-/g,'+').replace(/_/g,'/'),r=atob(b),o=new Uint8Array(r.length);for(var i=0;i<r.length;i++)o[i]=r.charCodeAt(i);return o;}
 function appBox(html){var el=document.getElementById('appbar');if(el)el.innerHTML=html?'<div class="card" style="margin:8px 0;padding:10px 14px">'+html+'</div>':'';}
-function appRender(){
+function appServerKey(){   /* on the always-on server the alert key comes from the server, and the phone is linked automatically */
+  return fetch('api/push',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).then(function(j){return j&&j.key?j.key:null;}).catch(function(){return null;});
+}
+function appSame(sub,key){
+  try{var k=new Uint8Array(sub.options.applicationServerKey),w=appB64(key);if(k.length!==w.length)return false;for(var i=0;i<k.length;i++)if(k[i]!==w[i])return false;return true;}catch(e){return true;}
+}
+function appRender(done){
   var mobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   var canPush=('serviceWorker' in navigator)&&('PushManager' in window)&&('Notification' in window);
   if(!canPush){
@@ -838,30 +844,44 @@ function appRender(){
     return;
   }
   navigator.serviceWorker.ready.then(function(reg){
-    return reg.pushManager.getSubscription().then(function(sub){
-      if(Notification.permission==='denied'){appBox('<span class="muted">Alerts are blocked. On iPhone: Settings, Notifications, Fantasy Hockey.</span>');return;}
-      if(!sub){
-        appBox('<b>Daily alerts:</b> get the day\'s best move on your phone each morning. <button class="chip-btn" id="appOn" style="margin-left:6px">Turn on alerts</button><span id="appMsg" class="muted"></span>');
-        var b=document.getElementById('appOn');
-        if(b)b.addEventListener('click',function(){
-          var m=document.getElementById('appMsg');
-          Notification.requestPermission().then(function(p){
-            if(p!=='granted'){if(m)m.textContent=' Not allowed.';return;}
-            return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:appB64(APPKEY)}).then(appRender);
-          }).catch(function(e){if(m)m.textContent=' Could not turn on alerts ('+(e&&e.message||e)+').';});
+    return appServerKey().then(function(srvKey){
+      return reg.pushManager.getSubscription().then(function(sub){
+        if(sub&&srvKey&&!appSame(sub,srvKey))return sub.unsubscribe().then(function(){return null;});
+        return sub;
+      }).then(function(sub){
+        if(Notification.permission==='denied'){appBox('<span class="muted">Alerts are blocked. On iPhone: Settings, Notifications, Fantasy Hockey.</span>');return;}
+        if(!sub){
+          appBox('<b>Daily alerts:</b> get the day\'s best move on your phone each morning. <button class="chip-btn" id="appOn" style="margin-left:6px">Turn on alerts</button><span id="appMsg" class="muted"></span>');
+          var b=document.getElementById('appOn');
+          if(b)b.addEventListener('click',function(){
+            var m=document.getElementById('appMsg');
+            Notification.requestPermission().then(function(p){
+              if(p!=='granted'){if(m)m.textContent=' Not allowed.';return;}
+              return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:appB64(srvKey||APPKEY)}).then(function(s){
+                if(!srvKey)return appRender();
+                return fetch('api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(s)}).then(function(r){return r.json();}).then(function(j){
+                  appBox(j&&j.ok?'&#128276; <b>Alerts are on.</b> <span class="muted">You\'re all set. Nothing else to do.</span>':'<span class="muted">Alerts turned on, but the server did not save this phone. Try again.</span>');
+                });
+              });
+            }).catch(function(e){if(m)m.textContent=' Could not turn on alerts ('+(e&&e.message||e)+').';});
+          });
+          return;
+        }
+        if(srvKey){   /* quietly (re)register this phone with the server every time the app opens */
+          fetch('api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)}).catch(function(){});
+          appBox('');return;
+        }
+        if(!/[?&]setup\b/.test(location.search)){appBox('');return;}   /* GitHub Pages: alerts already on, hide the box (add ?setup to the address to bring the phone code back) */
+        var code=JSON.stringify(sub);
+        appBox('&#128276; <b>Alerts are on for this phone.</b> <button class="chip-btn" id="appCopy" style="margin-left:6px">Copy phone code</button><span id="appMsg" class="muted"></span>'
+          +'<div class="muted" style="margin-top:4px">The phone code is only needed once, to link this phone to the daily build.</div>'
+          +'<textarea id="appCode" readonly rows="3" style="display:none;width:100%;margin-top:6px;font-size:11px">'+esc(code)+'</textarea>');
+        var c=document.getElementById('appCopy');
+        if(c)c.addEventListener('click',function(){
+          var m=document.getElementById('appMsg'),t=document.getElementById('appCode');
+          var show=function(){t.style.display='block';t.focus();t.select();if(m)m.textContent=' Select all and copy.';};
+          if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(code).then(function(){if(m)m.textContent=' Copied.';},show);}else{show();}
         });
-        return;
-      }
-      if(!/[?&]setup\b/.test(location.search)){appBox('');return;}   /* alerts already on: hide the box (add ?setup to the address to bring the phone code back) */
-      var code=JSON.stringify(sub);
-      appBox('&#128276; <b>Alerts are on for this phone.</b> <button class="chip-btn" id="appCopy" style="margin-left:6px">Copy phone code</button><span id="appMsg" class="muted"></span>'
-        +'<div class="muted" style="margin-top:4px">The phone code is only needed once, to link this phone to the daily build.</div>'
-        +'<textarea id="appCode" readonly rows="3" style="display:none;width:100%;margin-top:6px;font-size:11px">'+esc(code)+'</textarea>');
-      var c=document.getElementById('appCopy');
-      if(c)c.addEventListener('click',function(){
-        var m=document.getElementById('appMsg'),t=document.getElementById('appCode');
-        var show=function(){t.style.display='block';t.focus();t.select();if(m)m.textContent=' Select all and copy.';};
-        if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(code).then(function(){if(m)m.textContent=' Copied.';},show);}else{show();}
       });
     });
   }).catch(function(){});

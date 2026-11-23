@@ -128,13 +128,65 @@ def data_age_min():
     return max(0.0, (time.time() * 1000 - at) / 60000)
 
 
+# ---------------------------------------------------------------- phone alerts (server-managed)
+def _b64u(b):
+    import base64
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def vapid():
+    """Alert keys live on the volume. Made once, so phones never need a pasted code."""
+    f = DATA / "vapid.json"
+    try:
+        v = json.loads(f.read_text(encoding="utf-8"))
+        if v.get("private") and v.get("public"):
+            return v
+    except Exception:
+        pass
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    k = ec.generate_private_key(ec.SECP256R1())
+    raw = k.private_numbers().private_value.to_bytes(32, "big")
+    pub = k.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    v = {"private": _b64u(raw), "public": _b64u(pub)}
+    f.write_text(json.dumps(v), encoding="utf-8")
+    return v
+
+
+def load_subs():
+    try:
+        return json.loads((DATA / "subs.json").read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def add_sub(sub):
+    if not isinstance(sub, dict) or not str(sub.get("endpoint", "")).startswith("https://") \
+            or not isinstance(sub.get("keys"), dict):
+        return False
+    with LOCK:
+        subs = [s for s in load_subs() if s.get("endpoint") != sub["endpoint"]]
+        subs.append({"endpoint": sub["endpoint"], "keys": sub["keys"]})
+        (DATA / "subs.json").write_text(json.dumps(subs[-20:]), encoding="utf-8")
+    log(f"phone linked for alerts ({len(subs[-20:])} total)")
+    return True
+
+
+def push_env():
+    env = dict(os.environ)
+    subs = load_subs()
+    if subs:
+        env["PUSH_CONFIG"] = json.dumps({"vapid_private": vapid()["private"], "subscriptions": subs})
+    return env
+
+
 # ---------------------------------------------------------------- building
 def notify(payload_file):
     if not SEND_ALERTS:
         log("alert skipped (SEND_ALERTS is off)")
         return
     try:
-        subprocess.run([sys.executable, str(CODE / "notify.py"), str(payload_file)], cwd=CODE, timeout=120)
+        subprocess.run([sys.executable, str(CODE / "notify.py"), str(payload_file)], cwd=CODE, timeout=120, env=push_env())
     except Exception as e:
         log(f"alert failed: {e}")
 
@@ -357,13 +409,16 @@ class Handler(BaseHTTPRequestHandler):
         self.do_GET()
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/refresh":
+        route = urlparse(self.path).path
+        if route not in ("/api/refresh", "/api/subscribe"):
             return self.json({"error": "not found"}, 404)
         try:
             n = min(int(self.headers.get("Content-Length") or 0), 4096)
             body = json.loads(self.rfile.read(n) or b"{}")
         except Exception:
             body = {}
+        if route == "/api/subscribe":
+            return self.json({"ok": add_sub(body)})
         keep = body.get("keep")
         keep = None if keep in (None, "") else str(keep)[:300]
         self.json(request_refresh(str(body.get("reason") or "")[:40], keep, bool(body.get("force"))))
@@ -372,6 +427,8 @@ class Handler(BaseHTTPRequestHandler):
         path = unquote(urlparse(self.path).path)
         if path == "/api/status":
             return self.json(status())
+        if path == "/api/push":
+            return self.json({"key": vapid()["public"]})
         if path.startswith("/api/"):
             return self.json({"error": "not found"}, 404)
         root = live_dir()
