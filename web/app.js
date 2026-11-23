@@ -1309,7 +1309,7 @@ if(window.visualViewport){window.visualViewport.addEventListener('scroll',glPin)
 var BAND={y0:null,x0:0,ax:0,on:false,base:0,inner:false,lt:0,ly:0,v:0,t:0};
 /* the page height is kept up to date by a ResizeObserver, so touches and scrolls never force a layout just to read it */
 function bandMax(){if(BAND.max==null||!window.ResizeObserver)BAND.max=Math.max(0,document.documentElement.scrollHeight-window.innerHeight);return BAND.max;}
-(function(){function upd(){BAND.max=null;}window.addEventListener('resize',upd,{passive:true});
+(function(){function upd(){BAND.max=null;if(typeof GS!=='undefined')GS.lim=null;}window.addEventListener('resize',upd,{passive:true});
   if(window.ResizeObserver){var ro=new ResizeObserver(upd),go=function(){var w=document.querySelector('.wrap');if(w)ro.observe(w);else setTimeout(go,200);};go();}})();
 function bandOff(){return (typeof SH!=='undefined'&&(SH.open||SH.closing_busy))||document.documentElement.classList.contains('sheet-on')||document.body.classList.contains('mlock');}
 function bandInner(el){
@@ -1356,9 +1356,32 @@ window.addEventListener('scroll',function(){
   if(dt>0&&dt<120)BAND.v=BAND.v*0.4+(y-BAND.lpy)/dt*0.6;else BAND.v=0;
   BAND.lt=now;BAND.lpy=y;
   if(RM||BAND.y0!=null||bandOff()||Math.abs(BAND.v)<0.9)return;
-  var max=bandMax(),k=Math.min(26,Math.abs(BAND.v)*11);
-  if(y<=0.5&&BAND.v<0){BAND.v=0;bandSet(k,'kick');setTimeout(function(){bandSet(0,'back');},110);}
-  else if(y>=max-1&&BAND.v>0){BAND.v=0;bandSet(-k,'kick');setTimeout(function(){bandSet(0,'back');},110);}
+  var max=bandMax();
+  if(y<=0.5&&BAND.v<0){bandFling(-BAND.v);BAND.v=0;}
+  else if(y>=max-1&&BAND.v>0){bandFling(-BAND.v);BAND.v=0;}
+},{passive:true});
+/* One continuous spring that starts at the flick's own speed (no stop, jump, return). It is a damped spring
+   x(t) = v*t*e^(-w*t), sampled into keyframes and run by the compositor (transform only), so it stays smooth
+   even while the page is busy. v is in px/ms; positive = content moves down (hit the top). */
+function bandFling(v){
+  var w=document.querySelector('.wrap');if(!w||!w.animate)return;
+  var a=Math.abs(v),peak=Math.min(56,a*30),om=a/(Math.E*Math.max(peak,1)),N=36,kf=[],kt=[];
+  om=Math.max(om,1/140);var dur=Math.min(900,Math.max(380,7/om));
+  var t=document.getElementById('lhT');
+  for(var i=0;i<=N;i++){var tm=dur*i/N,x=(i===N)?0:v*tm*Math.exp(-om*tm);
+    kf.push({transform:'translate3d(0,'+x.toFixed(2)+'px,0)'});
+    kt.push({transform:x>0?'scale('+Math.min(1.08,1+x/900).toFixed(4)+')':'none'});}
+  bandStop();
+  BAND.anim=w.animate(kf,{duration:dur,easing:'linear'});
+  if(t&&v>0)BAND.anim2=t.animate(kt,{duration:dur,easing:'linear'});
+}
+function bandStop(){if(BAND.anim){BAND.anim.cancel();BAND.anim=null;}if(BAND.anim2){BAND.anim2.cancel();BAND.anim2=null;}}
+/* a touch during the spring: freeze it where it is and let it settle back, never snap */
+document.addEventListener('touchstart',function(){
+  if(!BAND.anim||BAND.anim.playState!=='running')return;
+  var w=document.querySelector('.wrap'),m=getComputedStyle(w).transform,y=0;
+  if(m&&m!=='none'){var p=m.match(/matrix(3d)?\(([^)]+)\)/);if(p){var n=p[2].split(',');y=parseFloat(p[1]?n[13]:n[5])||0;}}
+  bandStop();bandSet(y);requestAnimationFrame(function(){bandSet(0,'back');});
 },{passive:true});
 /* scroll: collapse the large title into the nav bar; minimize the tab bar going down, restore going up */
 var GS={y:0,raf:0,acc:0};
@@ -1370,7 +1393,7 @@ function glScroll(){
     var y=window.pageYOffset||0,dy=y-GS.y;GS.y=y;
     var lh=document.getElementById('lhead'),nb=document.getElementById('gnav'),tb=document.getElementById('bnav');
     if(!lh||!nb||document.documentElement.classList.contains('sheet-on'))return;
-    var t=document.getElementById('lhT'),lim=t.offsetTop+t.offsetHeight-48;
+    var t=document.getElementById('lhT');if(GS.lim==null||GS.limT!==t){GS.limT=t;GS.lim=t.offsetTop+t.offsetHeight-48;}var lim=GS.lim;
     nb.classList.toggle('scrolled',y>lim);
     nb.classList.toggle('edge',y>4);
     if(t.style.transform&&!BAND.on&&!(document.querySelector('.wrap')||{}).style.transform)t.style.transform='';
