@@ -24,7 +24,9 @@ Settings (environment variables)
   PUSH_CONFIG            phone push keys, same JSON as the GitHub secret
   SEND_ALERTS=1          turn on push alerts (leave off while GitHub is still sending them)
   DATA_DIR               where state lives (default ./data; use the volume path in production)
-  STALE_MIN=15           rebuild on open when the data is older than this many minutes
+  STALE_MIN=25           rebuild on open when the data is older than this many minutes (the background keeps it
+                         under ~21 minutes from 7 AM to 1 AM ET, so this mostly matters overnight)
+  FRESH_MIN=20           background rebuild when the data is older than this (checked every minute)
   RESEED_STATE=1         one-time: replace the saved state with the copy that came with this deploy
   FH_BUILD_CMD           test hook: run this instead of build.py
 """
@@ -46,8 +48,9 @@ from urllib.parse import unquote, urlparse
 CODE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DATA_DIR") or CODE / "data").resolve()
 PORT = int(os.environ.get("PORT", "8080"))
-STALE_MIN = float(os.environ.get("STALE_MIN", "15"))
+STALE_MIN = float(os.environ.get("STALE_MIN", "25"))
 CHECK_EVERY = int(os.environ.get("CHECK_EVERY", "600"))      # seconds between scheduler checks
+TICK = int(os.environ.get("TICK", "60"))                     # seconds between keep-fresh / alert checks
 SETTLE_S = int(os.environ.get("SETTLE_S", "600"))            # post-game builds wait for final stats to settle
 BUILD_TIMEOUT = int(os.environ.get("BUILD_TIMEOUT", "1200"))
 STALE_ALERT_H = 14
@@ -58,12 +61,31 @@ LIVE = DATA / "live"
 RUNS = DATA / "runs.json"
 
 LOCK = threading.Lock()
-ST = {"building": None, "queued": None, "last_start": 0.0, "last_error": None, "alerted_day": None}
+PUB = threading.RLock()                     # one publish at a time (full builds and quick app-code updates)
+ST = {"building": None, "queued": None, "pending": {}, "last_start": 0.0, "last_error": None, "alerted_day": None,
+      "login": False, "login_alert_day": None, "held_alert_at": 0.0}
 GZ = {}
+ET = None
+
+
+def et_now():
+    global ET
+    if ET is None:
+        from zoneinfo import ZoneInfo
+        ET = ZoneInfo("America/New_York")
+    return datetime.now(ET)
 
 
 def log(msg):
-    print(f"[server {datetime.now():%m-%d %H:%M:%S}] {msg}", flush=True)
+    print(f"[server {et_now():%m-%d %H:%M:%S} ET] {msg}", flush=True)
+
+
+def write_atomic(path, text):
+    """Write a whole file or nothing: a crash halfway never leaves a broken file behind (phones, alert key, runs)."""
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def read_json(path, default=None):
@@ -103,9 +125,7 @@ def load_runs():
 
 
 def save_runs(runs):
-    tmp = RUNS.with_suffix(".tmp")
-    tmp.write_text(json.dumps(runs[-200:]), encoding="utf-8")
-    os.replace(tmp, RUNS)
+    write_atomic(RUNS, json.dumps(runs[-200:]))
 
 
 def live_dir():
@@ -149,7 +169,8 @@ def vapid():
     raw = k.private_numbers().private_value.to_bytes(32, "big")
     pub = k.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
     v = {"private": _b64u(raw), "public": _b64u(pub)}
-    f.write_text(json.dumps(v), encoding="utf-8")
+    write_atomic(f, json.dumps(v))
+    log("made a new alert key (phones re-link by themselves the next time the app opens)")
     return v
 
 
@@ -169,7 +190,7 @@ def add_sub(sub):
         welcomed = bool(old.get(sub["endpoint"], {}).get("welcomed"))
         subs = [s for s in old.values() if s.get("endpoint") != sub["endpoint"]]
         subs.append({"endpoint": sub["endpoint"], "keys": sub["keys"], "welcomed": welcomed})
-        (DATA / "subs.json").write_text(json.dumps(subs[-20:]), encoding="utf-8")
+        write_atomic(DATA / "subs.json", json.dumps(subs[-20:]))
     log(f"phone linked for alerts ({len(subs[-20:])} total)")
     if not welcomed:
         threading.Thread(target=welcome, args=(sub["endpoint"],), daemon=True).start()
@@ -179,8 +200,8 @@ def add_sub(sub):
 def welcome(endpoint):
     """One confirmation push per phone, so you know alerts really work."""
     try:
-        f = DATA / "welcome.json"
-        f.write_text(json.dumps({"title": "Alerts are on", "body": "Your daily Fantasy Hockey alerts will show up here.",
+        f = DATA / f"welcome-{abs(hash(endpoint)) % 10**8}.json"
+        write_atomic(f, json.dumps({"title": "Alerts are on", "body": "Your daily Fantasy Hockey alerts will show up here.",
                                  "url": "./", "tag": "fh-welcome"}), encoding="utf-8")
         env = push_env()
         cfg = json.loads(env["PUSH_CONFIG"])
@@ -189,12 +210,13 @@ def welcome(endpoint):
         r = subprocess.run([sys.executable, str(CODE / "notify.py"), str(f)], cwd=CODE, timeout=60, env=env,
                            capture_output=True, text=True)
         log("welcome push: " + (r.stdout.strip().splitlines() or ["no output"])[-1][:160])
+        f.unlink(missing_ok=True)
         with LOCK:
             subs = load_subs()
             for x in subs:
                 if x.get("endpoint") == endpoint:
                     x["welcomed"] = True
-            (DATA / "subs.json").write_text(json.dumps(subs), encoding="utf-8")
+            write_atomic(DATA / "subs.json", json.dumps(subs))
     except Exception as e:
         log(f"welcome push failed: {e}")
 
@@ -220,8 +242,25 @@ def notify(payload_file):
 
 def alert(title, body, tag="fh-health"):
     f = DATA / "alert.json"
-    f.write_text(json.dumps({"title": title, "body": body, "url": "./", "tag": tag}), encoding="utf-8")
+    write_atomic(f, json.dumps({"title": title, "body": body, "url": "./", "tag": tag}))
     notify(f)
+
+
+LOGIN_SIGNS = ("rejected your login cookies", "Missing login cookies")
+
+
+def login_failed(tail):
+    """ESPN turned the cookies down: builds cannot work until ESPN_S2 / SWID are replaced in Railway."""
+    if not any(x in tail for x in LOGIN_SIGNS):
+        return
+    ST["login"] = True
+    ST["last_error"] = "ESPN sign-in expired: update ESPN_S2 and SWID in Railway Variables"
+    day = et_now().date()
+    if ST["login_alert_day"] != day:
+        ST["login_alert_day"] = day
+        alert("Fantasy Hockey: ESPN sign-in expired",
+              "Updates are paused. Copy fresh ESPN_S2 and SWID cookies into Railway (Variables). "
+              "The app keeps showing the last update until then.")
 
 
 def gate(site):
@@ -243,6 +282,11 @@ def gate(site):
 
 
 def publish(site):
+    with PUB:
+        _publish(site)
+
+
+def _publish(site):
     sites = DATA / "sites"
     sites.mkdir(exist_ok=True)
     dest = sites / str(int(time.time() * 1000))
@@ -282,14 +326,17 @@ def do_build(reason, keep):
     if code != 0 or not (site / "index.html").exists():
         ST["last_error"] = f"{reason}: build failed (exit {code})"
         log(f"build FAILED ({code}) after {time.time() - t0:.0f}s\n{tail}")
+        login_failed(tail)
         return False
+    ST["login"] = False
     ok, why, held = gate(site)
     if not ok:
         ST["last_error"] = f"{reason}: held back ({why})"
         log(f"HELD BACK: {why}")
-        if held:
+        if held and time.time() - ST["held_alert_at"] > 6 * 3600:     # say it once, not at every retry
+            ST["held_alert_at"] = time.time()
             f2 = DATA / "held_alert.json"
-            f2.write_text(json.dumps(held), encoding="utf-8")
+            write_atomic(f2, json.dumps(held))
             notify(f2)
         return True
     payload = work / "notify_payload.json"
@@ -301,6 +348,10 @@ def do_build(reason, keep):
     publish(site)
     ST["last_error"] = None
     log(f"build published in {time.time() - t0:.0f}s: {reason} ({why})")
+    try:                                          # the app code changed while this build ran: put the newest code on top
+        shell_update("caught up after a build")
+    except Exception as e:
+        log(f"shell update after build failed: {e}")
     if reason.startswith("morning") and keep_payload.exists():
         notify(keep_payload)
     return True
@@ -309,8 +360,6 @@ def do_build(reason, keep):
 def _build_thread(reason, keep):
     ok = False
     try:
-        if reason.startswith("post-game") and SETTLE_S:
-            time.sleep(SETTLE_S)
         ok = do_build(reason, keep)
     except Exception as e:
         ST["last_error"] = f"{reason}: {type(e).__name__}: {e}"
@@ -322,14 +371,35 @@ def _build_thread(reason, keep):
         ST["building"] = None
         nxt, ST["queued"] = ST["queued"], None
     if nxt:
-        request_build(*nxt)
+        request_build(nxt[0], nxt[1], settle=False)          # a queued post-game build has already waited
 
 
-def request_build(reason, keep=""):
-    """Start a build, or queue it (one slot) if one is running. Returns 'started' or 'queued'."""
+SCHEDULED = ("morning", "pre-game", "post-game", "lock")
+
+
+def _merge(old, new):
+    """One waiting slot, but nothing important is lost: the newest Keep list always survives, and a scheduled build's
+    name (which decides the morning alert and tells the scheduler it ran) beats an on-open or background one."""
+    if not old:
+        return new
+    reason = old[0] if old[0].startswith(SCHEDULED) and not new[0].startswith(SCHEDULED) else new[0]
+    return (reason, new[1] or old[1])
+
+
+def request_build(reason, keep="", settle=True):
+    """Start a build, or queue it if one is running. Returns 'started', 'queued' or 'waiting'.
+    Post-game builds wait SETTLE_S for final stats without holding the build slot, so Keep taps and refreshes in the
+    meantime still run right away."""
+    if settle and SETTLE_S and reason.startswith("post-game"):
+        with LOCK:
+            if reason in ST["pending"]:
+                return "waiting"
+            ST["pending"][reason] = time.time()
+        threading.Timer(SETTLE_S, _settled, args=(reason,)).start()
+        return "waiting"
     with LOCK:
         if ST["building"]:
-            ST["queued"] = (reason, keep or "")
+            ST["queued"] = _merge(ST["queued"], (reason, keep or ""))
             return "queued"
         ST["building"] = reason
         ST["last_start"] = time.time()
@@ -337,12 +407,18 @@ def request_build(reason, keep=""):
     return "started"
 
 
+def _settled(reason):
+    with LOCK:
+        ST["pending"].pop(reason, None)
+    log(f"stats settled: {reason} -> {request_build(reason, settle=False)}")
+
+
 def request_refresh(reason, keep, force):
     """The app asked for fresh data (on open, the Refresh button, the Keep button)."""
     age = data_age_min()
     label = f"{reason or 'on-open'} {datetime.now():%Y-%m-%d %H:%M}"
     if keep is not None:                                        # a Keep tap must never be dropped: queue it if needed
-        return {"state": request_build(label, keep), "age_min": age}
+        return {"state": request_build(label, keep, settle=False), "age_min": age}
     with LOCK:
         if ST["building"]:
             return {"state": "building", "age_min": age}
@@ -350,7 +426,7 @@ def request_refresh(reason, keep, force):
     wanted = force or age is None or age >= STALE_MIN
     if not wanted:
         return {"state": "fresh", "age_min": age}
-    if since < (1.0 if force else STALE_MIN / 3):
+    if since < (1.0 if force else STALE_MIN / 3) or (ST["login"] and not force and since < 60):
         return {"state": "recent", "age_min": age}              # one was just tried: do not hammer ESPN
     request_build(label)
     return {"state": "started", "age_min": age}
@@ -361,7 +437,7 @@ def status():
         b = ST["building"]
     age = data_age_min()
     return {"ok": True, "building": bool(b), "age_min": None if age is None else round(age, 1),
-            "has_site": live_dir() is not None, "last_error": ST["last_error"]}
+            "has_site": live_dir() is not None, "last_error": ST["last_error"], "login_expired": ST["login"]}
 
 
 # ---------------------------------------------------------------- scheduler.py, run locally
@@ -372,6 +448,7 @@ def sched_titles():
             t.append(f"Daily ({ST['building']})")
         if ST["queued"]:
             t.append(f"Daily ({ST['queued'][0]})")
+        t += [f"Daily ({r})" for r in ST["pending"]]
     return t
 
 
@@ -381,13 +458,15 @@ def sched_start(reason):
 
 def stale_alert():
     age = data_age_min()
-    now = datetime.now()
+    now = et_now()                                # Eastern time: the server's own clock is UTC
     if age is None or age < STALE_ALERT_H * 60 or not (9 <= now.hour <= 21) or ST["alerted_day"] == now.date():
         return
     ST["alerted_day"] = now.date()
-    alert("Fantasy Hockey: site is not updating",
-          f"The site has not updated in {age / 60:.0f} hours. ESPN login cookies may have expired; "
-          "check the server logs.")
+    if ST["login"]:
+        return                                    # the sign-in alert already said why
+    alert("Fantasy Hockey: app is not updating",
+          f"The app has not updated in {age / 60:.0f} hours. The latest error: {ST['last_error'] or 'none recorded'}. "
+          "Check the Railway logs.")
 
 
 FRESH_MIN = float(os.environ.get("FRESH_MIN") or 20)
@@ -395,8 +474,7 @@ FRESH_MIN = float(os.environ.get("FRESH_MIN") or 20)
 
 def keep_fresh():
     """Waking hours: rebuild in the background when the data is older than FRESH_MIN, so opening the app is instant."""
-    from zoneinfo import ZoneInfo
-    hr = datetime.now(ZoneInfo("America/New_York")).hour
+    hr = et_now().hour
     if hr < 7 and hr >= 1:                        # sleep 1am-7am ET
         return
     age = data_age_min()
@@ -404,6 +482,8 @@ def keep_fresh():
         if ST["building"] or ST["queued"]:
             return
         since = (time.time() - ST["last_start"]) / 60
+    if ST["login"] and since < 60:                # ESPN said no: try once an hour, not every few minutes
+        return
     if (age is None or age >= FRESH_MIN) and since >= FRESH_MIN / 2:
         log(f"keep-fresh: data is {age if age is None else round(age)} min old -> {request_build('auto-fresh')}")
 
@@ -424,12 +504,11 @@ def model_changed():
         same = f.read_text().strip() == stamp
     except Exception:
         same = False
-    f.write_text(stamp)
+    write_atomic(f, stamp)
     return not same
 
 
 HOT = {"web": None, "sha": None}          # web/ files pulled straight from GitHub, ahead of Railway's redeploy
-SHELL_LOCK = threading.Lock()
 
 
 def web_dir():
@@ -440,7 +519,7 @@ def shell_update(why):
     """Put new app code live next to the current data: no ESPN build, a second or two. The open app reloads itself."""
     import site_builder
     import pwa
-    with SHELL_LOCK:
+    with PUB:                                     # a full build cannot go live halfway through this
         for _ in range(2):
             src = live_dir()
             if not src:
@@ -456,9 +535,9 @@ def shell_update(why):
             if after == before:
                 shutil.rmtree(work, ignore_errors=True)
                 return False
-            if live_dir() != src:                  # a full build went live meanwhile: redo on top of it
+            if live_dir() != src:                  # cannot happen while PUB is held; kept as a guard
                 continue
-            publish(work)
+            _publish(work)
             log(f"app code {before} -> {after} live in seconds ({why})")
             return True
     return False
@@ -492,9 +571,10 @@ def hot_loop():
                     d.mkdir(parents=True, exist_ok=True)
                     for f, b in files.items():
                         (d / f).write_bytes(b)
-                    for old in (DATA / "hotweb").iterdir():
-                        if old != d:
-                            shutil.rmtree(old, ignore_errors=True)
+                    # keep the two before it: a build that started a moment ago may still be reading one of them
+                    olds = sorted((p for p in (DATA / "hotweb").iterdir() if p != d), key=lambda p: p.stat().st_mtime)
+                    for old in olds[:-2]:
+                        shutil.rmtree(old, ignore_errors=True)
                     HOT["web"], HOT["sha"] = d, sha
                     shell_update(f"GitHub {sha[:7]}")
                 last = sha
@@ -511,11 +591,14 @@ def loop():
         request_build("boot")
     elif model_changed():                         # the model changed: new data needed
         request_build("new version")
+    last_sched = 0.0
     while True:
-        try:
-            scheduler.main()
-        except Exception as e:                    # a bad check never stops the loop
-            log(f"scheduler check failed: {type(e).__name__}: {e}")
+        if time.time() - last_sched >= CHECK_EVERY:
+            last_sched = time.time()
+            try:
+                scheduler.main()
+            except Exception as e:                # a bad check never stops the loop
+                log(f"scheduler check failed: {type(e).__name__}: {e}")
         try:
             keep_fresh()
         except Exception as e:
@@ -524,18 +607,19 @@ def loop():
             stale_alert()
         except Exception as e:
             log(f"stale check failed: {e}")
-        time.sleep(CHECK_EVERY)
+        time.sleep(TICK)
 
 
 # ---------------------------------------------------------------- web
 TEXT = {".html", ".js", ".css", ".json", ".webmanifest", ".svg"}
 WAIT = (b"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
         b"<meta http-equiv=refresh content=10><body style='font-family:-apple-system,sans-serif;padding:40px;"
-        b"background:#0b1d3a;color:#fff'><h2>Building the first update...</h2><p>This takes about a minute.</p>")
+        b"background:#0b1d3a;color:#fff'><h2>Getting your team ready&hellip;</h2><p>This takes about a minute. The page opens by itself when it is done.</p>")
 
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "FantasyHockey"
+    protocol_version = "HTTP/1.1"                 # keep the connection open between requests (1.0 closed it every time)
 
     def log_message(self, *a):
         pass
@@ -561,8 +645,13 @@ class Handler(BaseHTTPRequestHandler):
         if route not in ("/api/refresh", "/api/subscribe"):
             return self.json({"error": "not found"}, 404)
         try:
-            n = min(int(self.headers.get("Content-Length") or 0), 4096)
-            body = json.loads(self.rfile.read(n) or b"{}")
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 65536:
+                self.close_connection = True
+                return self.json({"error": "too large"}, 413)
+            body = json.loads(self.rfile.read(n) or b"{}")   # read all of it: leftovers would break the next request
+            if not isinstance(body, dict):
+                body = {}
         except Exception:
             body = {}
         if route == "/api/subscribe":
@@ -595,12 +684,24 @@ class Handler(BaseHTTPRequestHandler):
             ctype += "; charset=utf-8"
         immutable = f.name.startswith("app.") or ext == ".png"
         h = {"Cache-Control": "public, max-age=31536000, immutable" if immutable else "no-cache"}
+        st = f.stat()
+        gz_ok = ext in TEXT and "gzip" in (self.headers.get("Accept-Encoding") or "") and st.st_size > 1024
+        etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}{"-gz" if gz_ok else ""}"'
+        h["ETag"] = etag
+        if gz_ok:
+            h["Vary"] = "Accept-Encoding"
+        if etag in (self.headers.get("If-None-Match") or ""):    # unchanged since last time: no body to send
+            self.send_response(304)
+            for k, v in h.items():
+                self.send_header(k, v)
+            self.end_headers()
+            return
         body = f.read_bytes()
-        if ext in TEXT and "gzip" in (self.headers.get("Accept-Encoding") or "") and len(body) > 1024:
-            key = (str(f), len(body))
+        if gz_ok:
+            key = (str(f), st.st_mtime_ns, len(body))
             if key not in GZ:
                 GZ[key] = gzip.compress(body, 6)
-            body, h["Content-Encoding"], h["Vary"] = GZ[key], "gzip", "Accept-Encoding"
+            body, h["Content-Encoding"] = GZ[key], "gzip"
         self.send(200, body, ctype, h)
 
 

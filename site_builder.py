@@ -85,12 +85,15 @@ def render_site(site_data):
 #   - the app (index.html + app.<code>.js/.css): changes only when the code changes. The phone keeps it, so it opens
 #     straight away. The file names carry a fingerprint of the code, so a new version is never mixed with an old one.
 #   - the data (data.json): changes with every build.
-#   - version.json says which code and which data are live. The open app checks it every minute and when it comes
-#     back to the screen, and reloads itself (keeping your tab and scroll) when either changed.
+#   - version.json says which code and which data are live. The open app checks it every 15 s and when it comes back to
+#     the screen, and reloads itself (keeping your tab and scroll) when either changed. Just before that reload it puts the
+#     data the new page needs in sessionStorage ('fh_pre'); the loader below uses it, so the reload needs no network.
 LOADER = r"""<script>window.FH_CODE='__CODE__';(function(){
 var el=document.getElementById('data');
 function boot(txt){el.textContent=txt;var s=document.createElement('script');s.src='app.__CODE__.js';document.body.appendChild(s);}
 function fail(){var w=document.querySelector('.wrap');if(w)w.insertAdjacentHTML('afterbegin','<div class="card" style="margin:12px 0">Could not load the latest data. Check your signal, then <a href="" onclick="location.reload();return false">try again</a>.</div>');}
+var pre=null;try{pre=sessionStorage.getItem('fh_pre');sessionStorage.removeItem('fh_pre');}catch(e){}
+if(pre){boot(pre);return;}
 var tries=0;(function go(){fetch('data.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.text();}).then(boot).catch(function(){if(++tries<3)setTimeout(go,800*tries);else fail();});})();
 })();</script>"""
 
