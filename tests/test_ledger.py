@@ -34,6 +34,7 @@ class Ledger(unittest.TestCase):
         LG.write_files(self.rows, d, 1794936231350)
         self.assertTrue((d / "lifetime.json").exists())
         self.assertFalse((d / "stats.html").exists())
+        self.assertTrue((d / "move_ledger.xlsx").exists())
         rows = list(csv.reader(io.StringIO((d / "moves.csv").read_text())))
         self.assertEqual(len(rows), 5)
         self.assertEqual(rows[1][3], "made")
