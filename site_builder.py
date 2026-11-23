@@ -4,6 +4,7 @@ SITE DATA + PAGE (READ-ONLY): turns the players and teams into the compact data 
 into the page files in web/ (page.html, app.css, app.js). build.py runs it; it never changes anything in ESPN.
 """
 import json
+import os
 from pathlib import Path
 
 import analyze as A
@@ -66,7 +67,7 @@ def build_site_data(cfg, data, league, standings, now_ms):
     }
 
 
-WEB = Path(__file__).with_name("web")
+WEB = Path(os.environ.get("FH_WEB_DIR") or Path(__file__).with_name("web"))
 
 
 def _web():

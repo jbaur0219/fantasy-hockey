@@ -265,6 +265,8 @@ def do_build(reason, keep):
     if not env.get("ESPN_S2") and env.get("ESPN_2"):
         env["ESPN_S2"] = env["ESPN_2"]
     env["FH_KEEP"] = keep or ""
+    if HOT["web"]:
+        env["FH_WEB_DIR"] = str(HOT["web"])
     env["FH_RECORD"] = str(work / "snapshot.json.gz")
     t0 = time.time()
     log(f"build start: {reason}")
@@ -406,15 +408,18 @@ def keep_fresh():
         log(f"keep-fresh: data is {age if age is None else round(age)} min old -> {request_build('auto-fresh')}")
 
 
-def code_changed():
-    """True when the deployed code differs from the code that made the live site (stamp kept on the volume)."""
+APP_ONLY = {"server.py", "site_builder.py", "pwa.py", "notify.py", "scheduler.py", "watch.py"}
+
+
+def model_changed():
+    """True when the deployed model/data code differs from what made the live data (needs a full ESPN build).
+    App-look changes (web/, site_builder.py, pwa.py) only need the quick shell update."""
     import hashlib
     h = hashlib.sha1()
-    for p in sorted(list(CODE.glob("*.py")) + list((CODE / "web").glob("*")) + list((CODE / "tools").glob("*.py"))):
-        if p.is_file():
-            h.update(p.name.encode())
-            h.update(p.read_bytes())
-    stamp, f = h.hexdigest(), DATA / "code_stamp.txt"
+    for p in sorted([p for p in CODE.glob("*.py") if p.name not in APP_ONLY] + list((CODE / "tools").glob("*.py"))):
+        h.update(p.name.encode())
+        h.update(p.read_bytes())
+    stamp, f = h.hexdigest(), DATA / "model_stamp.txt"
     try:
         same = f.read_text().strip() == stamp
     except Exception:
@@ -423,13 +428,88 @@ def code_changed():
     return not same
 
 
+HOT = {"web": None, "sha": None}          # web/ files pulled straight from GitHub, ahead of Railway's redeploy
+SHELL_LOCK = threading.Lock()
+
+
+def web_dir():
+    return HOT["web"] or CODE / "web"
+
+
+def shell_update(why):
+    """Put new app code live next to the current data: no ESPN build, a second or two. The open app reloads itself."""
+    import site_builder
+    import pwa
+    with SHELL_LOCK:
+        for _ in range(2):
+            src = live_dir()
+            if not src:
+                return False
+            site_builder.WEB = web_dir()
+            work = DATA / "shellwork"
+            shutil.rmtree(work, ignore_errors=True)
+            shutil.copytree(src, work)
+            before = (read_json(work / "version.json", {}) or {}).get("code")
+            site_builder.write_shell(work)
+            pwa.write_files(str(work))
+            after = site_builder.write_version(work)["code"]
+            if after == before:
+                shutil.rmtree(work, ignore_errors=True)
+                return False
+            if live_dir() != src:                  # a full build went live meanwhile: redo on top of it
+                continue
+            publish(work)
+            log(f"app code {before} -> {after} live in seconds ({why})")
+            return True
+    return False
+
+
+REPO = os.environ.get("GH_REPO", "jbaur0219/fantasy-hockey")
+HOT_EVERY = int(os.environ.get("HOT_EVERY") or 15)
+
+
+def _get(url):
+    from urllib.request import Request, urlopen
+    return urlopen(Request(url, headers={"User-Agent": "fantasy-hockey-server"}), timeout=20).read()
+
+
+def hot_loop():
+    """Every few seconds: has main moved on GitHub? If its web/ files differ, put them live right away."""
+    import re
+    last = None
+    time.sleep(20)
+    while True:
+        try:
+            refs = _get(f"https://github.com/{REPO}.git/info/refs?service=git-upload-pack")
+            m = re.search(rb"([0-9a-f]{40}) refs/heads/main", refs)
+            sha = m.group(1).decode() if m else None
+            if sha and sha != last:
+                files = {f: _get(f"https://raw.githubusercontent.com/{REPO}/{sha}/web/{f}")
+                         for f in ("page.html", "app.css", "app.js")}
+                cur = web_dir()
+                if any((cur / f).read_bytes() != b for f, b in files.items()):
+                    d = DATA / "hotweb" / sha[:12]
+                    d.mkdir(parents=True, exist_ok=True)
+                    for f, b in files.items():
+                        (d / f).write_bytes(b)
+                    for old in (DATA / "hotweb").iterdir():
+                        if old != d:
+                            shutil.rmtree(old, ignore_errors=True)
+                    HOT["web"], HOT["sha"] = d, sha
+                    shell_update(f"GitHub {sha[:7]}")
+                last = sha
+        except Exception as e:
+            log(f"hot update check failed: {type(e).__name__}: {e}")
+        time.sleep(HOT_EVERY)
+
+
 def loop():
     import scheduler
     scheduler.build_titles, scheduler.start = sched_titles, sched_start
     time.sleep(15)
     if not live_dir():
         request_build("boot")
-    elif code_changed():                          # a new version was deployed: rebuild so the new app code goes live
+    elif model_changed():                         # the model changed: new data needed
         request_build("new version")
     while True:
         try:
@@ -526,6 +606,12 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     seed_state()
+    shutil.rmtree(DATA / "hotweb", ignore_errors=True)   # this deploy's own web/ is the starting point
+    try:
+        shell_update("new deploy")                # new app code live before the first visitor, no ESPN build
+    except Exception as e:
+        log(f"shell update failed: {e}")
+    threading.Thread(target=hot_loop, daemon=True).start()
     threading.Thread(target=loop, daemon=True).start()
     log(f"serving on port {PORT}; data in {DATA}; alerts {'on' if SEND_ALERTS else 'OFF'}")
     ThreadingHTTPServer(("", PORT), Handler).serve_forever()

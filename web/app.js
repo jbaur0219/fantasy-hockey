@@ -2597,7 +2597,7 @@ document.addEventListener('click',function(e){
 });
 
 /* ---------- Auto-update: the open app reloads itself when new data or new app code is live ---------- */
-/* The published app has window.FH_CODE (see site_builder.LOADER). It asks version.json every minute while open and
+/* The published app has window.FH_CODE (see site_builder.LOADER). It asks version.json every 15 s while open and
    whenever it comes back to the screen. When something changed it waits for a quiet moment (no sheet open, not
    typing, no touch for 5 s, or the app is in the background), then reloads and keeps your tab and scroll. */
 var UPD={t:0,busy:false,want:null,tm:null};
@@ -2629,7 +2629,7 @@ function updCheck(){
 function updStart(){
   ['pointerdown','touchstart','keydown','scroll'].forEach(function(ev){document.addEventListener(ev,function(){UPD.t=Date.now();},{passive:true,capture:true});});
   document.addEventListener('visibilitychange',function(){if(!document.hidden)updCheck();else if(UPD.want)updApply();});
-  setInterval(function(){if(!document.hidden)updCheck();},60000);
+  setInterval(function(){if(!document.hidden)updCheck();},15000);
   setTimeout(updCheck,3000);
   var s=null;try{s=JSON.parse(sessionStorage.getItem('fh_upd')||'null');sessionStorage.removeItem('fh_upd');if(s)sessionStorage.setItem('fh_tried',s.v);}catch(e){}
   if(s){if(s.y)setTimeout(function(){window.scrollTo(0,s.y);},80);kpToast(s.k==='code'?'The app was just updated.':'Updated with the latest data.');}
