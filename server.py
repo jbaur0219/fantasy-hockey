@@ -165,11 +165,38 @@ def add_sub(sub):
             or not isinstance(sub.get("keys"), dict):
         return False
     with LOCK:
-        subs = [s for s in load_subs() if s.get("endpoint") != sub["endpoint"]]
-        subs.append({"endpoint": sub["endpoint"], "keys": sub["keys"]})
+        old = {s.get("endpoint"): s for s in load_subs()}
+        welcomed = bool(old.get(sub["endpoint"], {}).get("welcomed"))
+        subs = [s for s in old.values() if s.get("endpoint") != sub["endpoint"]]
+        subs.append({"endpoint": sub["endpoint"], "keys": sub["keys"], "welcomed": welcomed})
         (DATA / "subs.json").write_text(json.dumps(subs[-20:]), encoding="utf-8")
     log(f"phone linked for alerts ({len(subs[-20:])} total)")
+    if not welcomed:
+        threading.Thread(target=welcome, args=(sub["endpoint"],), daemon=True).start()
     return True
+
+
+def welcome(endpoint):
+    """One confirmation push per phone, so you know alerts really work."""
+    try:
+        f = DATA / "welcome.json"
+        f.write_text(json.dumps({"title": "Alerts are on", "body": "Your daily Fantasy Hockey alerts will show up here.",
+                                 "url": "./", "tag": "fh-welcome"}), encoding="utf-8")
+        env = push_env()
+        cfg = json.loads(env["PUSH_CONFIG"])
+        cfg["subscriptions"] = [x for x in cfg["subscriptions"] if x.get("endpoint") == endpoint]
+        env["PUSH_CONFIG"] = json.dumps(cfg)
+        r = subprocess.run([sys.executable, str(CODE / "notify.py"), str(f)], cwd=CODE, timeout=60, env=env,
+                           capture_output=True, text=True)
+        log("welcome push: " + (r.stdout.strip().splitlines() or ["no output"])[-1][:160])
+        with LOCK:
+            subs = load_subs()
+            for x in subs:
+                if x.get("endpoint") == endpoint:
+                    x["welcomed"] = True
+            (DATA / "subs.json").write_text(json.dumps(subs), encoding="utf-8")
+    except Exception as e:
+        log(f"welcome push failed: {e}")
 
 
 def push_env():
