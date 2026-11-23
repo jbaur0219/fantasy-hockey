@@ -361,12 +361,31 @@ def stale_alert():
           "check the server logs.")
 
 
+def code_changed():
+    """True when the deployed code differs from the code that made the live site (stamp kept on the volume)."""
+    import hashlib
+    h = hashlib.sha1()
+    for p in sorted(list(CODE.glob("*.py")) + list((CODE / "web").glob("*")) + list((CODE / "tools").glob("*.py"))):
+        if p.is_file():
+            h.update(p.name.encode())
+            h.update(p.read_bytes())
+    stamp, f = h.hexdigest(), DATA / "code_stamp.txt"
+    try:
+        same = f.read_text().strip() == stamp
+    except Exception:
+        same = False
+    f.write_text(stamp)
+    return not same
+
+
 def loop():
     import scheduler
     scheduler.build_titles, scheduler.start = sched_titles, sched_start
     time.sleep(15)
     if not live_dir():
         request_build("boot")
+    elif code_changed():                          # a new version was deployed: rebuild so the new app code goes live
+        request_build("new version")
     while True:
         try:
             scheduler.main()
