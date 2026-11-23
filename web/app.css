@@ -234,7 +234,7 @@ max-height:min(48vh,380px);overflow:auto;box-shadow:0 8px 24px rgba(16,24,40,.25
 .why .kp{min-height:32px;padding:2px 10px;font-size:12px}
 .pbl li.mvli{list-style:none;margin-left:-18px}
 #kptoast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
-  background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;max-width:90vw;transition:all .25s;z-index:60}
+  background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;max-width:90vw;transition:opacity .25s,transform .25s;z-index:60}
 #kptoast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 /* Today card */
 .tstrip{display:flex;gap:8px;margin-bottom:12px}
@@ -1064,3 +1064,17 @@ input,textarea,[contenteditable=true]{-webkit-user-select:text;user-select:text;
 /* Schedule advantage: your teams in blue + back-to-back dots */
 table.edge b.own{color:var(--tint)}
 table.edge i.b2b{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--orange);margin-left:3px;vertical-align:middle}
+
+/* move-row expanders: no height animation (it re-laid-out the whole page every frame); see rxToggle() */
+.rx{display:block!important;position:relative;transition:none!important}
+.rx>.rxi{display:none;opacity:1!important;padding-bottom:14px;transition:none!important}
+.rx>.rxi.nest{padding-bottom:0}
+.rx.open>.rxi{display:block}
+.rx.opening>.rxi{animation:cbIn .36s var(--ease) both}
+.rx.closing>.rxi{display:block;position:absolute;left:0;right:0;top:0;z-index:0;pointer-events:none;animation:rxOut .2s var(--ease) both}
+@keyframes rxOut{to{opacity:0}}
+.flip{position:relative;z-index:1}
+/* keep small animated pieces from re-laying-out the page around them */
+#bnav{contain:layout style}
+.tbcap{contain:layout style}
+.wp-bar,.cm-bar,.mu-pd{contain:layout}

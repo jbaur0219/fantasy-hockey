@@ -1029,6 +1029,27 @@ function cardToggle(c){
   c._fl=moved;
   c._ft=setTimeout(function(){c.classList.remove('closing','opening');moved.forEach(function(e){e.classList.remove('flip');});c._fl=null;},470);
 }
+/* move-row expanders: the row snaps open or shut once, the rows below slide with transforms (no per-frame layout) */
+function rxToggle(x,open){
+  clearTimeout(x._ft);x.classList.remove('closing','opening');
+  if(x._fl){x._fl.forEach(function(e){e.classList.remove('flip');e.style.transform='';});x._fl=null;}
+  if(RM||!x.offsetParent){x.classList.toggle('open',open);return;}
+  var fol=[],vh=window.innerHeight||800;
+  for(var el=x;el&&!el.matches('section,.wrap,body');el=el.parentElement)
+    for(var n=el.nextElementSibling;n;n=n.nextElementSibling)fol.push(n);
+  var ft=document.querySelector('.ufoot');if(ft)fol.push(ft);
+  var before=fol.map(function(e){return e.getBoundingClientRect().top;});
+  x.classList.toggle('open',open);x.classList.add(open?'opening':'closing');
+  var moved=[];
+  fol.forEach(function(e,i){
+    var a=e.getBoundingClientRect().top,d=before[i]-a;
+    if(Math.abs(d)<1||Math.min(a,before[i])>vh+40)return;
+    e.style.transform='translateY('+d.toFixed(1)+'px)';moved.push(e);
+  });
+  if(moved.length){void x.offsetWidth;moved.forEach(function(e){e.classList.add('flip');e.style.transform='';});}
+  x._fl=moved;
+  x._ft=setTimeout(function(){x.classList.remove('closing','opening');moved.forEach(function(e){e.classList.remove('flip');});x._fl=null;},470);
+}
 /* which sections you opened or closed survives the app reloading itself */
 function uiSaveOpen(){try{localStorage.setItem('fh_open',JSON.stringify(UI.open));}catch(e){}}
 function showTab(n){
@@ -1898,7 +1919,7 @@ function uiStart(){uiModalWatch();
   document.addEventListener('click',function(e){
     var t=e.target;if(!t||!t.closest)return;
     var ex=t.closest('[data-exp]');
-    if(ex&&!t.closest('a,button:not([data-exp])')){var k=ex.getAttribute('data-exp'),x=document.getElementById('x-'+k);UI.exp=UI.exp||{};UI.exp[k]=!UI.exp[k];ex.classList.toggle('open',UI.exp[k]);if(x)x.classList.toggle('open',UI.exp[k]);return;}
+    if(ex&&!t.closest('a,button:not([data-exp])')){var k=ex.getAttribute('data-exp'),x=document.getElementById('x-'+k);UI.exp=UI.exp||{};UI.exp[k]=!UI.exp[k];ex.classList.toggle('open',UI.exp[k]);if(x)rxToggle(x,UI.exp[k]);return;}
     var kb=t.closest('[data-keep]');
     if(kb){kpClick(kb.getAttribute('data-keep'));return;}
     var ts=t.closest('details.tsmall > summary');
