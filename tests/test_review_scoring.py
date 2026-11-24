@@ -205,7 +205,6 @@ class LongTerm(unittest.TestCase):
     # BUG C3: any player listed OUT / on injured reserve costs nothing to drop, however good he is and however soon he
     # returns. With no open IR spot the plan can drop an injured star for a one-week stream (drop_rule also lets any
     # OUT player go for a 1-point gain). ESPN's OUT includes short absences, so the 3-week horizon is not all lost.
-    @unittest.expectedFailure
     def test_dropping_an_injured_star_still_costs_something(self):
         star = sk(1, out=3.0, inj="OUT", own=99)
         self.assertGreater(LT.cost(star, sk(2, out=1.5, tm="BBB"), self.FUT), 2.0)
