@@ -142,9 +142,13 @@ class Model:
                 continue                    # a goalie add can take any skater's roster spot (a bench spot is a spot)
             if not b.get("ir") and x["g"] != "G" and b["g"] not in ("F", "D"):
                 continue                    # (moving an injured player to IR frees a spot for anyone)
-            out.append((self.loss(i, t) + self.cost[(xi, i)], i))     # ranked by lineup points lost, not raw points
-        out.sort()
-        return [i for _, i in out[:DROPS_PER]]
+            out.append((self.loss(i, t) + self.cost[(xi, i)], sum(b["v"][t:]) + self.cost[(xi, i)], i))
+        # Try the cheapest drops by lineup points lost (a player whose games sit on your bench costs nothing) AND by his
+        # own points. Lineup loss alone is measured one drop at a time, so it can hide drops that are cheap together;
+        # the union never searches less than the old list did.
+        by_loss = [i for _, _, i in sorted(out)[:DROPS_PER]]
+        by_raw = [i for _, _, i in sorted(out, key=lambda r: (r[1], r[2]))[:DROPS_PER]]
+        return by_loss + [i for i in by_raw if i not in by_loss]
 
     def cands(self, used_x, used_y, moves=()):
         full = set()
