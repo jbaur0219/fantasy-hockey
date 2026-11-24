@@ -130,7 +130,6 @@ class InjuredReserve(unittest.TestCase):
 
 
 class Bugs(unittest.TestCase):
-    @unittest.expectedFailure
     def test_goalie_add_can_replace_a_spare_defenseman(self):
         # BUG A1: drop_options() lets a goalie add drop a G or an F, never a D. Here your 6th defenseman sits on the
         # bench every day (5 D slots full, UTIL taken by a forward) and one goalie slot is empty all week: adding a
@@ -151,7 +150,6 @@ class Bugs(unittest.TestCase):
         self.assertAlmostEqual(res["gain"], 8.0, places=1)
         self.assertIn(("Stream B", "Stream A"), pairs(res))
 
-    @unittest.expectedFailure
     def test_benched_player_is_considered_as_a_drop(self):
         # BUG A3: drop_options() keeps the DROPS_PER cheapest drops by raw value (his own points), not by what he adds
         # to your lineup. Yama's 3 points all sit on the bench (forwards full on his days), but nine cheaper

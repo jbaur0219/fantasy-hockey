@@ -85,7 +85,7 @@ class Model:
         self.fut = nxt_games
         self.per_day = per_day                  # league limit on adds per day (None: only the weekly limit)
         self.base, self.pool, self.ndays = base, pool, ndays
-        self.cost = {}
+        self.cost, self._loss = {}, {}
         for xi, x in enumerate(pool):
             for yi, b in enumerate(base):
                 if b["ok"]:
@@ -115,17 +115,34 @@ class Model:
     def score(self, moves):
         return self.lineup_total(moves)[0] - sum(self.cost[(xi, yi)] for xi, _, yi in moves)
 
+    def loss(self, yi, t):
+        """Lineup points lost from day t on by dropping roster player yi alone. Games he would spend on your bench (his
+        position already full that day) cost nothing, so a benched player is never ranked as an expensive drop."""
+        k = (yi, t)
+        if k not in self._loss:
+            tot = 0.0
+            for d in range(t, self.ndays):
+                full, less = ([], [], []), ([], [], [])
+                for i, b in enumerate(self.base):
+                    j = 0 if b["g"] == "F" else 1 if b["g"] == "D" else 2
+                    full[j].append(b["v"][d])
+                    if i != yi:
+                        less[j].append(b["v"][d])
+                tot += day_value(*full) - day_value(*less)
+            self._loss[k] = tot
+        return self._loss[k]
+
     def drop_options(self, xi, t, used_y):
         x = self.pool[xi]
         out = []
         for i, b in enumerate(self.base):
             if not b["ok"] or i in used_y:
                 continue
-            if not b.get("ir") and x["g"] == "G" and b["g"] not in ("G", "F"):
-                continue
+            if not b.get("ir") and x["g"] == "G" and b["g"] not in ("G", "F", "D"):
+                continue                    # a goalie add can take any skater's roster spot (a bench spot is a spot)
             if not b.get("ir") and x["g"] != "G" and b["g"] not in ("F", "D"):
                 continue                    # (moving an injured player to IR frees a spot for anyone)
-            out.append((sum(b["v"][t:]) + self.cost[(xi, i)], i))
+            out.append((self.loss(i, t) + self.cost[(xi, i)], i))     # ranked by lineup points lost, not raw points
         out.sort()
         return [i for _, i in out[:DROPS_PER]]
 
@@ -508,7 +525,7 @@ def alternatives(M, final, m, days, ndays, healthy):
         if j == yi or j in used or not b["ok"] or (xi, j) not in M.cost:
             continue
         xg, bg = M.pool[xi]["g"], b["g"]
-        if not b.get("ir") and ((xg == "G" and bg not in ("G", "F")) or (xg != "G" and bg not in ("F", "D"))):
+        if not b.get("ir") and ((xg == "G" and bg not in ("G", "F", "D")) or (xg != "G" and bg not in ("F", "D"))):
             continue
         net = M.score(rest + [(xi, t, j)]) - without
         sb = show_bar(t, ndays)
