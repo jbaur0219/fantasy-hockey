@@ -1125,11 +1125,24 @@ html.sheet-on:not(:has(#modal.open)){background:var(--bg)!important}
 html.sheet-on:not(:has(#modal.open)) .wrap{transform:none!important;clip-path:none!important;overflow:visible!important;will-change:auto!important;transition:none!important}
 
 /* ---------- Schedule advantage: day header stays pinned under the nav bar while the table scrolls ---------- */
-/* overflow:clip keeps the rounded-card clipping but, unlike overflow:hidden, does not become a scroll container, so sticky can follow the page */
-.card[data-ut="Schedule advantage"] .cin{overflow:clip}
+/* overflow:clip keeps the rounded-card clipping but, unlike overflow:hidden, does not become a scroll container, so sticky can follow the page.
+   min-width:0 is required with clip: without it the card grows to the table's full width and runs off the screen. */
+.card[data-ut="Schedule advantage"] .cin{overflow:clip;min-width:0}
+.card[data-ut="Schedule advantage"] .cbody{grid-template-columns:minmax(0,1fr)}
 .edge-wrap{position:relative}
+.edge-sent{height:1px;margin-bottom:-1px;pointer-events:none}
+/* the real header hides once the pinned copy is lined up on top of it, so text is never doubled */
+.edge-wrap.ready>.scroll thead th{visibility:hidden}
 .edge-sh{position:sticky;top:calc(var(--sat) + 54px);height:0;z-index:5;pointer-events:none}
-.edge-shin{position:absolute;left:0;right:0;top:0;overflow:hidden!important;background:var(--card);visibility:hidden}
+/* material bar: spans the card's full width (into its 16px padding), translucent glass like an iOS section header */
+.edge-shbg{position:absolute;left:-16px;right:-16px;top:0;padding:0 16px;
+  background:color-mix(in srgb,var(--card) 78%,transparent);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);backdrop-filter:blur(20px) saturate(180%);
+  box-shadow:0 .5px 0 transparent;transition:box-shadow .25s var(--ease)}
+.edge-shbg.pinned{box-shadow:0 .5px 0 var(--sep)}
+.edge-shin{position:relative;overflow:hidden!important;background:none!important;visibility:hidden}
 .edge-shin.ready{visibility:visible}
 .edge-shin table.edge{table-layout:fixed;width:auto}
-.edge-shin th{box-sizing:border-box;overflow:hidden}
+.edge-shin th{box-sizing:border-box;overflow:hidden;border-bottom-color:transparent!important}
+/* header labels: small, quiet, evenly tracked */
+table.edge thead th{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--label2);text-transform:uppercase}

@@ -1940,7 +1940,7 @@ function uiEdge(){
   w.days.forEach(function(d){hd+='<th>'+esc(d)+'</th>';});
   hd+='<th>Best adds</th>';
   /* pinned copy of the header row (see edgeStick): sits exactly over the real header at rest, stays under the nav bar when scrolling */
-  h+='<div class="edge-wrap"><div class="edge-sh" aria-hidden="true"><div class="edge-shin scroll"><table class="edge"><thead><tr>'+hd+'</tr></thead></table></div></div>';
+  h+='<div class="edge-wrap"><div class="edge-sent"></div><div class="edge-sh" aria-hidden="true"><div class="edge-shbg"><div class="edge-shin scroll"><table class="edge"><thead><tr>'+hd+'</tr></thead></table></div></div></div>';
   h+='<div class="scroll"><table class="edge"><thead><tr>'+hd+'</tr></thead><tbody>';
   w.rows.forEach(function(r){
     var by={};r.opps.forEach(function(o){by[o.d]=o;});
@@ -1959,6 +1959,7 @@ function uiEdge(){
    the sideways scroll position is copied on scroll (passive, one property write). */
 function edgeStick(){
   if(UI.edgeRO){UI.edgeRO.disconnect();UI.edgeRO=null;}
+  if(UI.edgeIO){UI.edgeIO.disconnect();UI.edgeIO=null;}
   var root=document.querySelector('.card[data-ut="Schedule advantage"] .edge-wrap');if(!root)return;
   var sc=root.querySelector(':scope>.scroll'),sh=root.querySelector('.edge-shin'),tb=sc&&sc.querySelector('table.edge'),ct=sh&&sh.querySelector('table.edge');
   if(!sc||!sh||!tb||!ct)return;
@@ -1968,8 +1969,17 @@ function edgeStick(){
     ct.style.width=w+'px';
     for(var i=0;i<real.length&&i<copy.length;i++)copy[i].style.width=real[i].getBoundingClientRect().width+'px';
     sh.scrollLeft=sc.scrollLeft;
-    sh.classList.add('ready');
+    sh.classList.add('ready');root.classList.add('ready');
   };
+  /* hairline under the header only once it is pinned (IntersectionObserver: no scroll handler, no layout reads while scrolling) */
+  var bg=root.querySelector('.edge-shbg'),hr=root.querySelector(':scope>.edge-sent');
+  if(window.IntersectionObserver&&bg&&hr){
+    var pr=document.createElement('div');pr.style.cssText='position:fixed;top:0;height:calc(var(--sat) + 54px);visibility:hidden;pointer-events:none';
+    document.body.appendChild(pr);var nav=Math.round(pr.getBoundingClientRect().height);pr.remove();
+    UI.edgeIO=new IntersectionObserver(function(es){es.forEach(function(e){
+      bg.classList.toggle('pinned',!e.isIntersecting&&e.boundingClientRect.top<nav+1);});},{rootMargin:(-nav-1)+'px 0px 0px 0px',threshold:1});
+    UI.edgeIO.observe(hr);
+  }
   sc.addEventListener('scroll',function(){sh.scrollLeft=sc.scrollLeft;},{passive:true});
   if(window.ResizeObserver){UI.edgeRO=new ResizeObserver(sync);UI.edgeRO.observe(tb);}
   sync();
