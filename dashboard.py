@@ -216,6 +216,23 @@ def move_limit_info(league, days):
     return {"limit": lim, "unlimited": False, "known": True, "season_limit": season}
 
 
+IR_OK = {"OUT", "INJURY_RESERVE"}   # injury statuses ESPN lets you put in an IR spot
+
+
+def ir_free(league, mine):
+    """Open IR spots on your roster: the league's IR slot count (ESPN slot ids 8-10 here) minus players already there."""
+    counts = (((league or {}).get("settings") or {}).get("rosterSettings") or {}).get("lineupSlotCounts") or {}
+    total = 0
+    for k, v in counts.items():
+        try:
+            if int(k) in A.IR_SLOTS:
+                total += int(v or 0)
+        except (TypeError, ValueError):
+            pass
+    used = sum(1 for p in mine or [] if p.get("slot") == "IR")
+    return max(0, total - used)
+
+
 def move_limit(league, days):
     """Adds allowed this matchup, from the league's settings (NO_LIMIT when the league has no weekly cap)."""
     return move_limit_info(league, days)["limit"]

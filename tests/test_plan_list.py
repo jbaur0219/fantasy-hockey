@@ -51,17 +51,17 @@ class PlanList(unittest.TestCase):
 
     def test_big_move_shown_small_move_left_off(self):
         # Your 5th defenseman (Benson here) plays 2 of 4 days; Brown plays all 4: +2.0, on the list.
-        # Your UTIL forward (1.9 a day) could be swapped for a 2.2 forward: +1.2 over the week, a coin flip, left off.
+        # Your UTIL forward (1.9 a day) could be swapped for a 2.1 forward: +0.8 over the week, a coin flip, left off.
         roster = [(player(100 + i, f"Solid Forward{i}", out=2.0), [2.0] * 4, None) for i in range(9)]
         roster.append((player(150, "Util Filler", out=1.9), [1.9] * 4, 1.0))
         roster += [(player(300 + i, f"Solid D{i}", grp="D", out=2.0), [2.0] * 4, None) for i in range(4)]
         roster.append((player(200, "Zach Benson", grp="D", tm="BUF"), [1.0, 0.0, 1.0, 0.0], 1.0))
         fas = [(player(1, "Connor Brown", grp="D", rl="D2 - PP2", ev="D2", ppu=2), [1.0] * 4),
-               (player(2, "Small Upgrade"), [2.2] * 4)]
+               (player(2, "Small Upgrade"), [2.1] * 4)]
         res = self.run_plan(roster, fas)
         self.assertEqual([(m["add"]["n"], m["drop"]["n"]) for m in res["moves"]], [("Connor Brown", "Zach Benson")])
         self.assertEqual([m["add"]["n"] for m in res["small"]], ["Small Upgrade"])
-        self.assertAlmostEqual(res["small"][0]["net"], 1.2, places=1)
+        self.assertAlmostEqual(res["small"][0]["net"], 0.8, places=1)
         self.assertAlmostEqual(res["moves"][0]["net"], 2.0, places=1)
         self.assertNotEqual(res["moves"][0]["conf"], "optional")
         self.assertAlmostEqual(res["gain"], 2.0, places=1)       # the total only counts what is on the list
@@ -75,13 +75,48 @@ class PlanList(unittest.TestCase):
         self.assertNotIn("About", mv["why1"])                     # the points are shown next to it, not repeated
 
     def test_planned_move_does_not_flip_flop_near_the_line(self):
-        # +1.2: under the bar for a new move, but it was already on the plan, so it stays (HOLD_SLACK)
+        # +0.8: under the bar for a new move, but it was already on the plan, so it stays (HOLD_SLACK)
         roster = roster_with_weak([1.0, 1.0, 1.0, 1.0])
-        fas = [(player(1, "Steady Add"), [1.3, 1.3, 1.3, 1.3])]
+        fas = [(player(1, "Steady Add"), [1.2, 1.2, 1.2, 1.2])]
         self.assertEqual(self.run_plan(roster, fas)["moves"], [])
         kept = self.run_plan(roster, fas, prev=[(1, DAYS[0], 200)])["moves"]
         self.assertEqual([m["add"]["n"] for m in kept], ["Steady Add"])
         self.assertEqual(kept[0]["conf"], "lean")
+
+    def test_late_week_bar_is_lower(self):
+        # +0.6 is too small on Monday, but in the last 3 days unused moves expire, so it makes the list
+        roster = roster_with_weak([1.0, 1.0, 0.0, 0.0])
+        fas = [(player(1, "Late Add"), [0.0, 0.0, 0.3, 0.3])]
+        res = self.run_plan(roster, fas)
+        self.assertEqual([(m["add"]["n"], m["day"]) for m in res["moves"]], [("Late Add", DAYS[2])])
+
+    def test_bench_games_are_explained(self):
+        # Same games, same points a game: the edge is that the forward's games sit on your bench (forwards full)
+        roster = [(player(100 + i, f"Solid Forward{i}", out=2.0), [2.0] * 4, None) for i in range(10)]
+        roster.append((player(200, "Kailer Yamamoto", tm="SEA"), [1.5, 0.0, 1.5, 1.5], 1.0))
+        roster += [(player(300 + i, f"Solid D{i}", grp="D", out=2.0), [2.0] * 4, None) for i in range(4)]
+        fas = [(player(1, "Rasmus Andersson", grp="D", tm="CGY", rl="D1 - PP1", ev="D1", ppu=1), [1.5, 0.0, 1.5, 1.5])]
+        mv = self.run_plan(roster, fas)["moves"][0]
+        self.assertAlmostEqual(mv["gain"], 4.5, places=1)
+        self.assertEqual((mv["ca"], mv["cd"]), (3, 0))
+        self.assertIn("All 3 of Andersson's games would count in your lineup. None of Yamamoto's 3 would", mv["why1"])
+        self.assertIn("forward spots are already full", mv["why1"])
+
+    def test_injured_player_goes_to_ir_instead_of_a_drop(self):
+        roster = roster_with_weak([1.0, 1.0, 1.0, 1.0])
+        roster[0] = (player(100, "Hurt Star", out=3.0, inj="OUT"), [0.0] * 4, None)   # never a drop (a star)
+        fas = [(player(1, "Fill In"), [1.5] * 4)]
+        ents = fake_inputs(roster, fas)
+        with mock.patch.object(C, "build_inputs", return_value=ents), \
+                mock.patch.object(C, "cost", return_value=5.0), mock.patch.object(LT, "assess", return_value=None):
+            res = C.plan([], [], None, len(DAYS), DAYS, {}, {}, 7, {}, reasons=False, ir_free=1)
+        mv = res["moves"][0]
+        self.assertEqual((mv["drop"]["n"], mv["ir"], mv["cost"]), ("Hurt Star", True, 0.0))
+        self.assertIn("move him to your open IR spot", mv["why1"])
+        with mock.patch.object(C, "build_inputs", return_value=fake_inputs(roster, fas)), \
+                mock.patch.object(C, "cost", return_value=5.0), mock.patch.object(LT, "assess", return_value=None):
+            res = C.plan([], [], None, len(DAYS), DAYS, {}, {}, 7, {}, reasons=False, ir_free=0)
+        self.assertNotIn("Hurt Star", [m["drop"]["n"] for m in res["moves"]])   # no IR spot: a star is not dropped
 
     def test_nothing_worth_it(self):
         roster = roster_with_weak([1.0, 1.0, 1.0, 1.0])

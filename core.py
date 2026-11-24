@@ -7,9 +7,10 @@ Each move also gets a confidence (Strong / Lean, kept for the back-end track rec
 for the Keep button.
 
 What you see: one list of moves to make, each one a clear "make this move". A move only makes the list when it adds at
-least SHOW_NET points this week net of what you give up (and clears the drop rule for the player it drops). Smaller
-moves are close to coin flips and would spend a move you may need later in the week, so they are left off the list and
-logged privately (history/, result "hidden") so the track record can show whether leaving them off cost anything.
+least SHOW_NET points this week net of what you give up (LATE_NET in the last LATE_DAYS days, since unused moves
+expire) and clears the drop rule for the player it drops. Smaller moves are logged privately (history/, result
+"hidden") so the track record can show whether leaving them off cost anything. Injured players (out / IR) go to an open
+IR spot instead of being dropped. Each move's reason counts only games that fit in your lineup.
 
 How a move is judged
   gain   = extra points your best daily lineup scores for the rest of this matchup with the move made
@@ -39,8 +40,11 @@ STICKY = 1.0              # points a new move must beat the previous plan's move
 STRONG_NET = 3.0          # net points that make a move Strong on its own
 STRONG_SCHED_NET = 2.0    # ...or this much when the edge comes from extra games (a schedule edge is close to certain)
 LEAN_NET = 1.5            # below this a move is Optional, whatever its tier
-SHOW_NET = LEAN_NET       # smallest net gain a move needs to be on the plan you see
+SHOW_NET = 1.0            # smallest net gain a move needs to be on the plan you see
+LATE_NET = 0.5            # ...in the last LATE_DAYS days of the matchup: unused moves expire, so any real gain counts
+LATE_DAYS = 3
 HOLD_SLACK = 0.5          # a move already on the plan stays until it falls this far below the bar (no flip-flop)
+IR_STATUSES = {"OUT", "INJURY_RESERVE"}   # injured players ESPN lets you move to an IR spot
 ALTS = 3                  # other drops kept for each move, for the "Keep him" button
 POOL_SK, POOL_G = 45, 8
 DROPS_PER = 7
@@ -115,10 +119,10 @@ class Model:
         for i, b in enumerate(self.base):
             if not b["ok"] or i in used_y:
                 continue
-            if x["g"] == "G" and b["g"] not in ("G", "F"):
+            if not b.get("ir") and x["g"] == "G" and b["g"] not in ("G", "F"):
                 continue
-            if x["g"] != "G" and b["g"] not in ("F", "D"):
-                continue
+            if not b.get("ir") and x["g"] != "G" and b["g"] not in ("F", "D"):
+                continue                    # (moving an injured player to IR frees a spot for anyone)
             out.append((sum(b["v"][t:]) + self.cost[(xi, i)], i))
         out.sort()
         return [i for _, i in out[:DROPS_PER]]
@@ -235,8 +239,13 @@ def build_inputs(mine, fas, game, ndays, standings, starters):
     return entries, base, [{"g": x["grp"], "v": x["v"], "waiver": x["waiver"], "p": x["p"], "x": x} for x in pool]
 
 
+def show_bar(t, ndays):
+    """Net points a move on day t needs to make the list (lower near the end of the week: unused moves expire)."""
+    return LATE_NET if ndays - t <= LATE_DAYS else SHOW_NET
+
+
 def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_games, prev=None, reasons=True, only_prev=False,
-         keep_ids=(), healthy=True):
+         keep_ids=(), healthy=True, ir_free=0):
     """The plan. prev = [(add_id, day_label, drop_id), ...] from the previous build (kept unless clearly beaten).
     keep_ids: players you chose to keep this week (never suggested as drops). healthy: data was complete enough to call
     a move Strong. nxt_games: {team: games} over the long-term horizon after this matchup (longterm.HORIZON_DAYS)."""
@@ -246,7 +255,16 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
     for b in base:
         if b["p"]["id"] in keep_ids:
             b["ok"] = False
+    # Injured players (out / on injured reserve) with an open IR spot: move them to IR instead of dropping them. The add
+    # still uses one of your weekly moves, but you lose nobody, so it costs nothing after this week.
+    if ir_free:
+        hurt = sorted((b for b in base if b["p"].get("inj") in IR_STATUSES), key=lambda b: -(b["p"].get("out") or 0))
+        for b in hurt[:ir_free]:
+            b.update(ok=True, ir=True, bar=STR.MIN_GAIN)
     M = Model(base, pool, ndays, nxt_games)
+    for (xi, yi) in list(M.cost):
+        if base[yi].get("ir"):
+            M.cost[(xi, yi)] = 0.0
     pi = {x["p"]["id"]: i for i, x in enumerate(pool)}
     bi = {b["p"]["id"]: i for i, b in enumerate(base)}
     keep = []
@@ -270,9 +288,11 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             best, best_s = m, s
 
     def shows(mv):
-        """On the list you see: clears the drop rule for that player and adds at least SHOW_NET this week."""
+        """On the list you see: clears the drop rule for that player and adds at least show_bar() this week."""
         slack = HOLD_SLACK if mv["kept"] else 0.0
-        return mv["marg"] >= mv["need"] - slack and round(mv["net"], 1) >= SHOW_NET - slack
+        bar = show_bar(mv["t"], ndays)
+        need = mv["need"] if mv["need"] > STR.MIN_GAIN else min(mv["need"], bar)   # producers keep their higher bar
+        return mv["marg"] >= need - slack and round(mv["net"], 1) >= max(OPTIONAL_MIN, bar - slack)
 
     def sequence(tiers, with_reasons):
         """Moves in day order, each with its own gain (lineup points with the earlier moves made), cost and labels."""
@@ -285,17 +305,25 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             x = pool[xi]["x"]
             y = by_p[base[yi]["p"]["id"]]
             c = M.cost[(xi, yi)]
-            gain = 0.0
+            gain, ca, cd = 0.0, 0, 0
             for d in range(t, ndays):
                 act = STR._active(ents, d, skip=y)
+                without = STR.day_value(act)
                 act.append((x["grp"], x["v"][d]))
                 gain += STR.day_value(act) - days_now[d]
+                # games that would actually count in your lineup (a game behind a full position sits on the bench)
+                if x["v"][d] > 0 and STR.day_value(act) - without > 0.01:
+                    ca += 1
+                if y["v"][d] > 0 and days_now[d] - without > 0.01:
+                    cd += 1
             mv = {"t": t, "day": days[t], "add": STR._brief(x["p"]), "drop": STR._brief(y["p"]),
                   "gain": round(gain, 2), "cost": c, "net": round(gain - c, 2), "marg": marg, "need": base[yi]["bar"],
                   "games": sum(1 for i in range(t, ndays) if x["v"][i] > 0), "waiver": x["waiver"], "tier": tier,
                   "kept": (xi, t, yi) in keep}
             mv["ga"] = mv["games"]
             mv["gd"] = sum(1 for i in range(t, ndays) if y["v"][i] > 0) if y["p"]["inj"] not in A.BAD_INJURY else 0
+            mv["ca"], mv["cd"] = ca, min(cd, mv["gd"])
+            mv["ir"] = bool(base[yi].get("ir"))
             mv["conf"] = confidence(mv, y["p"], healthy, x["p"])
             if with_reasons:
                 mv["why1"] = headline(mv, x["p"], y["p"])
@@ -383,12 +411,18 @@ def _games(n):
     return f"{n} game{'s' if n != 1 else ''}"
 
 
+POS_WORD = {"F": "forward", "D": "defense", "G": "goalie"}
+
+
 def headline(mv, xp, yp):
     """Why this move, in one or two plain sentences an everyday player can trust without knowing the player:
-    who he is (team, line and power-play role) and why he beats the player you drop (games left, or points a game).
-    The points it adds are shown next to it, so they are not repeated here."""
+    who he is (team, line and power-play role) and where the points come from. When a player's games would sit on
+    your bench (his position is already full that day), it says so: that is often the real reason for a move, and
+    comparing games or points a game alone would hide it (e.g. Andersson for Yamamoto, Nov 24: both 3 games, both
+    1.5 a game). The points it adds are shown next to it, so they are not repeated here."""
     a, d = _last(xp["n"]), _last(yp["n"])
     ga, gd = mv["ga"], mv["gd"]
+    ca, cd = mv.get("ca", ga), mv.get("cd", gd)
     if xp["grp"] == "G":
         who = f"{a} is {xp['tm']}'s {STR._role_text(xp)}, likely to start about {int(round((xp.get('sp') or 0) * 100))}% of their games."
     else:
@@ -400,8 +434,21 @@ def headline(mv, xp, yp):
         rec = xp.get("rec")
         if rec is not None and rec >= 2.0 and (xp.get("gp") or 0) >= 5:
             who = who[:-1] + f" and is scoring {rec:.1f} pts a game lately."
-    if yp["inj"] in A.BAD_INJURY:
-        why = f"{d} is {yp['inj'].replace('_', ' ').lower()}, and {a} has {_games(ga)} left this week."
+    if mv.get("ir"):
+        why = (f"{d} is {yp['inj'].replace('_', ' ').lower()}: move him to your open IR spot (no drop), "
+               f"and {a} adds {_games(ca)} that count this week.")
+    elif yp["inj"] in A.BAD_INJURY:
+        why = f"{d} is {yp['inj'].replace('_', ' ').lower()}, and {a} has {_games(ca)} left this week that count."
+    elif ca != ga or cd != gd:
+        # lineup spots, not talent, decide it: say which games count and why the others don't
+        pos = POS_WORD.get(yp["grp"], "lineup")
+        why = (f"All {ga} of {a}'s games" if ca == ga else f"Only {ca} of {a}'s {ga} games") + " would count in your lineup."
+        if cd == gd:
+            why += f" All {gd} of {d}'s count too, but {a} adds more."
+        elif cd == 0:
+            why += f" None of {d}'s {gd} would: your {pos} spots are already full on his days, so he'd sit on your bench."
+        else:
+            why += f" Only {cd} of {d}'s {gd} would: on his other days your {pos} spots are already full, so he'd sit on your bench."
     elif ga > gd:
         why = f"{_games(ga)} left this week; {d} has {gd}."
         why = why[0].upper() + why[1:]
@@ -428,10 +475,11 @@ def alternatives(M, final, m, days, ndays, healthy):
         if j == yi or j in used or not b["ok"] or (xi, j) not in M.cost:
             continue
         xg, bg = M.pool[xi]["g"], b["g"]
-        if (xg == "G" and bg not in ("G", "F")) or (xg != "G" and bg not in ("F", "D")):
+        if not b.get("ir") and ((xg == "G" and bg not in ("G", "F")) or (xg != "G" and bg not in ("F", "D"))):
             continue
         net = M.score(rest + [(xi, t, j)]) - without
-        if net < SHOW_NET or net < b["bar"]:
+        sb = show_bar(t, ndays)
+        if net < sb or net < (b["bar"] if b["bar"] > STR.MIN_GAIN else sb):
             continue                                    # only offer a swap that would itself make the list
         c = M.cost[(xi, j)]
         xp, yp = M.pool[xi]["p"], b["p"]
@@ -440,6 +488,7 @@ def alternatives(M, final, m, days, ndays, healthy):
               "waiver": M.pool[xi]["waiver"], "tier": "make" if net >= b["bar"] else "optional"}
         mv["ga"] = mv["games"]
         mv["gd"] = sum(1 for i in range(t, ndays) if b["v"][i] > 0) if yp["inj"] not in A.BAD_INJURY else 0
+        mv["ir"] = bool(b.get("ir"))
         mv["conf"] = confidence(mv, yp, healthy, xp)
         mv["why1"] = headline(mv, xp, yp)
         mv["lt"] = LT.assess(yp, xp, M.fut, c)

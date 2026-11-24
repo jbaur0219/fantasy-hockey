@@ -138,7 +138,8 @@ def notify_texts(site_data, now_ms):
     dl = _deadline(clock, first_open) if clock and first_open is not None else None
 
     def line(m):
-        return f"add {m['add']['n']} ({m['add']['tm']}), drop {m['drop']['n']} (+{m['gain']:.1f} pts)"
+        out = f"move {m['drop']['n']} to IR" if m.get("ir") else f"drop {m['drop']['n']}"
+        return f"add {m['add']['n']} ({m['add']['tm']}), {out} (+{m['gain']:.1f} pts)"
 
     today = [m for m in moves if first_open is not None and m.get("t") == first_open]
     claims = [m for m in moves if m.get("waiver") and first_open is not None and m.get("t") == first_open + 1]

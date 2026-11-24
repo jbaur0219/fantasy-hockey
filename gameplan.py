@@ -60,7 +60,7 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
     mp = (league.get("status") or {}).get("currentMatchupPeriod")
     kept = KP.load(mp)
     res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, fut, prev=prev,
-                 only_prev=cautious, keep_ids=kept, healthy=healthy)
+                 only_prev=cautious, keep_ids=kept, healthy=healthy, ir_free=D.ir_free(league, site_data["mine"]))
     entries, _, pool = C.build_inputs(site_data["mine"], site_data["fas"], game, ndays, standings, starters)
     before_rows = _day_rows(entries, ndays, days, game)
     after_rows = _day_rows(res["ents"], ndays, days, game)
@@ -84,7 +84,7 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
             "unlimited": bg["unlimited"], "limit_known": bg["known"], "season_left": bg["season_left"],
             "next_games": nxt, "fut": fut, "fut_days": LT.HORIZON_DAYS, "cautious": cautious, "mp": mp, "kept": sorted(kept), "healthy": healthy}
     plan["unused"] = max(0, moves_left - len(plan["moves"]))
-    plan["reserve"] = 0 if bg["unlimited"] else plan["unused"]      # moves saved for injuries and late-week streams
+    plan["ir_free"] = D.ir_free(league, site_data["mine"])
     if m:
         # one projection model for the whole site: same daily-lineup values as the plan, for both teams
         opp = next((t for t in site_data.get("teams", []) if t["id"] == m.get("opp_id")), None)

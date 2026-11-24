@@ -1144,7 +1144,7 @@ function gpRow(m,o){
     +'<span class="mvr-av">'+glAv(m.add,'add')+glAv(m.drop,'drop')+'</span>'
     +'<div class="row-m"><div class="gpr-h"><div class="row-t">Add <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
     +'<span class="gpr-p">'+sgn(m.gain,1)+'<small>pts</small></span></div>'
-    +'<div class="gpr-d">Drop <a class="pl" data-noav="1" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a></div>'
+    +'<div class="gpr-d">'+(m.ir?'Move ':'Drop ')+'<a class="pl" data-noav="1" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a>'+(m.ir?' to IR':'')+'</div>'
     +(gpWhy(m)?'<div class="gpr-w">'+esc(gpWhy(m))+'</div>':'')+'</div>'
     +'<span class="rchev">'+SF.chev+'</span></div>'
     +'<div class="rx'+(open?' open':'')+'" id="x-'+key+'"><div class="rxi">'
@@ -1158,15 +1158,14 @@ function gpRow(m,o){
 }
 function gpClaimRow(m){
   return '<div class="row"><span class="ric">'+SF.clock+'</span><div class="row-m"><div class="row-t">Claim <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
-    +'<div class="row-s">He is on waivers. Put the claim in today so he is yours '+esc(dayShort(m.day))+' (then drop '+esc(m.drop.n)+').</div></div></div>';
+    +'<div class="row-s">He is on waivers. Put the claim in today so he is yours '+esc(dayShort(m.day))+' (then '+(m.ir?'move '+esc(m.drop.n)+' to IR':'drop '+esc(m.drop.n))+').</div></div></div>';
 }
 function gpLockTxt(i){var C=D.clock,l=C&&C.lock&&C.lock[i];return l?'Before '+etTime(l):'';}
 function gpBudget(P){
   if(P.unlimited)return '<div class="sec-f">Your league has no weekly move limit.</div>';
   var lim=P.limit,ml=P.moves_left,n=P.moves.length,res=Math.max(0,ml-n),dots='',note=[];
   if(lim>0&&lim<=14)for(var i=0;i<lim;i++)dots+='<i class="'+(i<lim-ml?'u':'')+'"></i>';
-  if(n&&res)note.push(res+' saved for injuries and late-week streams.');
-  else if(!n&&ml)note.push('Saved for injuries and late-week streams.');
+  if(res&&ml)note.push('More show up here as soon as they\u2019re worth it.');
   if(P.limit_known===false)note.push('Your league’s move limit couldn’t be read, so this assumes '+lim+'.');
   if(P.used_known===false)note.push('ESPN didn’t say how many you have used, so this assumes none yet.');
   if(P.season_left!=null&&P.season_left<=ml)note.push(P.season_left+' left for the season.');
@@ -1240,7 +1239,9 @@ function uiGamePlanDetails(P,WP,fi){
       +missed.map(function(m){return wpMove(Object.assign({},m,{state:'missed'}));}).join('')+'</ul>';
   }
   h+='<h3>How the plan works</h3><div class="muted gp-fine">One plan for the whole app: the Today screen, this page and the alerts all use these moves. '
-    +'A move is on the list only when it adds at least 1.5 points this week after anything it costs you later, so every move here is one to make. Smaller gains are left off to keep moves for injuries and late-week streams. '
+    +'A move is on the list when it adds at least 1 point this week after anything it costs you later (0.5 in the last 3 days of the week, since unused moves don\u2019t carry over), so every move here is one to make. '
+    +'Points come from games that count: a player\u2019s game only counts when he fits in your lineup that day, so a move can win even when both players have the same games. '
+    +'If a player is out and you have an open IR spot, the plan moves him to IR instead of dropping him (the pickup still uses one of your moves). '
     +'The list stays put through the week and only changes for real news (an injury, a line change, a better move), and it says what changed. '
     +'Never suggested as drops: players producing for you (1.9+ pts a game this season or 2.2+ lately), stars, and anyone you tap Keep on. '
     +'Waivers clear after a day, so a player on waivers needs a claim the day before. It is a projection, not a guarantee: check late scratches and goalie news the morning of.</div>';
@@ -1863,7 +1864,7 @@ function uiHelp(){
     ['Games left','Games his NHL team still plays in this Monday-to-Sunday matchup (days that have started do not count).'],
     ['Line 1 / Pair 2 / PP1','His current even-strength line (forwards) or pair (defense), and power-play unit, from DailyFaceoff.com.'],
     ['UTIL','The one lineup spot that takes any forward or defenseman.'],
-    ['Moves','Every move on the Game plan is one to make. It is there only when it adds at least 1.5 points this week after anything it costs you later. Smaller gains are left off so you keep moves for injuries and late-week streams. The plan uses your league\'s own weekly move limit.'],
+    ['Moves','Every move on the Game plan is one to make. It is there only when it adds at least 1 point this week after anything it costs you later (0.5 in the last 3 days, since unused moves don\'t carry over). Only games that fit in your lineup count. The plan uses your league\'s own weekly move limit and your open IR spots.'],
     ['Keep','Tap Keep on any suggested drop and that player is never suggested as a drop for the rest of the matchup week. The plan picks the next best drop instead.'],
     ['Track record','Each suggested move is scored after its games: points the added player scored minus the dropped player, from that day to the end of the week. Moves you skipped are scored too.'],
     ['Long-term cost','What a stream costs you after this week. It compares the two players per game with hot and cold streaks taken out, over their teams\' games in the next 3 weeks, and counts more when the player you drop is widely rostered (someone will likely claim him). No / Small / Real is shown on every move and in Try a swap. Every move\'s gain already has it taken off.'],
