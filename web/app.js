@@ -2703,16 +2703,34 @@ function muPageHtml(i){
 /* page dots: one per matchup, yours tinted; tap one to jump */
 function muDotsHtml(i){
   var S=D.sb,n=S.games.length;if(n<2)return '';
-  return S.games.map(function(g,k){
+  return '<div class="mu-trk">'+S.games.map(function(g,k){
     var A=muTeam(g.a),B=muTeam(g.b);
-    return '<button type="button" class="mu-pd'+(k===i?' on':'')+(muMe(g)?' me':'')+'" data-mupg="'+k+'" aria-label="Matchup '+(k+1)+' of '+n+': '+esc(A.name)+' vs '+esc(B.name)+'"'+(k===i?' aria-current="true"':'')+'><i></i></button>';
-  }).join('');
+    return '<button type="button" class="mu-pd'+(muMe(g)?' me':'')+'" data-mupg="'+k+'" aria-label="Matchup '+(k+1)+' of '+n+': '+esc(A.name)+' vs '+esc(B.name)+'"><i></i></button>';
+  }).join('')+'<span class="mu-pl" id="muPill" aria-hidden="true"><i></i><i></i></span></div>';
+}
+/* The pill sits at "page progress" p (0 = first matchup, n-1 = last; fractions while a finger is dragging). transform only. */
+var MPL={me:null};
+function muPill(p,tr){
+  var el=document.getElementById('muPill'),n=D.sb?D.sb.games.length:0;if(!el||n<2)return;
+  p=Math.max(-0.3,Math.min(n-0.7,p));                       /* a little give past the first and last, like the page itself */
+  el.style.transition=tr||'none';
+  el.style.transform='translate3d('+(p*20).toFixed(1)+'px,0,0)';
+  var g=D.sb.games[Math.max(0,Math.min(n-1,Math.round(p)))],me=!!(g&&muMe(g));
+  if(me!==MPL.me){MPL.me=me;el.classList.toggle('me',me);}
+}
+/* Dots are built once per sheet. Later pages only move the pill and the labels. */
+function muDotsSync(i){
+  var dt=document.getElementById('muDots'),n=D.sb?D.sb.games.length:0;if(!dt)return;
+  if(dt.getAttribute('data-n')!==String(n)||!document.getElementById('muPill')){dt.innerHTML=muDotsHtml(i);dt.setAttribute('data-n',n);MPL.me=null;}
+  var b=dt.querySelectorAll('.mu-pd');
+  for(var k=0;k<b.length;k++){if(k===i)b[k].setAttribute('aria-current','true');else b[k].removeAttribute('aria-current');}
+  muPill(i);
 }
 function muPaint(i){
   var pg=document.getElementById('muPage');if(!pg)return;
   MU.open=i;MU.dd=false;
   pg.innerHTML=muPageHtml(i);
-  var dt=document.getElementById('muDots');if(dt)dt.innerHTML=muDotsHtml(i);
+  muDotsSync(i);
   muBody();
 }
 function muOpen(i){
@@ -2746,8 +2764,9 @@ function muGhost(j){
   return el;
 }
 function muGhostOff(){if(MSW.g&&MSW.g.parentNode)MSW.g.parentNode.removeChild(MSW.g);MSW.g=null;MSW.gj=null;}
-function muPlace(dx,d){
+function muPlace(dx,d,tr){
   var pg=document.getElementById('muPage'),W=muW();if(!pg)return;
+  muPill(MU.open-dx/W,tr);                                  /* the dots follow the page, frame for frame */
   pg.style.transform='translate3d('+dx.toFixed(1)+'px,0,0)';
   if(MSW.g)MSW.g.style.transform='translate3d('+(dx+d*W).toFixed(1)+'px,0,0)';
 }
@@ -2764,7 +2783,7 @@ function muGo(j,from){
   var g=MSW.g,left=W-Math.abs(from||0),dur=Math.round(Math.max(220,Math.min(420,left/W*420)));
   var tr='transform '+dur+'ms cubic-bezier(.25,.9,.3,1)';
   pg.style.transition=tr;g.style.transition=tr;
-  muPlace(-d*W,d);
+  muPlace(-d*W,d,tr);
   setTimeout(function(){
     pg.style.transition='none';pg.style.transform='';
     muPaint(j);muGhostOff();
@@ -2777,7 +2796,7 @@ function muBack(){
   var pg=document.getElementById('muPage');if(!pg)return;
   var g=MSW.g,d=MSW.gd||1,tr='transform .45s var(--spring)';
   pg.style.transition=tr;if(g)g.style.transition=tr;
-  muPlace(0,d);
+  muPlace(0,d,tr);
   setTimeout(function(){if(!MSW.on&&!MSW.busy)muGhostOff();pg.style.transition='';},460);
 }
 function muSwipe(bx){

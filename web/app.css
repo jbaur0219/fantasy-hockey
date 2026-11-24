@@ -1025,11 +1025,16 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none}
 #modal .box{overflow-x:hidden}
 .mu-page{will-change:transform;touch-action:pan-y}
 .mu-pgs{display:flex;justify-content:center;gap:0;margin:-4px 0 8px;min-height:20px}
-.mu-pd{border:0;background:none;padding:6px 4px;margin:0;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center}
-.mu-pd i{display:block;width:7px;height:7px;border-radius:4px;background:var(--label3);transition:width .45s var(--spring),background .3s}
+/* Fixed slots, so nothing ever re-lays-out. One pill (#muPill) slides over them with transform only, and follows the
+   finger while you swipe. Dots are never rebuilt between pages. */
+.mu-trk{position:relative;display:flex}
+.mu-pd{flex:none;width:20px;height:20px;border:0;background:none;padding:0;margin:0;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center}
+.mu-pd i{display:block;width:7px;height:7px;border-radius:50%;background:var(--label3)}
 .mu-pd.me i{background:color-mix(in srgb,var(--tint) 45%,transparent)}
-.mu-pd.on i{width:20px;background:var(--label)}
-.mu-pd.on.me i{background:var(--tint)}
+.mu-pl{position:absolute;left:0;top:6.5px;width:20px;height:7px;pointer-events:none;will-change:transform}
+.mu-pl i{position:absolute;inset:0;border-radius:4px;background:var(--label)}
+.mu-pl i+i{background:var(--tint);opacity:0;transition:opacity .25s var(--ease)}
+.mu-pl.me i+i{opacity:1}
 
 /* ---------- Players: search every player ---------- */
 #psbox{margin:14px 0 4px}
