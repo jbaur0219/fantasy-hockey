@@ -340,6 +340,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             mv["ga"] = mv["games"]
             mv["gd"] = sum(1 for i in range(t, ndays) if y["v"][i] > 0) if y["p"]["inj"] not in A.BAD_INJURY else 0
             mv["ca"], mv["cd"] = ca, min(cd, mv["gd"])
+            mv["pa"], mv["pd"] = _pg(x["v"], t), _pg(y["v"], t)   # per game as the plan values them (reasons)
             mv["ir"] = bool(base[yi].get("ir"))
             # how the plan saw the move, logged with it for the backtest (backtest.py): days in the matchup, groups,
             # the show bar for that day and whether it is in the last days
@@ -375,7 +376,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
     out, order, ents = sequence(tiers, True)
     for mv in out:
         if mv["conf"] == "optional":
-            mv["conf"] = "lean"                 # an already-planned move kept by HOLD_SLACK: on the list, so not optional
+            mv["conf"] = "lean"                 # every move on the list is one to make: never rated optional
     final = [m for m, _, _ in tiers]
     for mv, (m, _, _) in zip(out, order):
         mv["alts"] = alternatives(M, final, m, days, ndays, healthy)
@@ -411,7 +412,7 @@ def confidence(mv, drop_p, healthy, add_p=None):
     """'strong', 'lean' or 'optional' (back-end track record only; the app shows every planned move the same way)."""
     if mv["tier"] != "make":
         return "optional"
-    sched = mv["ga"] > mv["gd"] or drop_p["inj"] in A.BAD_INJURY
+    sched = mv.get("ca", mv["ga"]) > mv.get("cd", mv["gd"]) or drop_p["inj"] in A.BAD_INJURY   # games that count
     net = round(mv["net"], 1)                 # judged on the number the page shows
     if net >= STRONG_NET or (sched and net >= STRONG_SCHED_NET):
         c = "strong"
@@ -424,6 +425,12 @@ def confidence(mv, drop_p, healthy, add_p=None):
     if c == "strong" and day_to_day(add_p):
         c = "lean"                        # the player you'd add might not play: never a sure thing
     return c
+
+
+def _pg(v, t):
+    """Points a game from day t on, as the plan values them (opponents, home ice and start chance included)."""
+    g = [x for x in v[t:] if x > 0]
+    return sum(g) / len(g) if g else 0.0
 
 
 def _last(n):
@@ -476,8 +483,11 @@ def headline(mv, xp, yp):
         why = f"{_games(ga)} left this week; {d} has {gd}."
         why = why[0].upper() + why[1:]
     else:
-        pa, pd = per_game(xp), per_game(yp)
-        if ga == gd:
+        pa, pd = mv.get("pa", per_game(xp)), mv.get("pd", per_game(yp))
+        if ga == gd and round(pa, 1) == round(pd, 1):
+            # same games and the same rounded points a game: never show two equal numbers, give the real edge
+            why = f"Both play {ga} more; {a} projects {pa:.2f} pts a game to {d}'s {pd:.2f} (easier opponents or home ice)."
+        elif ga == gd:
             why = f"Both play {ga} more; {a} projects {pa:.1f} pts a game to {d}'s {pd:.1f}."
         else:
             why = f"{a} projects {pa:.1f} pts a game to {d}'s {pd:.1f}, enough to beat {d}'s extra game."
@@ -511,6 +521,7 @@ def alternatives(M, final, m, days, ndays, healthy):
               "waiver": M.pool[xi]["waiver"], "tier": "make" if net >= b["bar"] else "optional"}
         mv["ga"] = mv["games"]
         mv["gd"] = sum(1 for i in range(t, ndays) if b["v"][i] > 0) if yp["inj"] not in A.BAD_INJURY else 0
+        mv["pa"], mv["pd"] = _pg(M.pool[xi]["v"], t), _pg(b["v"], t)
         mv["ir"] = bool(b.get("ir"))
         mv["conf"] = confidence(mv, yp, healthy, xp)
         mv["why1"] = headline(mv, xp, yp)

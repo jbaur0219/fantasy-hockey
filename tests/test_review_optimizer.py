@@ -166,7 +166,6 @@ class Bugs(unittest.TestCase):
         self.assertEqual(pairs(res), [("Upgrade", "Kailer Yamamoto")])
         self.assertAlmostEqual(res["moves"][0]["net"], 2.0, places=1)
 
-    @unittest.expectedFailure
     def test_reason_never_shows_identical_per_game_numbers(self):
         # BUG A4: headline() quotes per_game() (season outlook), not the per-game values the plan used (opponent
         # strength and home ice included). Two 1.5 players, same 3 games, Brown's opponents are weak: +1.8, and the
