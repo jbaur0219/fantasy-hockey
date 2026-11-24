@@ -213,3 +213,21 @@ class Alerts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LoggedForBacktest(PlanList):
+    """Each shown and hidden move carries how the plan saw it, so backtest.py can judge the bars (2026-11-25)."""
+    def test_moves_carry_the_plan_view(self):
+        roster = [(player(100 + i, f"Solid Forward{i}", out=2.0), [2.0] * 4, None) for i in range(9)]
+        roster.append((player(150, "Util Filler", out=1.9), [1.9] * 4, 1.0))
+        roster += [(player(300 + i, f"Solid D{i}", grp="D", out=2.0), [2.0] * 4, None) for i in range(4)]
+        roster.append((player(200, "Zach Benson", grp="D", tm="BUF"), [1.0, 0.0, 1.0, 0.0], 1.0))
+        fas = [(player(1, "Connor Brown", grp="D"), [1.0] * 4), (player(2, "Small Upgrade"), [2.1] * 4)]
+        res = self.run_plan(roster, fas)
+        mv, sm = res["moves"][0], res["small"][0]
+        for m in (mv, sm):
+            for k in ("nd", "g", "dg", "bar", "late", "need"):
+                self.assertIn(k, m)
+        self.assertEqual((mv["nd"], mv["g"], mv["dg"]), (4, "D", "D"))
+        self.assertEqual(mv["late"], 4 - mv["t"] <= C.LATE_DAYS)
+        self.assertEqual(mv["bar"], C.LATE_NET if mv["late"] else C.SHOW_NET)

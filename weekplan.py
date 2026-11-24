@@ -24,7 +24,9 @@ import streams as STR
 
 STATE_FILE = Path(__file__).with_name("plan_state.json")
 LOG_FILE = Path(__file__).with_name("history") / "moves.jsonl"     # every planned move that was made or missed
-KEEP = ("t", "day", "add", "drop", "gain", "cost", "net", "games", "waiver", "tier", "conf", "why1", "base")
+KEEP = ("t", "day", "add", "drop", "gain", "cost", "net", "games", "waiver", "tier", "conf", "why1", "base",
+        "nd", "need", "kept", "ga", "gd", "ca", "cd", "g", "dg", "ir", "late", "bar")
+LOG_EXTRA = ("t", "nd", "need", "kept", "ga", "gd", "ca", "cd", "g", "dg", "ir", "cost", "late", "bar")   # backtest.py
 
 
 def _load():
@@ -123,7 +125,8 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
                     f.write(json.dumps({"mp": mp, "logged": now_ms, "result": kind, "day": m.get("day"),
                                         "add": m["add"], "drop": m["drop"], "expected_gain": m.get("gain"),
                                         "net": m.get("net"), "conf": m.get("conf"), "why1": m.get("why1"),
-                                        "base": m.get("base")}) + "\n")
+                                        "base": m.get("base"),
+                                        **{k: m.get(k) for k in LOG_EXTRA if m.get(k) is not None}}) + "\n")
         # starting line for the track record: both players' season points, refreshed until the move's day locks
         import record as RC
         old_base = {(m["add"]["id"], m["day"], m["drop"]["id"]): m.get("base") for m in state.get("moves", [])}

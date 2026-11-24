@@ -349,6 +349,13 @@ def _main():
     except Exception as e:                                  # the stats page is an extra: never fail the build over it
         print(f"  lifetime stats skipped ({type(e).__name__}: {e})")
     try:
+        import backtest as BT                               # private: where the plan's bars should move (not published)
+        bt = BT.write_files(RC.STATE["rows"], "history", now_ms)
+        print(f"  backtest: {bt['scored']} of {bt['moves']} moves scored; "
+              + "; ".join(f"{v['bar']} {v['call']}" for v in bt["verdicts"]))
+    except Exception as e:                                  # an extra: never fail the build over it
+        print(f"  backtest skipped ({type(e).__name__}: {e})")
+    try:
         pwa.write_files("site")
         write_notify_payload(site_data, now_ms)
     except Exception as e:                                  # the app files and alert text are extras: never fail the build

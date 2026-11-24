@@ -35,6 +35,7 @@ goalie calls, streams and trade ideas. It never adds, drops, trades or changes a
 | `longterm.py` | Long-term impact of a stream: per game with streaks taken out, the next 3 weeks of games, and the chance the dropped player gets claimed. Feeds the plan's long-term cost and the Long term section on moves and Try a swap |
 | `keep.py` | Players you chose to keep this week (the Keep button sends them as the `keep` input; saved in `keep.json`) |
 | `record.py` | Track record: scores every suggested move after its games (made and skipped), finals in `history/results.json` |
+| `backtest.py` | Back-end only: scores every logged suggestion (shown and hidden) against what happened and says where the plan's bars (SHOW_NET, LATE_NET, goalies) should move, only when 15+ scored moves next to a bar say so clearly. Writes `history/backtest.md` / `.json` after each build; `python tools/backtest.py [history_dir]` runs it offline |
 | `ledger.py` | Back-end lifetime stats from the move log: `history/lifetime.json` and `history/moves.csv` (every move, opens in Excel). Not published to the site or shown in the app |
 | `goalies.py` | Start / bench for each goalie, every day of the matchup |
 | `gamelog.py` | Each player's recent games from ESPN (this league's points per game), saved as `site/gamelog.json` for the Game log tab and Compare |

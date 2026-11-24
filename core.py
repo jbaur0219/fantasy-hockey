@@ -324,6 +324,9 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             mv["gd"] = sum(1 for i in range(t, ndays) if y["v"][i] > 0) if y["p"]["inj"] not in A.BAD_INJURY else 0
             mv["ca"], mv["cd"] = ca, min(cd, mv["gd"])
             mv["ir"] = bool(base[yi].get("ir"))
+            # how the plan saw the move, logged with it for the backtest (backtest.py): days in the matchup, groups,
+            # the show bar for that day and whether it is in the last days
+            mv.update(nd=ndays, g=x["grp"], dg=y["grp"], bar=show_bar(t, ndays), late=ndays - t <= LATE_DAYS)
             mv["conf"] = confidence(mv, y["p"], healthy, x["p"])
             if with_reasons:
                 mv["why1"] = headline(mv, x["p"], y["p"])
@@ -371,7 +374,9 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
         c = M.cost[(xi, yi)]
         hidden.append({"t": t, "day": days[t], "add": STR._brief(pool[xi]["p"]), "drop": STR._brief(base[yi]["p"]),
                        "gain": round(net + c, 2), "cost": c, "net": round(net, 2), "conf": "small",
-                       "waiver": pool[xi]["waiver"]})
+                       "waiver": pool[xi]["waiver"], "nd": ndays, "g": pool[xi]["g"], "dg": base[yi]["g"],
+                       "need": base[yi]["bar"], "bar": show_bar(t, ndays), "late": ndays - t <= LATE_DAYS,
+                       "ir": bool(base[yi].get("ir"))})
     return {"base": round(base_total, 1), "total": round(after_total, 1), "gain": round(after_total - base_total, 1),
             "moves": out, "small": hidden, "before_days": before_days, "after_days": after_days, "ents": ents}
 
