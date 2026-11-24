@@ -150,7 +150,8 @@ def parse_player(pl, season, slot=None, status=None):
         g, sog = num(cs, S_G), num(cs, S_SOG)
         # Regress shooting % toward the league average: few shots -> trust the average more.
         exp_g = (g + SHOT_PRIOR * LEAGUE_SHOOTING_PCT) / (sog + SHOT_PRIOR) * sog if sog or g else 0
-        exp_pts = applied - 2 * (g - exp_g)          # swap real goals for "expected" goals
+        import league as L
+        exp_pts = applied - L.settings().goal_points(group) * (g - exp_g)   # swap real goals for "expected" goals
         p.update({"g": g, "a": num(cs, S_A), "sog": sog, "hit": num(cs, S_HIT),
                   "blk": num(cs, S_BLK), "ppp": num(cs, S_PPP),
                   "sh_pct": (g / sog) if sog else None,

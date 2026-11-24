@@ -172,7 +172,8 @@ def _enrich_skater(p, c):
     if ixg is not None and gp > 0:
         shrunk = (g + A.SHOT_PRIOR * A.LEAGUE_SHOOTING_PCT) / (sog + A.SHOT_PRIOR) * sog if (sog or g) else 0
         exp_g = XG_WEIGHT * ixg + (1 - XG_WEIGHT) * shrunk
-        p["exp_ppg"] = (p["applied"] - 2 * (g - exp_g)) / gp
+        import league as L
+        p["exp_ppg"] = (p["applied"] - L.settings().goal_points(p.get("group", "F")) * (g - exp_g)) / gp
         p["ixg"] = ixg
         p["gx"] = g - ixg
 

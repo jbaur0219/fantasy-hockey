@@ -130,3 +130,27 @@ class PerDayLimit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Scoring(unittest.TestCase):
+    """The luck adjustment and goalie values use this league's points for a goal and a win (advice branch)."""
+    def tearDown(self):
+        L.reset()
+
+    def pl(self):
+        st = {"13": 10, "29": 50, "30": 10}                  # 10 goals on 50 shots in 10 games: shooting hot
+        return {"id": 1, "fullName": "Hot Shooter", "defaultPositionId": 1, "proTeamId": 1, "injuryStatus": "ACTIVE",
+                "stats": [{"id": "002027", "stats": st, "appliedTotal": 30.0}]}
+
+    def test_goal_value_comes_from_the_league(self):
+        two = A.parse_player(self.pl(), 2027)["exp_ppg"]
+        L.install(settings_from(league_with(scoringSettings={"scoringItems": [{"statId": 13, "points": 3.0}]})))
+        three = A.parse_player(self.pl(), 2027)["exp_ppg"]
+        self.assertLess(three, two)                         # goals worth more: running hot inflates more
+        L.install(settings_from(league_with(scoringSettings={"scoringItems": [{"statId": 14, "points": 1.0}]})))
+        self.assertAlmostEqual(A.parse_player(self.pl(), 2027)["exp_ppg"], 3.0)   # goals not scored: no adjustment
+
+    def test_win_value_comes_from_the_league(self):
+        self.assertEqual(STR._win_pts(), 4.0)
+        L.install(settings_from(league_with(scoringSettings={"scoringItems": [{"statId": 1, "points": 5.0}]})))
+        self.assertEqual(STR._win_pts(), 5.0)
