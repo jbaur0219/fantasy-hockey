@@ -374,8 +374,8 @@ svg .k{fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejo
 #bnav.min .lens{opacity:0}
 
 /* ---------- sheet open: the page steps back ---------- */
-body:before{content:'';position:fixed;inset:0;z-index:-1;background:#000;opacity:0;pointer-events:none;transition:opacity .5s var(--soft-spring)}
-html.sheet-on body:before{opacity:1}
+/* The black behind the stepped-back page is the html background, NOT a fixed full-screen layer: iOS 26 samples fixed layers at the top edge to tint the status-bar area and kept a dark strip after a sheet closed (2026-11-24). */
+html.sheet-on{background:#000}
 html.sheet-on .wrap{transform:translateY(calc(var(--sp,0) * (var(--sat) + 10px))) scale(calc(1 - var(--sp,0) * .075));
   clip-path:inset(var(--clipy,0px) 0 0 0 round 14px);overflow:hidden;will-change:transform}
 html.sh-anim .wrap{transition:transform .5s var(--soft-spring)}
@@ -1088,5 +1088,5 @@ table.edge i.b2b{display:inline-block;width:5px;height:5px;border-radius:50%;bac
 #bnav.min .tbmini{opacity:1;transform:none;pointer-events:auto!important;transition:opacity .2s .06s var(--ease),transform .55s .04s var(--spring)}
 
 /* Never show the sheet's backdrop, clipping or top strip when no sheet is open (2026-11-24: a stuck dark bar above the header after Compare > Try swap). */
-html.sheet-on:not(:has(#modal.open)) body:before{opacity:0!important;transition:none!important}
+html.sheet-on:not(:has(#modal.open)){background:var(--bg)!important}
 html.sheet-on:not(:has(#modal.open)) .wrap{transform:none!important;clip-path:none!important;overflow:visible!important;will-change:auto!important;transition:none!important}
