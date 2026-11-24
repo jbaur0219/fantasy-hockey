@@ -1123,3 +1123,13 @@ table.edge i.b2b{display:inline-block;width:5px;height:5px;border-radius:50%;bac
 /* Never show the sheet's backdrop, clipping or top strip when no sheet is open (2026-11-24: a stuck dark bar above the header after Compare > Try swap). */
 html.sheet-on:not(:has(#modal.open)){background:var(--bg)!important}
 html.sheet-on:not(:has(#modal.open)) .wrap{transform:none!important;clip-path:none!important;overflow:visible!important;will-change:auto!important;transition:none!important}
+
+/* ---------- Schedule advantage: day header stays pinned under the nav bar while the table scrolls ---------- */
+/* overflow:clip keeps the rounded-card clipping but, unlike overflow:hidden, does not become a scroll container, so sticky can follow the page */
+.card[data-ut="Schedule advantage"] .cin{overflow:clip}
+.edge-wrap{position:relative}
+.edge-sh{position:sticky;top:calc(var(--sat) + 54px);height:0;z-index:5;pointer-events:none}
+.edge-shin{position:absolute;left:0;right:0;top:0;overflow:hidden!important;background:var(--card);visibility:hidden}
+.edge-shin.ready{visibility:visible}
+.edge-shin table.edge{table-layout:fixed;width:auto}
+.edge-shin th{box-sizing:border-box;overflow:hidden}

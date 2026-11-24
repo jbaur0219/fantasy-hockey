@@ -1935,9 +1935,12 @@ function uiEdge(){
   (D.mine||[]).forEach(function(p){if(p.slot!=='IR'&&!isInj(p))mineBy[p.tm]=(mineBy[p.tm]||0)+1;});
   E.forEach(function(x,i){h+='<button type="button" class="chip-btn'+(i===UI.edgeWin?' on':'')+'" data-ew="'+i+'">'+esc(x.label)+'</button>';});
   h+='</div><div class="muted" style="margin:6px 0">Teams ranked by games and opponent strength (3 easy games beat 3 average ones). Green = weak opponent, red = strong. @ = away. Blue teams are ones you own players on. A dot marks the second game of a back-to-back. Best free-agent skaters from each team are on the right.</div>';
-  h+='<div class="scroll"><table class="edge"><thead><tr><th>Team</th><th>GP</th>';
-  w.days.forEach(function(d){h+='<th>'+esc(d)+'</th>';});
-  h+='<th>Best adds</th></tr></thead><tbody>';
+  var hd='<th>Team</th><th>GP</th>';
+  w.days.forEach(function(d){hd+='<th>'+esc(d)+'</th>';});
+  hd+='<th>Best adds</th>';
+  /* pinned copy of the header row (see edgeStick): sits exactly over the real header at rest, stays under the nav bar when scrolling */
+  h+='<div class="edge-wrap"><div class="edge-sh" aria-hidden="true"><div class="edge-shin scroll"><table class="edge"><thead><tr>'+hd+'</tr></thead></table></div></div>';
+  h+='<div class="scroll"><table class="edge"><thead><tr>'+hd+'</tr></thead><tbody>';
   w.rows.forEach(function(r){
     var by={};r.opps.forEach(function(o){by[o.d]=o;});
     var n=mineBy[r.tm]||0;
@@ -1945,8 +1948,30 @@ function uiEdge(){
     w.days.forEach(function(d,di){var o=by[d],b2b=o&&di>0&&by[w.days[di-1]];h+='<td>'+(o?'<span class="'+(o.t==='weak'?'good':o.t==='strong'?'bad':'muted')+'">'+(o.h?'':'@')+esc(o.o)+'</span>'+(b2b?'<i class="b2b"></i>':''):'')+'</td>';});
     h+='<td>'+(r.fa.length?r.fa.map(function(p){return '<a class="pl" data-id="'+p.id+'" data-noav="1">'+esc(shortName(p.n))+'</a> <span class="muted">'+esc(p.pos)+(p.w?' W':'')+'</span>';}).join('<br>'):'<span class="muted">none</span>')+'</td></tr>';
   });
-  h+='</tbody></table></div>';
+  h+='</tbody></table></div></div>';
   uiPut('Schedule advantage',h,{v:'roster',s:'week',c:0});
+  edgeStick();
+}
+/* Schedule advantage: the day header stays pinned while you scroll down the table.
+   The table scrolls sideways, and a sideways scroller blocks a plain sticky <th>, so a copy of the header is pinned instead.
+   Column widths are copied from the real header whenever the table resizes (ResizeObserver, never in a scroll handler);
+   the sideways scroll position is copied on scroll (passive, one property write). */
+function edgeStick(){
+  if(UI.edgeRO){UI.edgeRO.disconnect();UI.edgeRO=null;}
+  var root=document.querySelector('.card[data-ut="Schedule advantage"] .edge-wrap');if(!root)return;
+  var sc=root.querySelector(':scope>.scroll'),sh=root.querySelector('.edge-shin'),tb=sc&&sc.querySelector('table.edge'),ct=sh&&sh.querySelector('table.edge');
+  if(!sc||!sh||!tb||!ct)return;
+  var real=tb.querySelectorAll('thead th'),copy=ct.querySelectorAll('th');
+  var sync=function(){
+    var w=tb.getBoundingClientRect().width;if(!w)return;
+    ct.style.width=w+'px';
+    for(var i=0;i<real.length&&i<copy.length;i++)copy[i].style.width=real[i].getBoundingClientRect().width+'px';
+    sh.scrollLeft=sc.scrollLeft;
+    sh.classList.add('ready');
+  };
+  sc.addEventListener('scroll',function(){sh.scrollLeft=sc.scrollLeft;},{passive:true});
+  if(window.ResizeObserver){UI.edgeRO=new ResizeObserver(sync);UI.edgeRO.observe(tb);}
+  sync();
 }
 
 var _mo=null,_msy=0;
