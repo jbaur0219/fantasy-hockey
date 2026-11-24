@@ -1494,6 +1494,19 @@ function sheetClose(){
     glPin();setTimeout(glPin,250);
   },RM?0:480);
 }
+/* Close the sheet at once (no slide-out) and unlock the page BEFORE the caller changes tabs or scrolls.
+   Compare/Player card > "Try swap" used to start the 0.5 s close, then switch tabs and scroll while the body was still locked
+   (position:fixed); when the lock released afterwards, iOS could leave the page shifted down with a dark strip above the header (2026-11-24). */
+function sheetCloseNow(){
+  var m=document.getElementById('modal'),bx=m&&m.querySelector('.box'),de=document.documentElement,b=document.body,w=document.querySelector('.wrap');
+  clearTimeout(SH.closing);SH.open=false;SH.closing_busy=false;
+  if(m)m.classList.remove('open','fading');
+  de.classList.remove('sheet-on','sh-anim');spSet(null);
+  if(w){w.style.transformOrigin='';w.style.removeProperty('--clipy');}
+  if(bx)bx.style.transform='';
+  b.classList.remove('mlock');b.style.top='';
+  glPin();
+}
 /* iOS keeps odd state after the keyboard closes or the app is reopened: the top bar can end up shifted under the status bar,
    and a closed sheet can leave the "page stepped back" look behind. Put both back to normal. */
 function glReset(){
@@ -2045,10 +2058,10 @@ function modal(p){
   if(pct==='gl')pcTabSet('gl');
   var sw=$('#pcSwap');
   if(sw&&wk)sw.addEventListener('click',function(){
-    closeModal();setTimeout(sheetHeal,600);
+    sheetCloseNow();
     if(typeof showTab==='function')showTab('moves/swap');
     if(typeof wiPick==='function'){wiPick('drop',String(wk.id));wiPick('add',String(p.id));}
-    setTimeout(function(){var o=document.getElementById('wiOut');if(o&&o.scrollIntoView){try{o.scrollIntoView({block:'center'});}catch(e){}}},120);
+    setTimeout(function(){var o=document.getElementById('wiOut');if(o&&o.scrollIntoView){try{o.scrollIntoView({block:'center'});}catch(e){}}glReset();},120);
   });
 }
 
@@ -2298,10 +2311,10 @@ document.addEventListener('click',function(e){
   b=t.closest('[data-cmset]');if(b){var np=ALL[b.getAttribute('data-cmset')];if(np){if(CMP.pick==='a')CMP.a=np;else CMP.b=np;}CMP.pick=null;cmpRender();return;}
   b=t.closest('[data-cmflip]');if(b){var x=CMP.a;CMP.a=CMP.b;CMP.b=x;cmpRender(true);return;}
   b=t.closest('[data-cmtry]');
-  if(b){var ids=b.getAttribute('data-cmtry').split(',');closeModal();setTimeout(sheetHeal,600);
+  if(b){var ids=b.getAttribute('data-cmtry').split(',');sheetCloseNow();
     if(typeof showTab==='function')showTab('moves/swap');
     if(typeof wiPick==='function'){wiPick('drop',ids[1]);wiPick('add',ids[0]);}
-    setTimeout(function(){var o=document.getElementById('wiOut');if(o&&o.scrollIntoView){try{o.scrollIntoView({block:'center'});}catch(x){}}},120);return;}
+    setTimeout(function(){var o=document.getElementById('wiOut');if(o&&o.scrollIntoView){try{o.scrollIntoView({block:'center'});}catch(x){}}glReset();},120);return;}
 },true);
 
 /* ---------- tabs + startup ---------- */
