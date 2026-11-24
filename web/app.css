@@ -508,6 +508,39 @@ html.sheet-on #gnav,html.sheet-on #bnav,html.sheet-on #rfbar{opacity:0;pointer-e
 .rb svg{width:12px;height:12px}.rb svg .k{stroke-width:3.4}
 .rb.add{background:var(--green);left:-3px;top:-3px}.rb.drop{background:var(--red);right:-5px;bottom:-4px;width:13px;height:13px}
 .rb.drop svg{width:10px;height:10px}
+/* ---------- Game plan: this week's moves (2026-11-24) ---------- */
+.card[data-ut="This week's moves"] .cin{background:none;padding:0;border-radius:0;overflow:visible}
+.gp-sum{display:flex}
+.gp-t{flex:1;min-width:0;padding:13px 16px 14px}
+.gp-t+.gp-t{box-shadow:inset .5px 0 0 var(--sep)}
+.gp-k{font-size:13px;color:var(--label2);letter-spacing:-.005em}
+.gp-v{margin-top:2px;font-size:26px;line-height:31px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.gp-v small{font-size:15px;font-weight:600;color:var(--label2)}
+.gp-v.good small{color:inherit;opacity:.8}
+.gp-ar{display:inline-block;margin:0 6px;font-size:18px;font-weight:600;color:var(--label3);transform:translateY(-2px)}
+.gp-gap{margin-top:12px}
+.gp-day{margin-top:22px}
+.gp-dh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:0 4px 8px;font-size:17px;font-weight:600;letter-spacing:-.02em}
+.grp>.row.gpr{align-items:flex-start;padding-top:13px;padding-bottom:13px}
+.gpr .mvr-av{margin-top:1px}
+.gpr-d{font-size:15px;line-height:20px;color:var(--label2);letter-spacing:-.012em;margin-top:1px}
+.gpr-d a.pl{color:inherit}
+.gpr-w{font-size:13px;line-height:18px;color:var(--label2);letter-spacing:-.005em;margin-top:6px}
+.gpr-h{display:flex;align-items:flex-start;gap:8px}.gpr-h>.row-t{flex:1;min-width:0}
+.gpr-p{flex:none;font-size:17px;line-height:22px;font-weight:600;color:var(--green);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.gpr-p small{font-size:12px;font-weight:600;margin-left:2px;opacity:.8}
+.gpr>.rchev{align-self:center;margin-left:-4px}
+.gpr+.rx .pc-det{margin:2px 0 10px}.gpr+.rx>.rxi{padding-left:64px}.gpr+.rx .rx-act .cm-btn{margin-left:0}.gp-lt{line-height:17px}
+.gp-bud{align-items:flex-start;line-height:18px}
+.gp-bud .mdots{margin-top:6px}
+.gp-bn{color:var(--label3)}
+.gp-tb{width:100%;border-collapse:collapse;font-size:15px;font-variant-numeric:tabular-nums}
+.gp-tb th{font-size:12px;font-weight:600;color:var(--label2);text-align:left;padding:0 6px 6px 0;white-space:nowrap}
+.gp-tb td{padding:7px 6px 7px 0;border-top:.5px solid var(--sep);white-space:nowrap}
+.gp-fine{font-size:13px;line-height:18px;margin-top:8px}
+.card[data-ut="See the details"] .cin h3{margin:18px 0 8px}
+.card[data-ut="See the details"] .cin h3:first-child{margin-top:4px}
+
 
 /* ---------- buttons, chips, fields ---------- */
 .chip-btn,.kp,.gbtn2,.pc-vs .pc-swap{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 15px;border:0!important;border-radius:100px;

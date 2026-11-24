@@ -478,8 +478,8 @@ def build(cfg, data, league, standings, now_ms, site_data):
     game = make_game_fn(abbr, games, sp, now_ms)
     starters = S.STATE["by_team"]
     days = D.day_clock(data["schedules"], sp, ndays, now_ms)["labels"]
-    used = PL._moves_used(league, cfg["team"])
-    moves_left = max(0, PL.MOVE_LIMIT - (used or 0))
+    bg = PL.budget(league, cfg["team"])
+    used, moves_left = bg["used"], bg["left"]
 
     def games_left(tm, i):
         return sum(1 for j in range(i, ndays) if game(tm, j))

@@ -7,6 +7,8 @@ WEEKLY PLAN MEMORY (READ-ONLY): keeps the plan steady through the week and track
     clearly better, so the plan does not flip-flop. Anything that did change is listed with the reason.
   - A move is DONE once the player it adds is on your roster, MISSED once its day starts without it.
   - The plan is only saved from a healthy build (line data fresh), so a bad data day never sets the week's plan.
+  - Small moves the plan left off your list (core.SHOW_NET) are saved too, and logged as "hidden" once their day starts,
+    so the private track record shows whether leaving them off cost anything. They are never shown in the app.
   - On the last day of a matchup it also drafts NEXT week's plan from today's roster and the real schedule.
 
 Never fails the build: any problem just skips the cards.
@@ -44,7 +46,7 @@ def previous(mp):
     return [(m["add"]["id"], m["day"], m["drop"]["id"]) for m in st.get("moves", [])]
 
 
-def _why_changed(m, mine_ids, fa_by_id, fresh_add_ids, fresh_drop_ids):
+def _why_changed(m, mine_ids, fa_by_id, fresh_add_ids, fresh_drop_ids, small_keys=()):
     a, d = m["add"], m["drop"]
     if a["id"] in mine_ids:
         return None                                           # done, not a change
@@ -57,6 +59,8 @@ def _why_changed(m, mine_ids, fa_by_id, fresh_add_ids, fresh_drop_ids):
         return f"{d['n']} is no longer on your roster."
     if a["id"] in fresh_add_ids:
         return f"{a['n']} is still in the plan, now paired with a different drop or day."
+    if (a["id"], d["id"]) in small_keys:
+        return "The gain shrank (new lines, injuries or goalie news), so it is no longer worth one of your moves."
     return "Today's update found a better use of this move (fresh lines, goalie starts and next week's schedule)."
 
 
@@ -68,7 +72,7 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
     mp = (league.get("status") or {}).get("currentMatchupPeriod")
     state = _load()
     if not state or state.get("mp") != mp:
-        state = {"mp": mp, "moves": [], "done": [], "missed": []}
+        state = {"mp": mp, "moves": [], "done": [], "missed": [], "small": [], "small_logged": []}
     mine_ids = {p["id"] for p in site_data["mine"]}
     fa_by_id = {p["id"]: p for p in site_data["fas"]}
     fresh_keys = {(m["add"]["id"], m["day"], m["drop"]["id"]) for m in fresh["moves"]}
@@ -89,14 +93,28 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
         if idx is None or D.day_locked(clock, idx, now_ms):
             missed.setdefault(k, {kk: m.get(kk) for kk in KEEP})
             continue
-        why = _why_changed(m, mine_ids, fa_by_id, fresh_adds, fresh_drops)
+        why = _why_changed(m, mine_ids, fa_by_id, fresh_adds, fresh_drops,
+                           {(x["add"]["id"], x["drop"]["id"]) for x in fresh.get("small") or []})
         if why:
             changes.append({"add": m["add"], "drop": m["drop"], "day": m["day"], "why": why})
+    # small moves left off the list: log each once, when its day has started (scored like any other move)
+    planned = set(done) | set(missed) | {(m["add"]["id"], m["drop"]["id"]) for m in fresh["moves"]}
+    small_logged = {tuple(k) for k in state.get("small_logged", [])}
+    new_hidden = []
+    for m in state.get("small", []):
+        k = (m["add"]["id"], m["drop"]["id"])
+        if k in small_logged or k in planned:
+            continue
+        idx = labels.index(m["day"]) if m["day"] in labels else None
+        if idx is None or D.day_locked(clock, idx, now_ms):
+            small_logged.add(k)
+            new_hidden.append(m)
     out = {"mp": mp, "done": list(done.values()), "missed": list(missed.values()), "changes": changes,
            "saved": healthy, "preview": None}
     if healthy:
         new = [("done", m) for k, m in done.items() if k not in {(x["add"]["id"], x["drop"]["id"]) for x in state.get("done", [])}]
         new += [("missed", m) for k, m in missed.items() if k not in {(x["add"]["id"], x["drop"]["id"]) for x in state.get("missed", [])}]
+        new += [("hidden", m) for m in new_hidden]
         import netcache
         if new and netcache.STATE["mode"] != "replay":            # test replays never write the log
             LOG_FILE.parent.mkdir(exist_ok=True)
@@ -117,7 +135,19 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
             open_day = idx is not None and not D.day_locked(clock, idx, now_ms)
             sm["base"] = (RC.snap(m["add"]["id"], m["drop"]["id"], now_ms) if open_day else None) or old_base.get(key)
             saved.append(sm)
-        _save({"mp": mp, "updated": now_ms, "moves": saved, "done": out["done"], "missed": out["missed"]})
+        old_sbase = {(m["add"]["id"], m["day"], m["drop"]["id"]): m.get("base") for m in state.get("small", [])}
+        small = []
+        for m in fresh.get("small") or []:
+            sm = {k: m.get(k) for k in KEEP if k != "base"}
+            key = (m["add"]["id"], m["day"], m["drop"]["id"])
+            idx = labels.index(m["day"]) if m["day"] in labels else None
+            open_day = idx is not None and not D.day_locked(clock, idx, now_ms)
+            if not open_day:
+                continue
+            sm["base"] = RC.snap(m["add"]["id"], m["drop"]["id"], now_ms) or old_sbase.get(key)
+            small.append(sm)
+        _save({"mp": mp, "updated": now_ms, "moves": saved, "done": out["done"], "missed": out["missed"],
+               "small": small, "small_logged": sorted([list(k) for k in small_logged])})
         print(f"  weekly plan saved for matchup {mp}: {len(fresh['moves'])} moves, {len(done)} done, "
               f"{len(changes)} changed since the last build")
     else:

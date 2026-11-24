@@ -19,7 +19,7 @@ import starters as S
 
 STREAM_MIN_START = 0.3      # only free-agent goalies who start at least this often
 STREAM_POOL = 25            # look at the best 25 free-agent goalies
-MOVE_LIMIT = 7
+MOVE_LIMIT = 7              # replaced by the league's own limit on every build (budget())
 
 
 def _grid(schedules, sp, abbr, games, now_ms, ndays):
@@ -75,16 +75,16 @@ def _stream(site_data, sp, abbr, games, standings, now_ms, ndays):
 
 
 def _moves_used(league, my_id):
-    try:
-        mp = str((league.get("status") or {}).get("currentMatchupPeriod"))
-        for t in league.get("teams", []):
-            if t.get("id") == my_id:
-                tot = (t.get("transactionCounter") or {}).get("matchupAcquisitionTotals") or {}
-                v = tot.get(mp)
-                return int(v) if v is not None else None
-    except Exception:
-        pass
-    return None
+    return D.move_budget(league, my_id)["used"]
+
+
+def budget(league, my_id):
+    """This league's own add limit and what is left this matchup (dashboard.move_budget). Also keeps MOVE_LIMIT,
+    which a few older callers read, in step with the league's rule."""
+    global MOVE_LIMIT
+    b = D.move_budget(league, my_id)
+    MOVE_LIMIT = b["limit"]
+    return b
 
 
 def build(cfg, data, league, standings, now_ms, site_data):
@@ -93,6 +93,7 @@ def build(cfg, data, league, standings, now_ms, site_data):
     m = site_data.get("matchup")
     ndays = max(1, min(int(m["days_left"]) if m else 7, D.MAX_DAYS))       # only the rest of THIS matchup week (through Sunday)
     days = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
+    bg = budget(league, cfg["team"])
     return {"days": days, "teams": _grid(data["schedules"], sp, abbr, games, now_ms, ndays),
             "stream": _stream(site_data, sp, abbr, games, standings, now_ms, ndays),
-            "moves_used": _moves_used(league, cfg["team"]), "limit": MOVE_LIMIT}
+            "moves_used": bg["used"], "limit": bg["limit"], "unlimited": bg["unlimited"], "limit_known": bg["known"]}

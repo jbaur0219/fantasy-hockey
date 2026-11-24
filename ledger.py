@@ -16,6 +16,8 @@ Definitions (shown on the page, so nobody has to guess)
                  player scored, from the move's day to the end of that matchup week.
   Made / Skipped by what you actually did in ESPN. "Extra points" is the total for moves you made.
   Misses are included: the win rate counts every scored move, good or bad.
+  Not shown      small moves the plan left off your list (under core.SHOW_NET). Scored the same way but kept out of
+                 every number above; "not_shown" in lifetime.json says whether leaving them off cost points.
 Never fails the build: any problem just leaves the stats files out.
 """
 import csv
@@ -46,8 +48,15 @@ def _date(ms):
         return None
 
 
+def _status(r):
+    return {"done": "made", "missed": "skipped", "hidden": "not shown"}.get(r.get("result"), "skipped")
+
+
 def summarize(rows, now_ms=None):
-    """rows: every move, oldest first (record.STATE['rows'])."""
+    """rows: every move, oldest first (record.STATE['rows']). Moves the plan left off your list (result "hidden",
+    since 2026-11-24) are not "suggested": they are reported on their own, to check that leaving them off was right."""
+    hidden = [r for r in rows if r.get("result") == "hidden"]
+    rows = [r for r in rows if r.get("result") != "hidden"]
     made = [r for r in rows if r.get("result") == "done"]
     skipped = [r for r in rows if r.get("result") == "missed"]
     scored = [r for r in rows if r.get("actual") is not None]
@@ -67,8 +76,9 @@ def summarize(rows, now_ms=None):
         "pending": len(rows) - len(scored),
         "made": _group(made), "skipped": _group(skipped), "all": _group(rows),
         "by_rating": {c: _group([r for r in rows if r.get("conf") == c]) for c in ("strong", "lean", "optional")},
+        "not_shown": _group(hidden),
         "by_week": by_week,
-        "recent": [{"week": r.get("mp"), "day": r.get("day"), "status": "made" if r.get("result") == "done" else "skipped",
+        "recent": [{"week": r.get("mp"), "day": r.get("day"), "status": _status(r),
                     "rating": r.get("conf"), "add": r["add"]["n"], "drop": r["drop"]["n"],
                     "expected": r.get("expected"), "actual": r.get("actual"), "final": bool(r.get("final"))}
                    for r in reversed(rows[-15:])],
@@ -82,7 +92,7 @@ def csv_text(rows):
                 "final", "scored"])
     for r in rows:
         w.writerow([r.get("mp"), r.get("day"), _date(r["logged"]) if r.get("logged") else "",
-                    "made" if r.get("result") == "done" else "skipped", r.get("conf") or "", r["add"]["n"], r["drop"]["n"],
+                    _status(r), r.get("conf") or "", r["add"]["n"], r["drop"]["n"],
                     "" if r.get("expected") is None else r["expected"], "" if r.get("actual") is None else r["actual"],
                     "yes" if r.get("final") else "no", "yes" if r.get("actual") is not None else "no"])
     return out.getvalue()
@@ -99,7 +109,9 @@ def write_xlsx(s, rows, path):
                  ("Waiting on games", s["pending"]), ("Moves you made (scored)", s["made"]["n"]),
                  ("Extra points from moves you made", s["made"]["pts"]), ("Moves you skipped (scored)", s["skipped"]["n"]),
                  ("Points from skipped moves", s["skipped"]["pts"]), ("Win rate, all scored (%)", s["all"]["win_pct"]),
-                 ("Points per scored move", s["all"]["avg"])]:
+                 ("Points per scored move", s["all"]["avg"]),
+                 ("Small moves left off the list (scored)", s["not_shown"]["n"]),
+                 ("Points those small moves would have added", s["not_shown"]["pts"])]:
         ws.append([k, v])
     ws.append([])
     ws.append(["By rating", "Scored", "Ahead", "Points"])

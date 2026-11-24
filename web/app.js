@@ -704,7 +704,7 @@ function streamsRender(){
 }
 
 function gpMoveHtml(m,i){
-  return '<div class="step"><div class="num"'+(cfOf(m)==='strong'?'':' style="background:var(--gray)"')+'>'+(i+1)+'</div><div style="flex:1;min-width:0"><div><b>'+esc(m.day)+'</b></div>'+mvCard(m)+'</div></div>';
+  return '<div class="step"><div class="num">'+(i+1)+'</div><div style="flex:1;min-width:0"><div><b>'+esc(m.day)+'</b></div>'+mvCard(m)+'</div></div>';
 }
 function gpTargets(list,label){
   var h='<div class="chip" style="min-width:290px"><div class="d">'+label+'</div>';
@@ -714,39 +714,9 @@ function gpTargets(list,label){
   return h+'</div>';
 }
 function gameplanRender(){
-  var P=lkPlan(D.gameplan),h='';
-  if(!P){$('#t-gameplan').innerHTML='<div class="card">The game plan is not available right now.</div>';return;}
-  var M=P.matchup,n=P.moves.length;
-  h+='<div class="card"><h2>Your game plan for the rest of this week</h2>'+lkNote(P)+keptHtml()+(P.cautious?'<div class="why warn" style="margin-bottom:8px">Line data could not be loaded this update, so only moves from the last good update are shown. New suggestions return with the next good update.</div>':'');
-  if(M){
-    var pa=M.p_win_after;
-    h+='<div class="vs"><div class="team"><div class="n">'+esc(D.me)+'</div><div class="s">'+f(M.me_now,1)+'</div><div class="r">projected final '+Math.round(M.proj_me)+(P.gain>0?' &rarr; '+Math.round(M.proj_me+P.gain)+' with the plan':'')+'</div></div>'
-    +'<div class="team right"><div class="n">'+esc(M.opp)+'</div><div class="s">'+f(M.opp_now,1)+'</div><div class="r">projected final '+Math.round(M.proj_opp)+'</div></div></div>'
-    +'<div style="margin-top:10px"><span class="big">'+Math.round(M.p_win*100)+'%</span> <span class="muted">win chance now</span>'
-    +(pa!=null&&n?' &nbsp;&rarr;&nbsp; <span class="big good">'+Math.round(pa*100)+'%</span> <span class="muted">if you make the plan</span>':'')+'</div>';
-  }
-  h+='<div style="margin-top:12px"><span class="big">+'+f(P.gain,1)+'</span> <span class="muted">projected points from '+n+' of your '+P.moves_left+' remaining moves ('+f(P.base,0)+' &rarr; '+f(P.total,0)+' for the rest of the matchup). Each move\'s gain already has its long-term cost taken off (what you lose next week and later by not keeping the player you drop).</span></div>';
-  if(!n)h+='<div class="verdict">No move adds points after what you would give up. Keep your lineup and use the day-by-day check below to set it each morning.</div>';
-  else{
-    var cnt={strong:0,lean:0,optional:0};P.moves.forEach(function(m){cnt[cfOf(m)]++;});
-    h+='<div class="verdict">'+(cnt.strong?cnt.strong+' Strong move'+(cnt.strong===1?'':'s')+' (do '+(cnt.strong===1?'it':'them')+'). ':'No Strong move this week. ')
-      +(cnt.lean?cnt.lean+' Lean (worth it if you have moves to spare). ':'')+(cnt.optional?cnt.optional+' Optional (small gain, fine to skip). ':'')
-      +(P.unused?P.unused+' move'+(P.unused===1?'':'s')+' stay unused because nothing else adds points.':'')+'</div>';
-  }
-  h+='</div>';
-  if(n){h+='<div class="card"><h2>The moves, in the order to make them</h2>';P.moves.forEach(function(m,i){h+=gpMoveHtml(m,i);});
-    h+='<div class="muted" style="margin-top:8px">Each step assumes the earlier ones were made. Never suggested as drops: players producing for you (1.9+ pts/game this season or 2.2+ over the last 15 days) and stars (projected 2.5+). Top-line and power-play players can be suggested when they are scoring well under what their role usually gives, have a light week, or are on your watch list, but only when the add clearly pays off after the long-term cost. Every add is on a top-six line, top-four pair or first power-play unit.</div></div>';}
-  h+='<div class="card"><h2>Day-by-day lineup check</h2><div class="scroll"><table><thead><tr><th>Day</th><th>Pts now</th><th>Pts with plan</th><th>F</th><th>D</th><th>G</th><th>Empty slots</th></tr></thead><tbody>';
-  P.after.forEach(function(a,i){
-    if(LK.closed(i))return;
-    var b=P.before[i],dl=a.pts-b.pts;
-    h+='<tr><td><b>'+esc(a.day)+'</b></td><td>'+f(b.pts,1)+'</td><td>'+f(a.pts,1)+(dl>0.05?' <span class="good">('+sgn(dl,1)+')</span>':'')+'</td>'
-    +'<td>'+a.f+'/9</td><td>'+a.d+'/5</td><td>'+a.g+'/2</td><td>'+(a.open?'<span class="'+(a.open<b.open?'warn':'bad')+'">'+a.open+'</span>':'<span class="good">0</span>')+(a.open!==b.open?' <span class="muted">(was '+b.open+')</span>':'')+'</td></tr>';});
-  h+='</tbody></table></div><div class="muted" style="margin-top:8px">F, D and G show how many of your players have a game that day against the slots you can fill (9 forwards, 5 defensemen, 2 goalies, plus 1 UTIL). Empty slots are where a streamer scores for you. Points are expected fantasy points from your best lineup each day.</div></div>';
-  h+='<div class="card"><h2>Best stream targets for the week</h2><div class="chips">'
-  +gpTargets(P.targets.F,'Forwards')+gpTargets(P.targets.D,'Defensemen')+gpTargets(P.targets.G,'Goalies')+'</div>'
-  +'<div class="muted" style="margin-top:8px">Ranked by total expected points over the rest of the matchup (games left x projected points per game, adjusted for opponent and home ice; goalies include their chance to start). These are the best adds if you want a stream, whether or not they made the move list above. Players already in the plan are tagged.</div></div>';
-  $('#t-gameplan').innerHTML=h;
+  /* The Game plan is drawn by uiGamePlan() ("This week's moves" + "See the details"). This keeps the old section empty
+     so nothing from the previous layout is shown twice. */
+  var el=$('#t-gameplan');if(el)el.innerHTML='';
 }
 
 /* ---------- daily lock: once the first game of a day starts, nobody can be added for that day ---------- */
@@ -893,7 +863,7 @@ var ICON={
 var VIEWS=[
  {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['Today'],['Track record'],['Lineup sheet',1]]}]},
  {id:'moves',label:'Moves',subs:[
-   {id:'plan',label:'Game plan',cards:[['Your game plan for the rest of this week'],['Day-by-day playbook'],['Next week preview'],['Moves and waivers',1],['Day-by-day lineup check',1]]},
+   {id:'plan',label:'Game plan',cards:[['This week\'s moves'],['Next week preview'],['See the details',1]]},
    {id:'swap',label:'Swap lab',cards:[['Try a swap'],['Your roster: who to look at this week']]},
    {id:'streams',label:'Streams',cards:[['Best skater streams by day'],['Best adds for the rest of this week'],['Streaming goalies by day'],['Best stream targets for the week',1]]}]},
  {id:'roster',label:'Roster',subs:[
@@ -971,7 +941,7 @@ function todayTeam(mine,M){
 function uiBadge(){
   var b=document.getElementById('bn-moves');if(!b)return;
   var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null;
-  var fi=LK.first(),n=P?P.moves.filter(function(m){return (m.t===fi||(m.waiver&&m.t-1===fi))&&cfOf(m)==='strong';}).length:0;
+  var fi=LK.first(),n=P?P.moves.filter(function(m){return m.t===fi||(m.waiver&&m.t-1===fi);}).length:0;
   var o=b.querySelector('.bdg');if(o)o.parentNode.removeChild(o);
   if(n)b.insertAdjacentHTML('beforeend','<span class="bdg">'+(n>9?'9+':n)+'</span>');
 }
@@ -991,7 +961,8 @@ function uiLayout(){
   });
   try{uiToday();}catch(e){}
   try{uiRecord();}catch(e){}
-  try{uiStreams();uiPlaybook();}catch(e){}
+  try{uiStreams();}catch(e){}
+  try{uiPlaybook();}catch(e){}
   try{uiHelp();}catch(e){}
   try{uiLineup();}catch(e){}
   try{uiEdge();}catch(e){}
@@ -1086,7 +1057,8 @@ function showTab(n){
 
 /* ---------- Streams (one card) + Day-by-day playbook (built from the existing data) ---------- */
 var HIDE={'This week matchup':1,'Best skater streams by day':1,'Best adds for the rest of this week':1,'Best stream targets for the week':1,'Streaming goalies by day':1,
-  'Goalie decisions':1,'Suggested moves':1,'Lineup alerts (today)':1,'Best use of your moves this week':1,'The moves, in the order to make them':1};
+  'Goalie decisions':1,'Suggested moves':1,'Lineup alerts (today)':1,'Best use of your moves this week':1,'The moves, in the order to make them':1,
+  'Your game plan for the rest of this week':1,'Day-by-day lineup check':1,'Day-by-day playbook':1,'Moves and waivers':1};
 UI.st={sel:'week',pos:'All'};
 function dayShort(l){var p=String(l).split(' ');return p[0]+(p[2]?' '+p[2]:'');}
 function uiPut(title,html,home){
@@ -1162,39 +1134,121 @@ function wpMove(m,full){
   if(m.state==='due'||m.state==='waiting')return '<li class="mvli">'+wpPill(m)+mvCard(m)+'</li>';
   var note=(m.agree===false)?' <span class="warn">&middot; today\'s model no longer picks him</span>':'';
   var why=m.why1?'<div class="muted">'+esc(m.why1)+'</div>':((m.why&&m.why[0])?'<div class="muted">'+esc(m.why[0])+'</div>':'');
-  return '<li>'+wpPill(m)+cfPill(m)+' add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' gm)</span>, drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span>'+(m.state==='done'?'':note)+why+'</li>';
+  return '<li>'+wpPill(m)+'add <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">('+esc(m.add.pos)+', '+esc(m.add.tm)+', '+m.games+' gm)</span>, drop <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">('+esc(m.drop.pos)+', '+esc(m.drop.tm)+')</span> &middot; <span class="good">'+sgn(m.gain,1)+' pts</span>'+(m.state==='done'?'':note)+why+'</li>';
 }
-function uiPlaybook(){
-  var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,S=D.streams,WP=D.weekplan||{};
-  if(!P||!S)return;
-  var h='',fi=LK.first(),done=WP.done||[],missed=WP.missed||[],ch=WP.changes||[];
-  h+='<div class="muted" style="margin-bottom:6px">One plan for the whole app: the Today screen, this page and the morning alert (Strong moves only) all use these moves. '
-    +'Each update keeps a planned move unless a clearly better one comes up, and says what changed.</div>';
-  if(WP.saved===false)h+='<div class="why warn" style="margin-bottom:6px">Some data was missing in this update, so this plan was not saved as the week\'s plan. The next good update replaces it.</div>';
-  if(ch.length)h+='<div class="pbh">Changed since the last update</div><ul class="pbl">'+ch.map(function(c){
-    return '<li><span class="muted">No longer suggested ('+esc(dayShort(c.day))+'):</span> add '+esc(c.add.n)+', drop '+esc(c.drop.n)+'. <span class="muted">'+esc(c.why)+'</span></li>';}).join('')+'</ul>';
-  S.days.forEach(function(lbl,i){
-    if(LK.closed(i))return;
-    var items=[];
-    P.moves.forEach(function(m){
-      if(m.waiver&&m.t-1===i)items.push('<li><b>Claim</b> <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">(he is on waivers, so put the claim in today to have him '+esc(dayShort(m.day))+')</span></li>');
-      if(m.t===i)items.push(wpMove(Object.assign({},m,{state:i===fi?'due':'waiting'}),true));
-    });
-    (D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){
-      if(r.day!==lbl||r.cls==='done'&&r.verdict==='GAME STARTED')return;
-      items.push('<li><b>Goalie</b> <a class="pl" data-id="'+g.p.id+'">'+esc(g.p.n)+'</a> '+(r.home?'vs':'@')+' '+esc(r.opp)+': <span class="pill '+r.cls+'">'+esc(r.verdict)+'</span> <span class="muted">'+esc(r.conf||'')+'</span></li>');});});
-    var tl=(((D.planner&&D.planner.stream)||[]).filter(function(x){return x.i===i;}).sort(function(a,b){return b.e-a.e;}))[0];
-    if(tl&&tl.e>=0.8)items.push('<li><span class="muted">Optional goalie stream: <a class="pl" data-id="'+tl.id+'">'+esc(tl.n)+'</a> '+(tl.h?'vs':'@')+' '+esc(tl.o)+', win '+Math.round(tl.p*100)+'%</span></li>');
-    h+='<div class="pbh">'+esc(lbl)+(i===fi?' <span class="muted">(next day you can add)</span>':'')+'</div>'+(items.length?'<ul class="pbl">'+items.join('')+'</ul>':'<div class="muted">No move. Set your lineup and check the alerts.</div>');
-  });
+/* ---------- Game plan: one list of moves to make (each one a "make this move"), the details behind a tap ---------- */
+function gpWhy(m){return m.why1||'';}
+function gpRow(m,o){
+  o=o||{};var key='mv'+m.add.id+'-'+m.drop.id,open=!!(UI.exp&&UI.exp[key]);
+  return '<div class="row mvr gpr'+(open?' open':'')+'" data-exp="'+key+'">'
+    +'<span class="mvr-av">'+glAv(m.add,'add')+glAv(m.drop,'drop')+'</span>'
+    +'<div class="row-m"><div class="gpr-h"><div class="row-t">Add <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
+    +'<span class="gpr-p">'+sgn(m.gain,1)+'<small>pts</small></span></div>'
+    +'<div class="gpr-d">Drop <a class="pl" data-noav="1" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a></div>'
+    +(gpWhy(m)?'<div class="gpr-w">'+esc(gpWhy(m))+'</div>':'')+'</div>'
+    +'<span class="rchev">'+SF.chev+'</span></div>'
+    +'<div class="rx'+(open?' open':'')+'" id="x-'+key+'"><div class="rxi">'
+    +(m.swapped?'<div class="rx-n">Instead of dropping '+esc(m.swapped)+', who you chose to keep.</div>':'')
+    +(m.waiver?'<div class="rx-n warn">He is on waivers: put the claim in the day before.</div>':'')
+    +'<div class="rx-n">'+sgn(m.gain,1)+' pts is what this move adds to your lineup this week.</div>'
+    +((m.lt&&m.lt.lines&&m.lt.lines.length)?'<div class="rx-n gp-lt">Long term: '+esc(m.lt.lines.join(' '))+'</div>':'')
+    +(((m.why_add&&m.why_add.length)||(m.why_drop&&m.why_drop.length))?'<details class="pc-det"><summary>Full reasons</summary>'+reasonsHtml(m)+'</details>':'')
+    +'<div class="rx-act">'+keepBtn(m.drop)+cmpBtn(m.add,m.drop)+(o.week?'<button type="button" class="gbtn2" data-go="moves/plan">Whole week</button>':'')+'</div>'
+    +'</div></div>';
+}
+function gpClaimRow(m){
+  return '<div class="row"><span class="ric">'+SF.clock+'</span><div class="row-m"><div class="row-t">Claim <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
+    +'<div class="row-s">He is on waivers. Put the claim in today so he is yours '+esc(dayShort(m.day))+' (then drop '+esc(m.drop.n)+').</div></div></div>';
+}
+function gpLockTxt(i){var C=D.clock,l=C&&C.lock&&C.lock[i];return l?'Before '+etTime(l):'';}
+function gpBudget(P){
+  if(P.unlimited)return '<div class="sec-f">Your league has no weekly move limit.</div>';
+  var lim=P.limit,ml=P.moves_left,n=P.moves.length,res=Math.max(0,ml-n),dots='',note=[];
+  if(lim>0&&lim<=14)for(var i=0;i<lim;i++)dots+='<i class="'+(i<lim-ml?'u':'')+'"></i>';
+  if(n&&res)note.push(res+' saved for injuries and late-week streams.');
+  else if(!n&&ml)note.push('Saved for injuries and late-week streams.');
+  if(P.limit_known===false)note.push('Your league’s move limit couldn’t be read, so this assumes '+lim+'.');
+  if(P.used_known===false)note.push('ESPN didn’t say how many you have used, so this assumes none yet.');
+  if(P.season_left!=null&&P.season_left<=ml)note.push(P.season_left+' left for the season.');
+  return '<div class="sec-f gp-bud">'+(dots?'<span class="mdots">'+dots+'</span>':'')+'<span>'+ml+' of '+lim+' moves left this week'+(note.length?'<br><span class="gp-bn">'+esc(note.join(' '))+'</span>':'')+'</span></div>';
+}
+function uiGamePlan(){
+  var P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,S=D.streams,WP=D.weekplan||{},C=D.clock;
+  if(!P||!C)return;
+  var h='',fi=LK.first(),n=C.labels.length,ch=WP.changes||[],M=P.matchup;
+  var today=C.dates&&C.dates[fi]===etToday();
+  /* summary: what the moves add and what that does to the matchup */
+  if(P.moves.length){
+    h+='<div class="grp gp-sum"><div class="gp-t"><div class="gp-k">'+P.moves.length+' move'+(P.moves.length===1?'':'s')+' this week</div><div class="gp-v'+(P.gain>0?' good':'')+'">'+sgn(P.gain||0,1)+'<small> pts</small></div></div>';
+    if(M){var pa=M.p_win_after;
+      h+='<div class="gp-t"><div class="gp-k">Win chance</div><div class="gp-v">'+Math.round(M.p_win*100)+'%'+(pa!=null&&P.moves.length&&Math.round(pa*100)!==Math.round(M.p_win*100)?'<span class="gp-ar">&rarr;</span><span class="good">'+Math.round(pa*100)+'%</span>':'')+'</div></div>';}
+    h+='</div>';
+  }
+  /* problems first, only when there is one */
+  var warns=[];
+  if(P.hidden)warns.push(P.hidden+' move'+(P.hidden===1?'':'s')+' for a day that already started '+(P.hidden===1?'was':'were')+' taken off. A fresh plan builds shortly after puck drop.');
+  if(P.cautious)warns.push('Line data couldn’t be loaded this update, so only moves from the last good update are shown.');
+  if(WP.saved===false)warns.push('Some data was missing in this update. Double-check a move before you make it; the next good update replaces this plan.');
+  if(warns.length)h+='<div class="grp gp-gap">'+warns.map(function(w){return '<div class="row"><span class="ric wn">'+SF.warn+'</span><div class="row-m"><div class="row-s" style="color:var(--label)">'+esc(w)+'</div></div></div>';}).join('')+'</div>';
+  /* the moves, day by day, each with the deadline to make it */
+  var any=false;
+  for(var i=fi;i<n;i++){
+    var mv=P.moves.filter(function(m){return m.t===i;}),cl=P.moves.filter(function(m){return m.waiver&&m.t-1===i;});
+    if(!mv.length&&!cl.length)continue;
+    any=true;
+    var lbl=(i===fi&&today)?'Today':dayShort(C.labels[i]),lt=gpLockTxt(i);
+    h+='<div class="gp-day"><div class="gp-dh"><span>'+esc(lbl)+'</span>'+(lt?'<span class="sec-r">'+SF.clock+esc(lt)+'</span>':'')+'</div><div class="grp">'
+      +cl.map(gpClaimRow).join('')+mv.map(function(m){return gpRow(m);}).join('')+'</div></div>';
+  }
+  if(!any){
+    h+='<div class="grp gp-gap"><div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">No move to make right now</div>'
+      +'<div class="row-s">Nothing available beats your lineup by enough to spend a move. The plan updates through the week as lines, injuries and goalie news change.</div></div></div></div>';
+  }
+  h+=gpBudget(P);
+  var kh=keptHtml();if(kh)h+=kh;
+  if(ch.length){
+    h+='<div class="gp-day"><div class="gp-dh"><span>Changed since the last update</span></div><div class="grp">'+ch.map(function(c){
+      return '<div class="row"><span class="ric gy">'+SF.swap+'</span><div class="row-m"><div class="row-t">No longer: add '+esc(c.add.n)+', drop '+esc(c.drop.n)+'</div><div class="row-s">'+esc(c.why)+'</div></div></div>';}).join('')+'</div></div>';
+  }
+  uiPut('This week\'s moves',h,{v:'moves',s:'plan',c:0});
+  uiGamePlanDetails(P,WP,fi);
+}
+function uiGamePlanDetails(P,WP,fi){
+  var C=D.clock,h='',done=WP.done||[],missed=WP.missed||[];
+  /* day by day: your lineup's projected points with and without the moves, and empty lineup spots */
+  if(P.after&&P.before){
+    var rows=[];P.after.forEach(function(a,i){if(LK.closed(i))return;var b=P.before[i]||a;rows.push({d:dayShort(a.day),now:b.pts,plan:a.pts,open:a.open,was:b.open});});
+    if(rows.length){
+      h+='<h3>Day by day</h3><table class="gp-tb"><thead><tr><th>Day</th><th>Pts now</th><th>With moves</th><th>Empty</th></tr></thead><tbody>'
+        +rows.map(function(r){var dl=r.plan-r.now;return '<tr><td><b>'+esc(r.d)+'</b></td><td>'+f(r.now,1)+'</td><td>'+f(r.plan,1)+(dl>0.05?' <span class="good">'+sgn(dl,1)+'</span>':'')+'</td><td>'
+          +'<span class="'+(r.open?(r.open>=3?'bad':'warn'):'good')+'">'+r.open+'</span>'+(r.open!==r.was?' <span class="muted">(was '+r.was+')</span>':'')+'</td></tr>';}).join('')
+        +'</tbody></table><div class="muted gp-fine">Empty means a lineup spot (9 F, 5 D, 1 UTIL, 2 G) with nobody who plays that day. Those days are where a pickup scores for you.</div>';
+    }
+  }
+  /* goalie start / bench calls by day */
+  var gl=[];
+  (D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){
+    var i=C.labels.indexOf(r.day);if(i<0||LK.closed(i))return;gl.push({i:i,g:g.p,r:r});});});
+  if(gl.length){
+    gl.sort(function(a,b){return a.i-b.i;});
+    h+='<h3>Goalies</h3><ul class="pbl">'+gl.map(function(x){
+      return '<li><span class="muted">'+esc(dayShort(x.r.day))+'</span> <a class="pl" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a> '+(x.r.home?'vs':'@')+' '+esc(x.r.opp)+': <span class="pill '+x.r.cls+'">'+esc(x.r.verdict)+'</span></li>';}).join('')+'</ul>';
+  }
   if(done.length||missed.length){
-    h+='<div class="pbh">Earlier this week</div><ul class="pbl">'
+    h+='<h3>Earlier this week</h3><ul class="pbl">'
       +done.map(function(m){return wpMove(Object.assign({},m,{state:'done'}));}).join('')
       +missed.map(function(m){return wpMove(Object.assign({},m,{state:'missed'}));}).join('')+'</ul>';
   }
-  h+='<div class="muted" style="margin-top:10px">A projection built from lines, schedules and opponents, not a guarantee. Each step assumes the earlier ones were made. Recheck the morning of: late scratches and goalie news can change a day.</div>';
-  uiPut('Day-by-day playbook',h,{v:'moves',s:'plan',c:0});
-  var PV=WP&&WP.preview;
+  h+='<h3>How the plan works</h3><div class="muted gp-fine">One plan for the whole app: the Today screen, this page and the alerts all use these moves. '
+    +'A move is on the list only when it adds at least 1.5 points this week after anything it costs you later, so every move here is one to make. Smaller gains are left off to keep moves for injuries and late-week streams. '
+    +'The list stays put through the week and only changes for real news (an injury, a line change, a better move), and it says what changed. '
+    +'Never suggested as drops: players producing for you (1.9+ pts a game this season or 2.2+ lately), stars, and anyone you tap Keep on. '
+    +'Waivers clear after a day, so a player on waivers needs a claim the day before. It is a projection, not a guarantee: check late scratches and goalie news the morning of.</div>';
+  uiPut('See the details',h,{v:'moves',s:'plan',c:1});
+}
+function uiPlaybook(){
+  uiGamePlan();
+  var WP=D.weekplan||{},PV=WP&&WP.preview;
   if(PV){
     var g='<div class="muted" style="margin-bottom:6px">Draft for the week starting <b>'+esc(PV.first_day||'')+'</b>: +'+f(PV.gain,1)+' projected points ('+f(PV.base,0)+' &rarr; '+f(PV.total,0)+'). Built from your roster and the real schedule as of now. It becomes the plan on the first update of the new week, with fresher news.</div>';
     var byDay={},order=[];
@@ -1576,20 +1630,8 @@ function glAv(p,badge){
   var id=p.id,tm=p.tm||(ALL[id]&&ALL[id].tm);
   return '<span class="rav">'+(typeof avHtml==='function'?avHtml(id,tm):'')+(badge?'<i class="rb '+badge+'">'+SF[badge==='add'?'plus':'minus']+'</i>':'')+'</span>';
 }
-function glMoveRow(m,open){
-  var c=cfOf(m),key='mv'+m.add.id+'-'+m.drop.id;
-  var sub=esc(dayShort(m.day))+' &middot; '+sgn(m.gain,1)+' pts this week';
-  return '<div class="row mvr'+(open?' open':'')+'" data-exp="'+key+'">'
-    +'<span class="mvr-av">'+glAv(m.add,'add')+glAv(m.drop,'drop')+'</span>'
-    +'<div class="row-m"><div class="row-t">Add <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(shortName(m.add.n))+'</a>, drop <a class="pl" data-noav="1" data-id="'+m.drop.id+'">'+esc(shortName(m.drop.n))+'</a></div><div class="row-s">'+sub+'</div></div>'
-    +'<span class="badge b-'+c+'">'+CONF[c][0]+'</span><span class="rchev">'+SF.chev+'</span></div>'
-    +'<div class="rx'+(open?' open':'')+'" id="x-'+key+'"><div class="rxi">'
-    +(m.swapped?'<div class="rx-n">Instead of dropping '+esc(m.swapped)+', who you chose to keep.</div>':'')
-    +(m.waiver?'<div class="rx-n warn">He is on waivers: put the claim in the day before.</div>':'')
-    +'<p class="rx-why">'+esc(m.why1||'')+'</p>'
-    +'<div class="rx-act">'+keepBtn(m.drop)+cmpBtn(m.add,m.drop)+'<button type="button" class="gbtn2" data-go="moves/plan">Whole week</button></div>'
-    +'</div></div>';
-}
+function glMoveRow(m){return gpRow(m,{week:1});}
+
 function uiToday(){
   var C=D.clock,P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,M=D.matchup,h='';
   if(!C)return;
@@ -1618,36 +1660,29 @@ function uiToday(){
   h+='<div id="livebox">'+lvHtml()+'</div>';
   /* problems only: the data line is silent when everything is fine */
   var warn=age>12?'This hasn\u2019t updated in '+Math.round(age)+' hours. Tap refresh, or check ESPN before making moves.'
-    :((H.level&&H.level!=='ok'&&H.items&&H.items.length)?H.items[0]+(H.level==='bad'?' Nothing is marked Strong until it is back.':''):'');
+    :((H.level&&H.level!=='ok'&&H.items&&H.items.length)?H.items[0]+(H.level==='bad'?' Double-check a move before you make it until it is back.':''):'');
   if(fi>=n){
     h+='<div class="sec"><div class="grp"><div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">You\'re set for this week</div><div class="row-s">Every game day has started. Next week\'s plan shows up after the next update.</div></div></div></div></div>';
     uiPut('Today',h,{v:'today',s:'main',c:0});glCount(document.getElementById('s-today-main'));return;
   }
   var lk=C.lock[fi],when=isToday?'Today':esc(dayShort(C.labels[fi]));
   var all=P?P.moves.filter(function(m){return m.t===fi;}):[];
-  var strong=all.filter(function(m){return cfOf(m)==='strong';}),small=all.filter(function(m){return cfOf(m)!=='strong';});
   var cl=P?P.moves.filter(function(m){return m.waiver&&m.t-1===fi;}):[];
   UI.exp=UI.exp||{};
-  h+='<div class="sec"><div class="sec-h"><span>Moves</span>'+(lk?'<span class="sec-r">'+SF.clock+'Moves lock '+etTime(lk)+'</span>':'')+'</div><div class="grp">';
+  h+='<div class="sec"><div class="sec-h"><span>Moves</span>'+(lk?'<span class="sec-r">'+SF.clock+'Before '+etTime(lk)+'</span>':'')+'</div><div class="grp">';
   if(warn)h+='<div class="row"><span class="ric wn">'+SF.warn+'</span><div class="row-m"><div class="row-t">Check the data</div><div class="row-s">'+esc(warn)+'</div></div></div>';
-  if(strong.length||cl.length){
-    h+=strong.map(function(m){return glMoveRow(m,UI.exp['mv'+m.add.id+'-'+m.drop.id]);}).join('');
-    h+=cl.map(function(m){return '<div class="row"><span class="ric">'+SF.clock+'</span><div class="row-m"><div class="row-t">Claim <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div><div class="row-s">To add him '+esc(dayShort(m.day))+', dropping '+esc(m.drop.n)+'</div></div><span class="badge b-'+cfOf(m)+'">'+CONF[cfOf(m)][0]+'</span></div>';}).join('');
+  if(all.length||cl.length){
+    h+=cl.map(gpClaimRow).join('')+all.map(function(m){return glMoveRow(m);}).join('');
   }else{
-    var nx=P?P.moves.filter(function(m){return m.t>fi&&cfOf(m)==='strong';})[0]:null;
-    h+='<button type="button" class="row" data-go="moves/plan"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">Nothing to do '+(isToday?'today':'yet')+'</div><div class="row-s">'
-      +(nx?'Next: '+esc(dayShort(nx.day))+', add '+esc(shortName(nx.add.n))+' for '+esc(shortName(nx.drop.n)):'No Strong move left this week')+'</div></div><span class="rchev">'+SF.chev+'</span></button>';
-  }
-  if(small.length){
-    var tot=small.reduce(function(s2,m){return s2+(m.net||0);},0),so=!!UI.exp.small;
-    h+='<div class="row'+(so?' open':'')+'" data-exp="small"><span class="ric gy">'+SF.swap+'</span><div class="row-m"><div class="row-t">'+small.length+' smaller move'+(small.length===1?'':'s')+'</div><div class="row-s">'+sgn(tot,1)+' pts &middot; only if you have moves to spare</div></div><span class="rchev">'+SF.chev+'</span></div>'
-      +'<div class="rx'+(so?' open':'')+'" id="x-small"><div class="rxi nest">'+small.map(function(m){return glMoveRow(m,UI.exp['mv'+m.add.id+'-'+m.drop.id]);}).join('')+'</div></div>';
+    var nx=P?P.moves.filter(function(m){return m.t>fi;})[0]:null;
+    h+='<button type="button" class="row" data-go="moves/plan"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">No move to make '+(isToday?'today':'yet')+'</div><div class="row-s">'
+      +(nx?'Next: '+esc(dayShort(nx.day))+', add '+esc(nx.add.n)+' for '+esc(nx.drop.n):'No move planned for the rest of this week')+'</div></div><span class="rchev">'+SF.chev+'</span></button>';
   }
   h+='</div>';
-  var ml=(P&&P.moves_left!=null)?P.moves_left:null,lim=(P&&P.limit)||7;
-  if(ml!=null){
-    var dots='';for(var i=0;i<lim;i++)dots+='<i class="'+(i<lim-ml?'u':'')+'"></i>';
-    h+='<div class="sec-f"><span class="mdots">'+dots+'</span>'+ml+' of '+lim+' moves left this week</div>';
+  if(P&&P.moves_left!=null&&!P.unlimited){
+    var lim=P.limit||0,ml=P.moves_left,dots='';
+    if(lim>0&&lim<=14)for(var i=0;i<lim;i++)dots+='<i class="'+(i<lim-ml?'u':'')+'"></i>';
+    h+='<div class="sec-f">'+(dots?'<span class="mdots">'+dots+'</span>':'')+ml+' of '+lim+' moves left this week</div>';
   }
   h+='</div>';
   /* lineup */
@@ -1674,10 +1709,8 @@ function uiToday(){
   glCount(document.getElementById('s-today-main'));
 }
 
-/* ---------- Confidence, move cards and the "Keep him" list ---------- */
-var CONF={strong:['Strong','Do it'],lean:['Lean','Worth it if you have moves to spare'],optional:['Optional','Small gain, fine to skip']};
-function cfOf(m){return m.conf||(m.tier==='make'?'lean':'optional');}
-function cfPill(m){var c=cfOf(m);return '<span class="cf cf-'+c+'">'+CONF[c][0]+'</span>';}
+/* ---------- Move cards and the "Keep him" list ---------- */
+/* No Strong / Lean / Optional labels in the app (2026-11-24): every move on the plan is one to make. */
 var KP=(function(){
   var K='fh_keep';
   function mp(){return D.gameplan?D.gameplan.mp:null;}
@@ -1761,14 +1794,13 @@ function ltHtml(lt,open){
     +lt.lines.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></details>';
 }
 function mvCard(m,o){
-  o=o||{};var c=cfOf(m);
-  var h='<div class="mv mv-'+c+'"><div class="mv-top">'+cfPill(m)+' <span class="muted">'+esc(CONF[c][1])+'</span>'
-    +(o.day?' <span class="mv-day">'+esc(dayShort(m.day))+'</span>':'')+'</div>'
+  o=o||{};
+  var h='<div class="mv"><div class="mv-top"><b>'+esc(dayShort(m.day))+'</b> <span class="good">'+sgn(m.gain,1)+' pts</span></div>'
     +'<div class="mv-sw"><span class="mv-k">Add</span> <a class="pl" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a> <span class="muted">'+esc(m.add.pos)+' '+esc(m.add.tm)+'</span></div>'
     +'<div class="mv-sw"><span class="mv-k">Drop</span> <a class="pl" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a> <span class="muted">'+esc(m.drop.pos)+' '+esc(m.drop.tm)+'</span></div>';
   if(m.waiver)h+='<div class="warn" style="font-size:13px">He is on waivers: put the claim in the day before.</div>';
   if(m.swapped)h+='<div class="muted" style="font-size:13px">Instead of dropping '+esc(m.swapped)+', who you chose to keep.</div>';
-  h+='<div class="mv-why">'+esc(m.why1||(sgn(m.gain,1)+' pts this week'))+'</div>';
+  if(m.why1)h+='<div class="mv-why">'+esc(m.why1)+'</div>';
   if(m.lt)h+=ltHtml(m.lt);
   if(!o.noact){
     h+='<div class="mv-act">'+keepBtn(m.drop)+cmpBtn(m.add,m.drop);
@@ -1812,8 +1844,6 @@ function uiRecord(){
     h+='<div class="rec">'
       +'<div class="rec-t"><div class="rec-v '+(M.pts>=0?'good':'bad')+'">'+sgn(M.pts,1)+'</div><div class="rec-k">Moves you made ('+M.n+')</div><div class="rec-s">'+M.wins+' of '+M.n+' came out ahead</div></div>'
       +'<div class="rec-t"><div class="rec-v '+(S.pts>0?'warn':'muted')+'">'+sgn(S.pts,1)+'</div><div class="rec-k">Moves you skipped ('+S.n+')</div><div class="rec-s">'+(S.n?'what they would have added':'none yet')+'</div></div></div>';
-    var cf=[['Strong',st],['Lean',R2.lean],['Optional',R2.optional]].filter(function(c){return c[1]&&c[1].n;});
-    if(cf.length)h+='<div class="muted" style="margin:6px 0">By rating: '+cf.map(function(c){return c[0]+' '+c[1].wins+' of '+c[1].n+' ahead ('+sgn(c[1].pts,1)+' pts)';}).join(' &middot; ')+'</div>';
     var rows=R2.moves.filter(function(r){return r.actual!=null;}).slice(0,8);
     if(rows.length){
       h+='<ul class="pbl rec-l">'+rows.map(function(r){
@@ -1833,7 +1863,7 @@ function uiHelp(){
     ['Games left','Games his NHL team still plays in this Monday-to-Sunday matchup (days that have started do not count).'],
     ['Line 1 / Pair 2 / PP1','His current even-strength line (forwards) or pair (defense), and power-play unit, from DailyFaceoff.com.'],
     ['UTIL','The one lineup spot that takes any forward or defenseman.'],
-    ['Strong / Lean / Optional','How sure the plan is about a move. Strong = do it: a clear gain, usually backed by extra games. Lean = a real gain, worth it if you have moves to spare. Optional = a small gain, fine to skip. Only Strong moves go in the morning alert.'],
+    ['Moves','Every move on the Game plan is one to make. It is there only when it adds at least 1.5 points this week after anything it costs you later. Smaller gains are left off so you keep moves for injuries and late-week streams. The plan uses your league\'s own weekly move limit.'],
     ['Keep','Tap Keep on any suggested drop and that player is never suggested as a drop for the rest of the matchup week. The plan picks the next best drop instead.'],
     ['Track record','Each suggested move is scored after its games: points the added player scored minus the dropped player, from that day to the end of the week. Moves you skipped are scored too.'],
     ['Long-term cost','What a stream costs you after this week. It compares the two players per game with hot and cold streaks taken out, over their teams\' games in the next 3 weeks, and counts more when the player you drop is widely rostered (someone will likely claim him). No / Small / Real is shown on every move and in Try a swap. Every move\'s gain already has it taken off.'],
@@ -1940,7 +1970,7 @@ function uiStart(){uiModalWatch();
   document.addEventListener('click',function(e){
     var t=e.target;if(!t||!t.closest)return;
     var ex=t.closest('[data-exp]');
-    if(ex&&!t.closest('a,button:not([data-exp])')){var k=ex.getAttribute('data-exp'),x=document.getElementById('x-'+k);UI.exp=UI.exp||{};UI.exp[k]=!UI.exp[k];ex.classList.toggle('open',UI.exp[k]);if(x)rxToggle(x,UI.exp[k]);return;}
+    if(ex&&!t.closest('a,button:not([data-exp])')){var k=ex.getAttribute('data-exp'),nx=ex.nextElementSibling,x=(nx&&nx.id==='x-'+k)?nx:document.getElementById('x-'+k);/* the same move can be on Today and the Game plan: open the one tapped */UI.exp=UI.exp||{};UI.exp[k]=!UI.exp[k];ex.classList.toggle('open',UI.exp[k]);if(x)rxToggle(x,UI.exp[k]);return;}
     var kb=t.closest('[data-keep]');
     if(kb){kpClick(kb.getAttribute('data-keep'));return;}
     var ts=t.closest('details.tsmall > summary');

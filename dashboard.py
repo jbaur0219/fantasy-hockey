@@ -189,16 +189,63 @@ def matchup_length(league, mp):
         return 7
 
 
-def move_limit(league, days):
-    """Adds allowed this matchup, from the league's settings (this league: 7 per 7-day matchup)."""
+DEFAULT_MOVE_LIMIT = 7      # used only when the league's settings can't be read (the app then says so)
+NO_LIMIT = 99               # stands in for "no weekly limit" in the planner
+
+
+def move_limit_info(league, days):
+    """This league's add limit for one matchup of `days` days, from its own ESPN settings.
+    {"limit": adds allowed, "unlimited": no weekly cap, "known": read from the settings (not the fallback),
+     "season_limit": adds allowed all season or None}"""
+    acq = ((league or {}).get("settings") or {}).get("acquisitionSettings")
+    if not isinstance(acq, dict) or acq.get("matchupAcquisitionLimit") is None:
+        return {"limit": DEFAULT_MOVE_LIMIT, "unlimited": False, "known": False, "season_limit": None}
     try:
-        acq = (league.get("settings") or {}).get("acquisitionSettings") or {}
-        lim = int(acq.get("matchupAcquisitionLimit", 7))
-        if lim < 0:
-            return 99
-        return lim * days if acq.get("matchupLimitPerScoringPeriod") else lim
-    except Exception:
-        return 7
+        lim = int(acq.get("matchupAcquisitionLimit"))
+    except (TypeError, ValueError):
+        return {"limit": DEFAULT_MOVE_LIMIT, "unlimited": False, "known": False, "season_limit": None}
+    try:
+        sl = int(acq.get("acquisitionLimit")) if acq.get("acquisitionLimit") is not None else -1
+    except (TypeError, ValueError):
+        sl = -1
+    season = sl if sl >= 0 else None
+    if lim < 0:
+        return {"limit": NO_LIMIT, "unlimited": True, "known": True, "season_limit": season}
+    if acq.get("matchupLimitPerScoringPeriod"):
+        lim *= max(1, days)                     # the limit is per day: a week allows that many each day
+    return {"limit": lim, "unlimited": False, "known": True, "season_limit": season}
+
+
+def move_limit(league, days):
+    """Adds allowed this matchup, from the league's settings (NO_LIMIT when the league has no weekly cap)."""
+    return move_limit_info(league, days)["limit"]
+
+
+def move_budget(league, my_id, days=None):
+    """How many adds you can still make this matchup, by this league's own rules.
+    {"limit", "used", "left", "unlimited", "known", "used_known", "season_left"}. `left` also respects a season cap."""
+    mp = ((league or {}).get("status") or {}).get("currentMatchupPeriod")
+    if days is None:
+        days = matchup_length(league or {}, mp)
+    info = move_limit_info(league, days)
+    team = next((t for t in (league or {}).get("teams", []) if t.get("id") == my_id), {}) or {}
+    tc = team.get("transactionCounter") or {}
+    used = None
+    try:
+        v = (tc.get("matchupAcquisitionTotals") or {}).get(str(mp))
+        used = int(v) if v is not None else (0 if "matchupAcquisitionTotals" in tc else None)
+    except (TypeError, ValueError):
+        used = None
+    left = max(0, info["limit"] - (used or 0))
+    season_left = None
+    if info["season_limit"] is not None:
+        try:
+            season_left = max(0, info["season_limit"] - int(tc.get("acquisitions") or 0))
+            left = min(left, season_left)
+        except (TypeError, ValueError):
+            season_left = None
+    return {"limit": info["limit"], "used": used, "left": left, "unlimited": info["unlimited"],
+            "known": info["known"], "used_known": used is not None, "season_left": season_left}
 
 
 def matchup_periods(m, mp, length=7):

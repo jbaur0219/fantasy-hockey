@@ -3,7 +3,13 @@
 CORE MOVE PLAN (READ-ONLY): the one plan the whole site uses.
 
 Every tab, the Today screen and the morning alert show the same moves, and they come from here.
-Each move also gets a confidence (Strong / Lean / Optional), a one-line reason, and other drops for the Keep button.
+Each move also gets a confidence (Strong / Lean, kept for the back-end track record), a one-line reason, and other drops
+for the Keep button.
+
+What you see: one list of moves to make, each one a clear "make this move". A move only makes the list when it adds at
+least SHOW_NET points this week net of what you give up (and clears the drop rule for the player it drops). Smaller
+moves are close to coin flips and would spend a move you may need later in the week, so they are left off the list and
+logged privately (history/, result "hidden") so the track record can show whether leaving them off cost anything.
 
 How a move is judged
   gain   = extra points your best daily lineup scores for the rest of this matchup with the move made
@@ -33,6 +39,8 @@ STICKY = 1.0              # points a new move must beat the previous plan's move
 STRONG_NET = 3.0          # net points that make a move Strong on its own
 STRONG_SCHED_NET = 2.0    # ...or this much when the edge comes from extra games (a schedule edge is close to certain)
 LEAN_NET = 1.5            # below this a move is Optional, whatever its tier
+SHOW_NET = LEAN_NET       # smallest net gain a move needs to be on the plan you see
+HOLD_SLACK = 0.5          # a move already on the plan stays until it falls this far below the bar (no flip-flop)
 ALTS = 3                  # other drops kept for each move, for the "Keep him" button
 POOL_SK, POOL_G = 45, 8
 DROPS_PER = 7
@@ -260,46 +268,84 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
         s = M.score(m) + STICKY * sum(1 for q in m if q in keep)
         if best is None or s > best_s:
             best, best_s = m, s
-    tiers = M.tier(best, lambda b: b["bar"])
+
+    def shows(mv):
+        """On the list you see: clears the drop rule for that player and adds at least SHOW_NET this week."""
+        slack = HOLD_SLACK if mv["kept"] else 0.0
+        return mv["marg"] >= mv["need"] - slack and round(mv["net"], 1) >= SHOW_NET - slack
+
+    def sequence(tiers, with_reasons):
+        """Moves in day order, each with its own gain (lineup points with the earlier moves made), cost and labels."""
+        order = sorted(tiers, key=lambda r: (r[0][1], -r[1]))
+        ents = [dict(e) for e in entries]
+        by_p = {e["p"]["id"]: e for e in ents}
+        days_now = [STR.day_value(STR._active(ents, d)) for d in range(ndays)]
+        out = []
+        for (xi, t, yi), marg, tier in order:
+            x = pool[xi]["x"]
+            y = by_p[base[yi]["p"]["id"]]
+            c = M.cost[(xi, yi)]
+            gain = 0.0
+            for d in range(t, ndays):
+                act = STR._active(ents, d, skip=y)
+                act.append((x["grp"], x["v"][d]))
+                gain += STR.day_value(act) - days_now[d]
+            mv = {"t": t, "day": days[t], "add": STR._brief(x["p"]), "drop": STR._brief(y["p"]),
+                  "gain": round(gain, 2), "cost": c, "net": round(gain - c, 2), "marg": marg, "need": base[yi]["bar"],
+                  "games": sum(1 for i in range(t, ndays) if x["v"][i] > 0), "waiver": x["waiver"], "tier": tier,
+                  "kept": (xi, t, yi) in keep}
+            mv["ga"] = mv["games"]
+            mv["gd"] = sum(1 for i in range(t, ndays) if y["v"][i] > 0) if y["p"]["inj"] not in A.BAD_INJURY else 0
+            mv["conf"] = confidence(mv, y["p"], healthy, x["p"])
+            if with_reasons:
+                mv["why1"] = headline(mv, x["p"], y["p"])
+                if reasons:
+                    mv["why_add"] = STR._why_add(x, ents, y, t, ndays, days, game, standings)
+                    mv["why_drop"] = why_drop(y, t, ndays, c, nxt_games, x["p"])
+                mv["lt"] = LT.assess(y["p"], x["p"], nxt_games, c)
+            out.append(mv)
+            y["leave"] = t
+            ents.append({"p": x["p"], "v": x["v"], "grp": x["grp"], "join": t, "leave": INF})
+            days_now = [STR.day_value(STR._active(ents, d)) for d in range(ndays)]
+        return out, order, ents
+
+    # Only moves worth making go on the plan. Take the weakest one off and re-check the rest (the others' gains change
+    # without it) until every move left clears the bar. Moves already on the plan get HOLD_SLACK of leeway.
+    shown, small = list(best), []
+    while True:
+        tiers = M.tier(shown, lambda b: b["bar"])
+        out, order, _ = sequence(tiers, False)
+        weak = [(mv["net"], m) for mv, (m, _, _) in zip(out, order) if not shows(mv)]
+        if not weak:
+            break
+        m = min(weak)[1]
+        small.append(m)
+        shown = [q for q, _, _ in tiers if q != m]
     base_total, before_days = M.lineup_total([])
     after_total, after_days = M.lineup_total([m for m, _, _ in tiers])
-
-    # moves in day order, each with its own gain, cost and reasons
-    order = sorted(tiers, key=lambda r: (r[0][1], -r[1]))
-    ents = [dict(e) for e in entries]
-    by_p = {e["p"]["id"]: e for e in ents}
-    days_now = [STR.day_value(STR._active(ents, d)) for d in range(ndays)]
-    out = []
-    for (xi, t, yi), marg, tier in order:
-        x = pool[xi]["x"]
-        y = by_p[base[yi]["p"]["id"]]
-        c = M.cost[(xi, yi)]
-        gain = 0.0
-        for d in range(t, ndays):
-            act = STR._active(ents, d, skip=y)
-            act.append((x["grp"], x["v"][d]))
-            gain += STR.day_value(act) - days_now[d]
-        mv = {"t": t, "day": days[t], "add": STR._brief(x["p"]), "drop": STR._brief(y["p"]),
-              "gain": round(gain, 2), "cost": c, "net": round(gain - c, 2), "marg": marg, "need": base[yi]["bar"],
-              "games": sum(1 for i in range(t, ndays) if x["v"][i] > 0), "waiver": x["waiver"], "tier": tier,
-              "kept": (xi, t, yi) in keep}
-        mv["ga"] = mv["games"]
-        mv["gd"] = sum(1 for i in range(t, ndays) if y["v"][i] > 0) if y["p"]["inj"] not in A.BAD_INJURY else 0
-        mv["conf"] = confidence(mv, y["p"], healthy, x["p"])
-        mv["why1"] = headline(mv, x["p"], y["p"])
-        if reasons:
-            mv["why_add"] = STR._why_add(x, ents, y, t, ndays, days, game, standings)
-            mv["why_drop"] = why_drop(y, t, ndays, c, nxt_games, x["p"])
-        mv["lt"] = LT.assess(y["p"], x["p"], nxt_games, c)
-        out.append(mv)
-        y["leave"] = t
-        ents.append({"p": x["p"], "v": x["v"], "grp": x["grp"], "join": t, "leave": INF})
-        days_now = [STR.day_value(STR._active(ents, d)) for d in range(ndays)]
+    out, order, ents = sequence(tiers, True)
+    for mv in out:
+        if mv["conf"] == "optional":
+            mv["conf"] = "lean"                 # an already-planned move kept by HOLD_SLACK: on the list, so not optional
     final = [m for m, _, _ in tiers]
     for mv, (m, _, _) in zip(out, order):
         mv["alts"] = alternatives(M, final, m, days, ndays, healthy)
+    # the small moves left off the list, each valued on top of the final plan (back-end log only)
+    hidden = []
+    without = M.score(final)
+    used_x, used_y = {q[0] for q in final}, {q[2] for q in final}
+    for (xi, t, yi) in small:
+        if xi in used_x or yi in used_y:
+            continue
+        net = M.score(final + [(xi, t, yi)]) - without
+        if net < OPTIONAL_MIN:
+            continue
+        c = M.cost[(xi, yi)]
+        hidden.append({"t": t, "day": days[t], "add": STR._brief(pool[xi]["p"]), "drop": STR._brief(base[yi]["p"]),
+                       "gain": round(net + c, 2), "cost": c, "net": round(net, 2), "conf": "small",
+                       "waiver": pool[xi]["waiver"]})
     return {"base": round(base_total, 1), "total": round(after_total, 1), "gain": round(after_total - base_total, 1),
-            "moves": out, "before_days": before_days, "after_days": after_days, "ents": ents}
+            "moves": out, "small": hidden, "before_days": before_days, "after_days": after_days, "ents": ents}
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +357,7 @@ def day_to_day(p):
 
 
 def confidence(mv, drop_p, healthy, add_p=None):
-    """'strong', 'lean' or 'optional'. Strong = clearly worth a move; the morning alert only names Strong moves."""
+    """'strong', 'lean' or 'optional' (back-end track record only; the app shows every planned move the same way)."""
     if mv["tier"] != "make":
         return "optional"
     sched = mv["ga"] > mv["gd"] or drop_p["inj"] in A.BAD_INJURY
@@ -333,29 +379,42 @@ def _last(n):
     return n.split()[-1] if n else n
 
 
+def _games(n):
+    return f"{n} game{'s' if n != 1 else ''}"
+
+
 def headline(mv, xp, yp):
-    """One plain sentence with the reason and the payoff."""
+    """Why this move, in one or two plain sentences an everyday player can trust without knowing the player:
+    who he is (team, line and power-play role) and why he beats the player you drop (games left, or points a game).
+    The points it adds are shown next to it, so they are not repeated here."""
     a, d = _last(xp["n"]), _last(yp["n"])
     ga, gd = mv["ga"], mv["gd"]
+    if xp["grp"] == "G":
+        who = f"{a} is {xp['tm']}'s {STR._role_text(xp)}, likely to start about {int(round((xp.get('sp') or 0) * 100))}% of their games."
+    else:
+        role = STR._role_text(xp)
+        if role and role not in ("no line role", "not on his team's current lines"):
+            who = f"{a} plays on {xp['tm']}'s {role}."
+        else:
+            who = f"{a} plays for {xp['tm']}."
+        rec = xp.get("rec")
+        if rec is not None and rec >= 2.0 and (xp.get("gp") or 0) >= 5:
+            who = who[:-1] + f" and is scoring {rec:.1f} pts a game lately."
     if yp["inj"] in A.BAD_INJURY:
-        why = f"{d} is {yp['inj'].replace('_', ' ').lower()}; {a} has {ga} game{'s' if ga != 1 else ''} left."
+        why = f"{d} is {yp['inj'].replace('_', ' ').lower()}, and {a} has {_games(ga)} left this week."
     elif ga > gd:
-        why = f"{a} plays {ga} game{'s' if ga != 1 else ''} the rest of this week, {d} plays {gd}."
-    elif xp["grp"] == "G":
-        why = f"{a} is likely to start more ({int(round((xp.get('sp') or 0) * 100))}% of games)."
+        why = f"{_games(ga)} left this week; {d} has {gd}."
+        why = why[0].upper() + why[1:]
     else:
         pa, pd = per_game(xp), per_game(yp)
-        why = (f"Both play {ga}; {a} projects {pa:.1f} pts a game to {d}'s {pd:.1f}." if ga == gd else
-               f"{a} projects {pa:.1f} pts a game to {d}'s {pd:.1f}.")
-    if xp["grp"] != "G":
-        role = STR._role_text(xp)
-        if role and role != "no line role":
-            why += f" {a} is on {xp['tm']}'s {role}."
+        if ga == gd:
+            why = f"Both play {ga} more; {a} projects {pa:.1f} pts a game to {d}'s {pd:.1f}."
+        else:
+            why = f"{a} projects {pa:.1f} pts a game to {d}'s {pd:.1f}, enough to beat {d}'s extra game."
+    out = who + " " + why
     if day_to_day(xp):
-        why += f" {a} is day-to-day, so check he's playing before you add him."
-    pay = f" About {mv['gain']:+.1f} pts this week"
-    pay += f" ({mv['net']:+.1f} counting what you give up later)." if mv.get("cost", 0) >= 0.05 else "."
-    return why + pay
+        out += f" {a} is day-to-day: check he's playing before you add him."
+    return out
 
 
 def alternatives(M, final, m, days, ndays, healthy):
@@ -372,8 +431,8 @@ def alternatives(M, final, m, days, ndays, healthy):
         if (xg == "G" and bg not in ("G", "F")) or (xg != "G" and bg not in ("F", "D")):
             continue
         net = M.score(rest + [(xi, t, j)]) - without
-        if net < OPTIONAL_MIN:
-            continue
+        if net < SHOW_NET or net < b["bar"]:
+            continue                                    # only offer a swap that would itself make the list
         c = M.cost[(xi, j)]
         xp, yp = M.pool[xi]["p"], b["p"]
         mv = {"t": t, "day": days[t], "add": STR._brief(xp), "drop": STR._brief(yp), "gain": round(net + c, 2),

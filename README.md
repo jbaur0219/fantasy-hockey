@@ -31,7 +31,7 @@ goalie calls, streams and trade ideas. It never adds, drops, trades or changes a
 | `enrich.py`, `starters.py`, `roles.py` | NHL.com / MoneyPuck stats, today's starting goalies, line and power-play roles |
 | `dashboard.py` | Matchup, schedule helpers, the daily add-lock clock, lineup alerts, standings |
 | `streams.py` | Player values per day, drop and add rules, Streams and Swap lab data |
-| `core.py` | **The one move plan** (gain, long-term cost, search, sticky plan), each move's confidence (Strong / Lean / Optional), its one-line reason and other drops for the Keep button, and the win-chance model |
+| `core.py` | **The one move plan** (gain, long-term cost, search, sticky plan), only moves worth at least 1.5 pts make the list (smaller ones are logged privately), each move's plain-English reason and other drops for the Keep button, and the win-chance model |
 | `longterm.py` | Long-term impact of a stream: per game with streaks taken out, the next 3 weeks of games, and the chance the dropped player gets claimed. Feeds the plan's long-term cost and the Long term section on moves and Try a swap |
 | `keep.py` | Players you chose to keep this week (the Keep button sends them as the `keep` input; saved in `keep.json`) |
 | `record.py` | Track record: scores every suggested move after its games (made and skipped), finals in `history/results.json` |
@@ -55,5 +55,5 @@ python -m unittest discover tests
 ```
 
 Secrets: `ESPN_2` and `SWID` (ESPN login cookies), `PUSH_CONFIG` (push alerts). The league and team default to
-`LEAGUE_ID=557638258`, `TEAM_ID=1`. Scoring, lineup slots and the 9 F / 5 D / 2 G / 1 UTIL layout currently match
-this league and are not yet read from ESPN for other leagues.
+`LEAGUE_ID=557638258`, `TEAM_ID=1`. The weekly move limit is read from each league's ESPN settings (`dashboard.move_budget`). Scoring, lineup slots and
+the 9 F / 5 D / 2 G / 1 UTIL layout currently match this league and are not yet read from ESPN for other leagues.

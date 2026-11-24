@@ -11,7 +11,8 @@ What it does
     already polls version.json, so it reloads itself when the new data lands.
   - The Refresh button and the Keep button call the same endpoint, so no GitHub token is needed.
   - Never lets a broken build replace a good page (the same publish check as the workflow: tools/publish_gate.py).
-  - Sends the morning alert after the new page is live, and a "site is not updating" alert (when SEND_ALERTS=1).
+  - Sends the morning alert after the new page is live, a reminder with the pre-game build when today's planned moves
+    are still not made, and a "site is not updating" alert (when SEND_ALERTS=1).
 
 Where things live (DATA_DIR, a persistent volume in production)
   live -> sites/<time>   the page being served (swapped in one step, so a visitor never sees a half-written build)
@@ -63,7 +64,7 @@ RUNS = DATA / "runs.json"
 LOCK = threading.Lock()
 PUB = threading.RLock()                     # one publish at a time (full builds and quick app-code updates)
 ST = {"building": None, "queued": None, "pending": {}, "last_start": 0.0, "last_error": None, "alerted_day": None,
-      "login": False, "login_alert_day": None, "held_alert_at": 0.0}
+      "login": False, "login_alert_day": None, "held_alert_at": 0.0, "morning_at": 0.0, "reminded_day": None}
 GZ = {}
 ET = None
 
@@ -343,6 +344,12 @@ def do_build(reason, keep):
     keep_payload = DATA / "notify_payload.json"
     if payload.exists():
         shutil.copyfile(payload, keep_payload)
+    reminder = work / "reminder_payload.json"
+    keep_reminder = DATA / "reminder_payload.json"
+    if reminder.exists():
+        shutil.copyfile(reminder, keep_reminder)
+    elif keep_reminder.exists():
+        keep_reminder.unlink()                    # nothing left to do today
     if (work / "snapshot.json.gz").exists():
         shutil.copyfile(work / "snapshot.json.gz", DATA / "last_snapshot.json.gz")
     publish(site)
@@ -354,6 +361,15 @@ def do_build(reason, keep):
         log(f"shell update after build failed: {e}")
     if reason.startswith("morning") and keep_payload.exists():
         notify(keep_payload)
+        ST["morning_at"] = time.time()
+    elif reason.startswith("pre-game") and keep_reminder.exists():
+        day = et_now().date()
+        # once a day, a few hours before puck drop, only for moves still not made (made moves drop off the plan);
+        # skipped when the morning alert went out in the last 90 minutes (early games: it would say the same thing)
+        if ST["reminded_day"] != day and time.time() - ST["morning_at"] > 90 * 60:
+            ST["reminded_day"] = day
+            notify(keep_reminder)
+            log("move reminder sent")
     return True
 
 

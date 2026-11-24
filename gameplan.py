@@ -46,8 +46,8 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
     game = STR.make_game_fn(abbr, games, sp, now_ms)
     starters = S.STATE["by_team"]
     days = D.day_clock_games(games, sp, ndays, now_ms)["labels"]
-    used = PL._moves_used(league, cfg["team"])
-    moves_left = max(0, PL.MOVE_LIMIT - (used or 0))
+    bg = PL.budget(league, cfg["team"])                    # this league's own weekly add limit, not a fixed 7
+    used, moves_left = bg["used"], bg["left"]
     nxt = C.team_games(games, abbr, sp + ndays, 7)
     import longterm as LT
     fut = C.team_games(games, abbr, sp + ndays, LT.HORIZON_DAYS)     # for the long-term cost of each drop
@@ -79,9 +79,12 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
             "before": before_rows, "after": after_rows,
             "targets": {g: [target(x) for x in ranked if x["g"] == g][:k]
                         for g, k in (("F", TARGETS_F), ("D", TARGETS_D), ("G", TARGETS_G))},
-            "moves_left": moves_left, "limit": PL.MOVE_LIMIT, "used_known": used is not None,
+            "small": res.get("small", []),
+            "moves_left": moves_left, "limit": bg["limit"], "used_known": bg["used_known"], "moves_used": used,
+            "unlimited": bg["unlimited"], "limit_known": bg["known"], "season_left": bg["season_left"],
             "next_games": nxt, "fut": fut, "fut_days": LT.HORIZON_DAYS, "cautious": cautious, "mp": mp, "kept": sorted(kept), "healthy": healthy}
     plan["unused"] = max(0, moves_left - len(plan["moves"]))
+    plan["reserve"] = 0 if bg["unlimited"] else plan["unused"]      # moves saved for injuries and late-week streams
     if m:
         # one projection model for the whole site: same daily-lineup values as the plan, for both teams
         opp = next((t for t in site_data.get("teams", []) if t["id"] == m.get("opp_id")), None)

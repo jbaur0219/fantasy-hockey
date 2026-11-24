@@ -113,8 +113,19 @@ def write_health_file(site_data, now_ms):
         print("  DEGRADED: these sections failed: " + ", ".join(missing))
 
 
-def write_notify_payload(site_data, now_ms):
-    """The text of the morning push notification, for notify.py."""
+def _deadline(clock, i):
+    """'7:00 PM' (Eastern): the day's first puck drop, after which nobody can be added for that day."""
+    try:
+        ms = clock["lock"][i]
+        if not ms:
+            return None
+        return datetime.fromtimestamp(ms / 1000, D.et_zone()).strftime("%I:%M %p").lstrip("0")
+    except Exception:
+        return None
+
+
+def notify_texts(site_data, now_ms):
+    """(morning alert, pre-game reminder or None). Every move on the plan is one to make, so the alert names them all."""
     clock = site_data.get("clock")
     gp = site_data.get("gameplan") or {}
     moves = gp.get("moves") or []
@@ -122,37 +133,57 @@ def write_notify_payload(site_data, now_ms):
     if clock:
         first_open = next((i for i in range(len(clock["lock"])) if not D.day_locked(clock, i, now_ms)), None)
     label = clock["labels"][first_open] if clock and first_open is not None else datetime.fromtimestamp(now_ms / 1000, D.et_zone()).strftime("%a %b %d")
+    is_today = bool(clock) and first_open is not None and \
+        clock.get("dates", [None] * (first_open + 1))[first_open] == datetime.fromtimestamp(now_ms / 1000, D.et_zone()).strftime("%Y-%m-%d")
+    dl = _deadline(clock, first_open) if clock and first_open is not None else None
 
     def line(m):
-        return f"add {m['add']['n']} ({m['add']['tm']}), drop {m['drop']['n']} (+{m['gain']:.1f})"
+        return f"add {m['add']['n']} ({m['add']['tm']}), drop {m['drop']['n']} (+{m['gain']:.1f} pts)"
 
-    # only Strong moves are worth a ping; smaller ones wait in the app
-    strong = [m for m in moves if m.get("conf") == "strong"]
-    today = [m for m in strong if m.get("t") == first_open]
-    claims = [m for m in strong if m.get("waiver") and first_open is not None and m.get("t") == first_open + 1]
-    small = [m for m in moves if m.get("t") == first_open and m.get("conf") != "strong"]
+    today = [m for m in moves if first_open is not None and m.get("t") == first_open]
+    claims = [m for m in moves if m.get("waiver") and first_open is not None and m.get("t") == first_open + 1]
+    when = ("today" if is_today else label.split()[0]) + (f" before {dl}" if dl else "")
+    parts = []
     if today:
-        parts = [("Do today: ") + "; ".join(line(m) for m in today[:2]) + "."]
+        parts.append(f"Make {'this move' if len(today) == 1 else f'these {len(today)} moves'} {when}: "
+                     + "; ".join(line(m) for m in today[:3]) + ".")
     else:
-        parts = ["Nothing you need to do today."]
-        nxt = next((m for m in strong if first_open is None or m.get("t", 0) > first_open), None)
+        parts.append("No move to make today.")
+        nxt = next((m for m in moves if first_open is None or m.get("t", 0) > first_open), None)
         if nxt:
             parts.append(f"Next: {nxt['day'].split()[0]}, {line(nxt)}.")
     for m in claims[:1]:
         parts.append(f"Put in a waiver claim for {m['add']['n']} today.")
-    if small and not today:
-        parts.append(f"{len(small)} smaller optional move{'s' if len(small) != 1 else ''} in the app.")
     m = site_data.get("matchup")
     if m:
         parts.append(f"Win chance {m['p_win'] * 100:.0f}%.")
-    if gp.get("moves_left") is not None:
-        parts.append(f"{gp['moves_left']} moves left.")
+    if gp.get("moves_left") is not None and not gp.get("unlimited"):
+        parts.append(f"{gp['moves_left']} move{'s' if gp['moves_left'] != 1 else ''} left this week.")
     h = site_data.get("health") or {}
     if h.get("level") == "bad":
         parts.append("Warning: " + " ".join(h.get("items", [])[:1]))
-    payload = {"title": f"Fantasy Hockey \u00b7 {label}", "body": " ".join(parts), "url": "./", "tag": "fh-daily"}
-    Path("notify_payload.json").write_text(json.dumps(payload), encoding="utf-8")
-    print(f"  alert text: {payload['title']} | {payload['body']}")
+    morning = {"title": f"Fantasy Hockey \u00b7 {label}", "body": " ".join(parts), "url": "./", "tag": "fh-daily"}
+    reminder = None
+    if today and is_today:
+        reminder = {"title": "Fantasy Hockey \u00b7 moves lock " + (dl or "soon"),
+                    "body": f"Still to do{' before ' + dl if dl else ''}: " + "; ".join(line(x) for x in today[:3]) + ".",
+                    "url": "./", "tag": "fh-reminder"}
+    return morning, reminder
+
+
+def write_notify_payload(site_data, now_ms):
+    """The morning push notification (notify_payload.json) and, when today has moves, the pre-game reminder
+    (reminder_payload.json). The server sends the reminder with the pre-game build; the plan only lists moves you
+    have not made yet, so a move you already made is never in it."""
+    morning, reminder = notify_texts(site_data, now_ms)
+    Path("notify_payload.json").write_text(json.dumps(morning), encoding="utf-8")
+    print(f"  alert text: {morning['title']} | {morning['body']}")
+    rp = Path("reminder_payload.json")
+    if reminder:
+        rp.write_text(json.dumps(reminder), encoding="utf-8")
+        print(f"  reminder text: {reminder['title']} | {reminder['body']}")
+    elif rp.exists():
+        rp.unlink()
 
 
 def main():
@@ -210,8 +241,7 @@ def _main():
     site_data["scoring"] = scoring_weights(league)          # ESPN stat id -> points, for live points during games
     _ab, _gm = D.schedule_maps(data["schedules"])
     site_data["g28"] = C.team_games(_gm, _ab, data["roster"].get("scoringPeriodId", 1), 28)   # trade values: next 4 weeks
-    if site_data.get("matchup"):
-        PL.MOVE_LIMIT = site_data["matchup"].get("move_limit", PL.MOVE_LIMIT)
+    PL.budget(league, cfg["team"])                      # this league's own weekly add limit, for every planner below
     try:
         _m = site_data.get("matchup")
         _nd = max(1, min(int(_m["days_left"]) if _m else 7, D.MAX_DAYS))
@@ -245,7 +275,7 @@ def _main():
         gp = site_data["gameplan"]
         print(f"  game plan: {len(gp['moves'])} of {gp['moves_left']} moves, +{gp['gain']} pts")
         for mv in gp["moves"]:
-            print(f"     {mv['day']} [{mv['tier']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, cost {mv['cost']}, net {mv['net']}){' kept' if mv.get('kept') else ''}")
+            print(f"     {mv['day']} [{mv['conf']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, cost {mv['cost']}, net {mv['net']}){' kept' if mv.get('kept') else ''}")
     except Exception as e:
         print(f"  game plan data failed ({type(e).__name__}: {e})")
     site_data["health"] = health_report(site_data, nhl_counts)
@@ -254,6 +284,11 @@ def _main():
                                          healthy=site_data["health"]["healthy_plan"])
     except Exception as e:                              # the locked plan is an extra: never fail the build over it
         print(f"  weekly plan skipped ({type(e).__name__}: {e})")
+    if site_data.get("gameplan"):                       # small moves left off the list: back-end log only, never published
+        hid = site_data["gameplan"].pop("small", None) or []
+        if hid:
+            print(f"  {len(hid)} small move(s) left off the list (logged privately): "
+                  + "; ".join(f"{m['day']} add {m['add']['n']} drop {m['drop']['n']} ({m['net']:+.1f})" for m in hid))
     try:
         site_data["record"] = RC.build(mp_now, write=NC.STATE["mode"] != "replay")
         r = site_data["record"]

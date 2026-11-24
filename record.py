@@ -9,6 +9,8 @@ How a move is scored
     through the end of that matchup week. Made moves and skipped moves are scored the same way, so you can see
     what following the advice was worth either way.
   - A week's numbers are final once the next matchup week starts (saved in history/results.json).
+  - Small moves the plan left off your list are logged as "hidden" and scored the same way. They stay out of the
+    app's numbers (you never saw them); the private ledger (ledger.py) reports them separately.
 
 It compares the two players, not your lineup slots: a player who sat on your bench still counts.
 Never fails the build: any problem just leaves the card out.
@@ -117,11 +119,13 @@ def build(mp, write=True):
                 "wins": sum(1 for r in rs if r["actual"] > 0), "expected": round(sum(r["expected"] or 0 for r in rs), 1)}
 
     def by_conf(c):
-        rs = [r for r in rows if r["conf"] == c and r["actual"] is not None]
+        rs = [r for r in rows if r["conf"] == c and r["result"] != "hidden" and r["actual"] is not None]
         return {"n": len(rs), "pts": round(sum(r["actual"] for r in rs), 1), "wins": sum(1 for r in rs if r["actual"] > 0)}
 
     STATE["rows"] = list(rows)                        # every move, oldest first: the lifetime stats (ledger.py) read these
     rows.reverse()                                    # newest first
+    shown = [r for r in rows if r["result"] != "hidden"]              # moves you were shown (the app's own numbers)
     return {"made": summary("done"), "skipped": summary("missed"),
             "strong": by_conf("strong"), "lean": by_conf("lean"), "optional": by_conf("optional"),
-            "untracked": sum(1 for r in rows if not r["tracked"]), "moves": rows[:30]}
+            "hidden": summary("hidden"),
+            "untracked": sum(1 for r in shown if not r["tracked"]), "moves": shown[:30]}
