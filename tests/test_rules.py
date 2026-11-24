@@ -105,5 +105,24 @@ class Goalies(unittest.TestCase):
         self.assertEqual(rows["C"]["verdict"], "BENCH")
 
 
+class NotStarting(unittest.TestCase):
+    """A goalie whose team has another goalie in net today carries a flag so the page shows no projection for him."""
+
+    def test_flag(self):
+        import starters as S
+        old = S.STATE["by_team"]
+        try:
+            S.STATE["by_team"] = {"VGK": {"name": "Akira Schmid", "status": "Confirmed"},
+                                  "EDM": {"name": "Stuart Skinner", "status": "Likely"}}
+            hill = {"group": "G", "team": "VGK", "name": "Aiden Hill"}
+            self.assertEqual(S.not_starting(hill), 1)                                            # other goalie confirmed
+            self.assertEqual(S.not_starting({"group": "G", "team": "VGK", "name": "Akira Schmid"}), 0)
+            self.assertEqual(S.not_starting({"group": "G", "team": "EDM", "name": "Tristan Jarry"}), 2)   # expected, not confirmed
+            self.assertEqual(S.not_starting({"group": "G", "team": "TOR", "name": "Anyone"}), 0)  # team unknown: leave alone
+            self.assertEqual(S.not_starting({"group": "D", "team": "VGK", "name": "Skater"}), 0)  # skaters never flagged
+        finally:
+            S.STATE["by_team"] = old
+
+
 if __name__ == "__main__":
     unittest.main()

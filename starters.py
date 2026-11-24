@@ -101,6 +101,17 @@ def _is_starter(p):
     return None if not s else E.norm(s["name"]) == E.norm(p["name"])
 
 
+def not_starting(p):
+    """0 = starting or unknown, 1 = Daily Faceoff has confirmed another goalie in net today, 2 = another goalie is listed
+    as the expected starter (not confirmed yet). Only ever non-zero for a goalie whose team's starter is known."""
+    if p.get("group") != "G":
+        return 0
+    s = STATE["by_team"].get(p.get("team"))
+    if not s or E.norm(s["name"]) == E.norm(p["name"]):
+        return 0
+    return 1 if s.get("status") == "Confirmed" else 2
+
+
 def _start_prob(p, standings):
     base = PREV["sp"](p, standings)
     return max(base, 0.6) if _is_starter(p) else base

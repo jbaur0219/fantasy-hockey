@@ -2444,21 +2444,26 @@ function muStatus(p,S){
   var g=S.tn&&S.tn[p.tm];
   if(!g)return {on:false,t:'No game'};
   var opp=(g[2]?'vs ':'@')+g[1],now=Date.now();
-  if(now<g[0])return {on:true,t:opp+' &middot; '+etTime(g[0]).replace(':00','').replace(/\s?PM$/,'p').replace(/\s?AM$/,'a'),up:true};
+  if(now<g[0]){
+    /* a player who is out, or a goalie whose team has another goalie in net, is not going to play: no projection, not counted as playing */
+    var gone=p.inj==='OUT'||p.inj==='INJURY_RESERVE'||p.inj==='SUSPENSION',ns=p.grp==='G'&&p.ns;
+    var tm=etTime(g[0]).replace(':00','').replace(/\s?PM$/,'p').replace(/\s?AM$/,'a');
+    return {on:true,up:true,np:!!(gone||ns),t:opp+' &middot; '+(ns?'<b class="mu-bt">Not starting</b>':tm)};
+  }
   if(now<g[0]+3*3600e3)return {on:true,t:opp+' &middot; <b class="mu-live">Live</b>',live:true};
   return {on:true,t:opp+' &middot; Final'};
 }
 function muInj(p){return (p.inj&&p.inj!=='ACTIVE')?' <i class="mu-inj">'+esc(injShort(p.inj))+'</i>':'';}
 function muPts(p,st,S){
   var v=S.pt?S.pt[p.id]:undefined;
-  if(v!=null&&(st.on&&!st.up||v!==0))return '<b>'+f(v,1)+'</b>';
-  if(st.on&&st.up&&p.out!=null)return '<span class="mu-pj">'+f(p.out,1)+'</span>';
+  if(v!=null&&(st.on&&!st.up||v!==0))return muNum(p.id,v,'t');
+  if(st.on&&st.up&&!st.np&&p.out!=null)return '<span class="mu-pj">'+f(p.out,1)+'</span>';
   return '<span class="mu-dash">&ndash;</span>';
 }
 function muCell(p,S,right){
   if(!p)return '<div class="mu-c empty'+(right?' r':'')+'"><span class="mu-dash">Empty</span></div>';
   var st=muStatus(p,S);
-  return '<div class="mu-c'+(st.on?'':' off')+(right?' r':'')+'"><span class="mu-nm">'+(right?muInj(p):'')+'<a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'+(right?'':muInj(p))+'</span>'
+  return '<div class="mu-c'+(st.on&&!st.np?'':' off')+(right?' r':'')+'"><span class="mu-nm">'+(right?muInj(p):'')+'<a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'+(right?'':muInj(p))+'</span>'
     +'<span class="mu-g">'+esc(p.pos)+' '+esc(p.tm)+' &middot; '+st.t+'</span></div>';
 }
 function muGroup(label,A,B,S){
@@ -2472,7 +2477,7 @@ function muGroup(label,A,B,S){
 }
 function muSlots(t,slot,S){
   return t.players.filter(function(p){return p.slot===slot;}).sort(function(x,y){
-    var a=muStatus(x,S).on?1:0,b=muStatus(y,S).on?1:0;return (b-a)||((y.out||0)-(x.out||0));});
+    var sx=muStatus(x,S),sy=muStatus(y,S),a=sx.on&&!sx.np?1:0,b=sy.on&&!sy.np?1:0;return (b-a)||((y.out||0)-(x.out||0));});
 }
 function muEtd(ms){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ms));}catch(e){return '';}}
 /* the past day on screen, or null when it is today */
@@ -2494,7 +2499,7 @@ function muDayMenu(g,S,t,i){
 }
 function muTonight(g,S){
   var A=muTeam(g.a),B=muTeam(g.b),t=Math.min(S.today,S.dates.length-1),sh=muShown(S),i=sh==null?t:sh,past=sh!=null;
-  function playing(T){return T.players.filter(function(p){return ['F','D','G','UTIL'].indexOf(p.slot)>=0&&muStatus(p,S).on;}).length;}
+  function playing(T){return T.players.filter(function(p){var st=muStatus(p,S);return ['F','D','G','UTIL'].indexOf(p.slot)>=0&&st.on&&!st.np;}).length;}
   var pill=past?esc(dayShort(S.labels[i])):(S.done?'Last day':'Today');
   var h='<div class="mu-sumw"><div class="mu-sum"><div><b>'+(g.ad[i]==null?'0.0':f(g.ad[i],1))+'</b><span id="muPa">'+(past?'':playing(A)+' playing')+'</span></div>'
     +'<button type="button" class="mu-sk mu-pick'+(MU.dd?' open':'')+(past?' past':'')+'" data-mud="tg" aria-haspopup="listbox" aria-expanded="'+(MU.dd?'true':'false')+'" aria-label="Choose a day. Showing '+pill+'">'+pill+'<span class="mu-cv">'+MU_CV+'</span></button>'
@@ -2505,7 +2510,7 @@ function muTonight(g,S){
   var bn=muGroup('Bench',muSlots(A,'BN',S),muSlots(B,'BN',S),S);
   if(bn)h+='<details class="mu-bn"><summary>Bench</summary>'+bn.replace('<div class="mu-gh">Bench</div>','')+'</details>';
   var live=S.pt&&Object.keys(S.pt).length;
-  h+='<div class="muted mu-note">'+(live?'Points are from the last update ('+esc(D.updated)+'). Gray numbers are projections for games that have not started.':'Gray numbers are projected points for tonight. Final points show in the day totals above and on the Week tab.')+'</div>';
+  h+='<div class="muted mu-note">'+(live?'Points are from the last update ('+esc(D.updated)+'). Gray numbers are projections for games that have not started. Tap a score to see how it was made.':'Gray numbers are projected points for tonight. Final points show in the day totals above and on the Week tab.')+'</div>';
   return h;
 }
 /* a past day: who played and what they scored. With ESPN's lineup for that day (S.dp) it also says who was on the bench, because
@@ -2539,7 +2544,7 @@ function muPastFill(g,S,i){
       return '<div class="mu-c'+(x.bench?' off':'')+(right?' r':'')+'"><span class="mu-nm">'+(right?muInj(p):'')+'<a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(shortName(p.n))+'</a>'+(right?'':muInj(p))+'</span>'
         +'<span class="mu-g">'+esc(p.pos)+' '+esc(p.tm)+(x.r?' &middot; '+glOpp(x.r):'')+(tag?' &middot; <b class="mu-bt">'+tag+'</b>':'')+'</span></div>';
     }
-    function pts(x){return '<div class="mu-p">'+(x?'<b class="'+(x.bench?'mu-bpts':x.pts<0?'mu-neg':'')+'">'+f(x.pts,1)+'</b>':'')+'</div>';}
+    function pts(x){return '<div class="mu-p">'+(x?muNum(x.p.id,x.pts,'d'+i,x.bench?'mu-bpts':x.pts<0?'mu-neg':''):'')+'</div>';}
     function block(label,la,lb,sub){
       var n=Math.max(la.length,lb.length);if(!n)return '';
       var h='<div class="mu-gh">'+label+(sub?' <span class="mu-gs">'+sub+'</span>':'')+'</div>';
@@ -2557,7 +2562,7 @@ function muPastFill(g,S,i){
     var note=real?'Only players in a lineup spot that day count toward the score. Bench points are shown in gray and left out of the totals.'
       :'ESPN\'s lineup for this day is not available, so this shows each player\'s game log on today\'s rosters. Anyone who sat on a bench that day is not marked, and the points can differ from the day totals above.';
     if(!d&&!real)note='Game logs are not available right now, so player points for this day cannot be shown. The team totals above are still right.';
-    el.innerHTML=h+'<div class="muted mu-note">'+note+'</div>';
+    el.innerHTML=h+'<div class="muted mu-note">'+note+' Tap a score to see how it was made.</div>';
   }
   if(typeof glLoad==='function'){glLoad().then(go,function(){go(null);});}else go(null);
 }
@@ -2585,9 +2590,9 @@ function muTopFill(g,S){
     if(!n){el.innerHTML='<div class="muted" style="padding:8px 2px">No points scored yet this week.</div>';return;}
     for(var i=0;i<n;i++){var a=ta[i],b=tb[i];
       h+='<div class="mu-lr">'+(a?'<div class="mu-c"><a class="pl" data-noav="1" data-id="'+a.p.id+'">'+esc(shortName(a.p.n))+'</a><span class="mu-g">'+esc(a.p.pos)+' '+esc(a.p.tm)+(a.p.slot==='BN'?' &middot; bench':'')+'</span></div>':'<div class="mu-c"></div>')
-        +'<div class="mu-p">'+(a?'<b>'+f(a.v,1)+'</b>':'')+'</div><div class="mu-p">'+(b?'<b>'+f(b.v,1)+'</b>':'')+'</div>'
+        +'<div class="mu-p">'+(a?muNum(a.p.id,a.v,'w'):'')+'</div><div class="mu-p">'+(b?muNum(b.p.id,b.v,'w'):'')+'</div>'
         +(b?'<div class="mu-c r"><a class="pl" data-noav="1" data-id="'+b.p.id+'">'+esc(shortName(b.p.n))+'</a><span class="mu-g">'+esc(b.p.pos)+' '+esc(b.p.tm)+(b.p.slot==='BN'?' &middot; bench':'')+'</span></div>':'<div class="mu-c r"></div>')+'</div>';}
-    el.innerHTML=h+'<div class="muted mu-note">Points on the current roster this week, bench games included.</div>';
+    el.innerHTML=h+'<div class="muted mu-note">Points on the current roster this week, bench games included. Tap a score to see how it was made.</div>';
   }
   if(S.pw&&Object.keys(S.pw).length){draw(function(p){return S.pw[p.id];});return;}
   if(typeof glLoad!=='function'){el.innerHTML='<div class="muted">Not available.</div>';return;}
@@ -2604,6 +2609,83 @@ function muBody(){
   var sg=document.getElementById('muSeg');if(sg){sg.classList.toggle('two',MU.tab==='wk');$$('button',sg).forEach(function(x){x.classList.toggle('on',x.getAttribute('data-mut')===MU.tab);});}
   if(MU.tab==='wk')muTopFill(g,S);
   else if(muShown(S)!=null)muPastFill(g,S,muShown(S));
+}
+/* ---- tap a score: how it was made ----
+   Each number the sheet shows for a player (tonight, a past day, the week's top scorers) is a button. Tapping it opens a card
+   under that row: every stat that scored, how many, and the points it was worth in this league's scoring (D.scoring, read from
+   ESPN's league settings), from the player's game log. Anything the game log does not carry (plus/minus and the like) is added as
+   "Other scoring", so the lines always add up to the number that was tapped. */
+var BD_SK=[[4,'13','Goals'],[5,'14','Assists'],[6,'29','Shots on goal'],[7,'31','Hits'],[8,'32','Blocked shots'],[10,'38','Power-play points']];
+var BD_GK=[[4,'1','Win'],[6,'6','Saves'],[5,'4','Goals against'],[8,'7','Shutout']];
+function muNum(id,v,sc,cls){
+  return '<button type="button" class="mu-nb" data-bd="'+id+'" data-bs="'+sc+'" data-bv="'+v+'" aria-expanded="false" aria-label="How these '+f(v,1)+' points were scored"><b'+(cls?' class="'+cls+'"':'')+'>'+f(v,1)+'</b></button>';
+}
+function bdF(x){var r=Math.round(x*100)/100;return Math.abs(r*10-Math.round(r*10))<1e-9?r.toFixed(1):r.toFixed(2);}
+function bdKeys(sc,S){
+  if(sc==='w')return S.dates;
+  if(sc==='t')return [S.dates[Math.min(S.today,S.dates.length-1)]];
+  return [S.dates[+sc.slice(1)]];
+}
+function bdBuild(id,v,sc){
+  var S=D.sb,p=ALL[id],keys=bdKeys(sc,S);
+  var rows=glRows(id).filter(function(r){return keys.indexOf(muEtd(r[0]))>=0;});
+  var hasW=Object.keys(D.scoring||{}).length>0,spec=(p&&p.grp==='G')?BD_GK:BD_SK,lines=[],sum=0;
+  spec.forEach(function(s){
+    var n=0;rows.forEach(function(r){n+=(+r[s[0]]||0);});
+    var w=hasW?lvW(s[1]):0;
+    if(n&&(w||!hasW)){var pts=hasW?n*w:null;if(pts!=null)sum+=pts;lines.push({l:s[2],n:(s[2]==='Win'||s[2]==='Shutout')?1:n,pts:pts});}
+  });
+  if(rows.length&&hasW&&Math.abs(v-sum)>=0.05)lines.push({l:'Other scoring',n:1,pts:v-sum});
+  return {p:p,rows:rows,lines:lines,hasW:hasW};
+}
+function bdHtml(id,v,sc,key){
+  var b=bdBuild(id,v,sc),p=b.p,games=b.rows.map(function(r){return (r[2]?'vs ':'@')+r[1];}).join(', ');
+  var h='<div class="mu-bk" data-bdk="'+key+'"><div class="mu-bkc"><div class="mu-bkh"><b>'+esc(p?p.n:'Player')+'</b><span>'+(sc==='w'?'This week':'')+(sc==='w'&&games?' &middot; ':'')+esc(games)+'</span></div>';
+  if(!b.rows.length){
+    var L=(sc==='t'&&typeof LIVE!=='undefined'&&LIVE.pts&&LIVE.pts[id])||null;
+    h+='<div class="mu-bkm">'+(L&&L.s?'So far: '+esc(L.s)+'. The full breakdown shows after the next update.':'The stat line for this game is not in yet. It shows after the next update.')+'</div>';
+  }else{
+    h+=b.lines.map(function(l){
+      return '<div class="mu-bkr"><span>'+esc(l.l)+(l.n>1?' <i>&times;'+l.n+'</i>':'')+'</span>'+(l.pts==null?'':'<b class="'+(l.pts<0?'mu-neg':'')+'">'+(l.pts>=0?'+':'&minus;')+bdF(Math.abs(l.pts))+'</b>')+'</div>';
+    }).join('');
+    if(!b.lines.length)h+='<div class="mu-bkm">No stats that score points.</div>';
+    h+='<div class="mu-bkt"><span>Total</span><b>'+bdF(v)+'</b></div>';
+  }
+  return h+'</div></div>';
+}
+/* change the page under a row (fn), and slide everything below it into its new place instead of jumping (transforms only) */
+function muFlip(anchor,fn){
+  var root=anchor.closest('.mu-page')||document.body,fol=[anchor],vh=window.innerHeight||800;
+  for(var el=anchor;el&&el!==root;el=el.parentElement)for(var n=el.nextElementSibling;n;n=n.nextElementSibling)fol.push(n);
+  var before=fol.map(function(e){return e.getBoundingClientRect().top;});
+  fn();
+  if(RM)return;
+  var moved=[];
+  fol.forEach(function(e,i){
+    if(!e.isConnected)return;
+    var a=e.getBoundingClientRect().top,d=before[i]-a;
+    if(Math.abs(d)<1||Math.min(a,before[i])>vh+40)return;
+    e.style.transform='translateY('+d.toFixed(1)+'px)';moved.push(e);
+  });
+  if(!moved.length)return;
+  void root.offsetWidth;
+  moved.forEach(function(e){e.classList.add('flip');e.style.transform='';});
+  setTimeout(function(){moved.forEach(function(e){e.classList.remove('flip');});},470);
+}
+function muBd(btn){
+  var row=btn.closest('.mu-lr');if(!row)return;
+  var id=btn.getAttribute('data-bd'),sc=btn.getAttribute('data-bs'),v=+btn.getAttribute('data-bv'),key=id+'|'+sc;
+  var nx=row.nextElementSibling,wasOpen=!!(nx&&nx.classList&&nx.classList.contains('mu-bk')&&nx.getAttribute('data-bdk')===key);
+  function go(){
+    if(!row.isConnected)return;
+    muFlip(row,function(){
+      var pg=row.closest('.mu-page')||document;
+      $$('.mu-bk',pg).forEach(function(e){e.parentNode.removeChild(e);});
+      $$('.mu-nb.on',pg).forEach(function(e){e.classList.remove('on');e.setAttribute('aria-expanded','false');});
+      if(!wasOpen){row.insertAdjacentHTML('afterend',bdHtml(id,v,sc,key));btn.classList.add('on');btn.setAttribute('aria-expanded','true');}
+    });
+  }
+  if(typeof glLoad==='function')glLoad().then(go,go);else go();
 }
 /* your own matchup's place in the list (-1 when the league scoreboard is missing) */
 function muMine(){var S=D.sb,k=-1;if(S&&S.games)S.games.forEach(function(g,i){if(k<0&&muMe(g))k=i;});return k;}
@@ -2752,6 +2834,7 @@ document.addEventListener('keydown',function(e){
 });
 document.addEventListener('click',function(e){
   var t=e.target;if(!t||!t.closest)return;
+  var nb=t.closest('.mu-nb');if(nb){muBd(nb);return;}
   var pd=t.closest('[data-mupg]');if(pd){muGo(+pd.getAttribute('data-mupg'));return;}
   var a=t.closest('[data-mu]');if(a){muOpen(+a.getAttribute('data-mu'));return;}
   var b=t.closest('[data-mut]');if(b){MU.tab=b.getAttribute('data-mut');MU.dd=false;muBody();return;}

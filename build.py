@@ -56,6 +56,9 @@ def slim_full(p, standings):
         for k in EXTRA:
             if p.get(k) is not None:
                 d[k] = SB.r3(p[k])
+    ns = S.not_starting(p)
+    if ns:
+        d["ns"] = ns                                       # another goalie is in net today: the page shows no projection
     return STR.slim_roles(d, p)
 
 

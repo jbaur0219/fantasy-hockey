@@ -888,6 +888,22 @@ button.mu-pick.open .mu-cv{transform:rotate(180deg)}
 .mu-bn{margin-top:14px;border-top:.5px solid var(--sep)}
 .mu-bn>summary{list-style:none;padding:12px 2px 4px;font-size:13px;font-weight:600;text-transform:uppercase;color:var(--tint)}
 .mu-bn>summary::-webkit-details-marker{display:none}
+.mu-p button.mu-nb{appearance:none;-webkit-appearance:none;display:block;width:100%;min-height:36px;margin:-8px 0;padding:0;border:0;border-radius:10px;background:transparent;color:inherit;font:inherit;text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s}
+.mu-p button.mu-nb:active,.mu-p button.mu-nb.on{background:var(--fill3)}
+.mu-bk{padding:2px 0 10px;border-bottom:.5px solid var(--sep)}
+.mu-bkc{background:var(--fill4);border-radius:14px;padding:10px 14px 6px;animation:muBdIn .34s var(--soft-spring) both}
+.mu-bkh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-bottom:7px;border-bottom:.5px solid var(--sep)}
+.mu-bkh b{font-size:14px;font-weight:600;white-space:nowrap}
+.mu-bkh span{font-size:11.5px;color:var(--label2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mu-bkr,.mu-bkt{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;font-size:14px}
+.mu-bkr+.mu-bkr{border-top:.5px solid var(--sep)}
+.mu-bkr i{font-style:normal;font-size:12.5px;color:var(--label2);margin-left:2px}
+.mu-bkr b,.mu-bkt b{font:600 14px ui-rounded,-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.mu-bkt{border-top:.5px solid var(--sep);margin-top:2px;font-weight:600}
+.mu-bkt b{font-size:15px}
+.mu-bkm{font-size:12.5px;line-height:1.4;color:var(--label2);padding:8px 0 8px}
+@keyframes muBdIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.mu-bkc{animation:none}}
 .mu-note{font-size:12px!important;margin:12px 2px 0;line-height:1.4}
 .mu-bf{background:var(--fill4);border-radius:16px;padding:8px 10px;margin-top:4px}
 .mu-bfr{display:grid;grid-template-columns:1fr 44px 1fr;align-items:center;height:30px}
