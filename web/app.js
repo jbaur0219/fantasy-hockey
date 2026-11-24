@@ -1066,6 +1066,9 @@ function showTab(n){
   VIEWS.forEach(function(x){
     document.getElementById('v-'+x.id).classList.toggle('on',x.id===v);
     document.getElementById('bn-'+x.id).classList.toggle('on',x.id===v);
+  });
+  (function(){var mi=document.getElementById('tbmini');if(mi&&v!=='players'&&SF[v]&&mi._v!==v){mi._v=v;mi.innerHTML=SF[v];}})();
+  VIEWS.forEach(function(x){
     x.subs.forEach(function(y){document.getElementById('s-'+x.id+'-'+y.id).classList.toggle('on',x.id===v&&y.id===s);});
   });
   var sn=document.getElementById('snav'),same=sn.getAttribute('data-v')===v;
@@ -1268,8 +1271,9 @@ function glBuild(){
   var cap=VIEWS.filter(function(v){return v.id!=='players';});
   tb.innerHTML='<div class="gn-edge bot"></div><div class="tbcap glass" id="tbcap"><div class="lens" id="lens"></div>'
     +cap.map(function(v){return '<button type="button" data-go="'+v.id+'" id="bn-'+v.id+'" aria-label="'+v.label+'">'+SF[v.id]+'<span>'+v.label+'</span></button>';}).join('')
-    +'</div><button type="button" class="tbsearch glass" data-go="players" id="bn-players" aria-label="Search players">'+SF.players+'</button>';
+    +'</div><button type="button" class="tbmini glass" id="tbmini" aria-label="Show tabs" tabindex="-1"></button><button type="button" class="tbsearch glass" data-go="players" id="bn-players" aria-label="Search players">'+SF.players+'</button>';
   document.body.appendChild(tb);
+  (function(){var mi=document.getElementById('tbmini'),v=UI.view;if(mi&&v&&v!=='players'&&SF[v]){mi._v=v;mi.innerHTML=SF[v];}})();
   glTabDrag(tb.querySelector('#tbcap'));
   window.addEventListener('scroll',glScroll,{passive:true});
   window.addEventListener('resize',function(){glLens(false);glThumb(false);});
@@ -1426,7 +1430,7 @@ function glScroll(){
 }
 document.addEventListener('click',function(e){
   var tb=document.getElementById('bnav');
-  if(tb&&tb.classList.contains('min')&&e.target.closest&&e.target.closest('#tbcap')){e.stopPropagation();e.preventDefault();tb.classList.remove('min');GS.acc=0;}
+  if(tb&&tb.classList.contains('min')&&e.target.closest&&e.target.closest('#tbcap,#tbmini')){e.stopPropagation();e.preventDefault();tb.classList.remove('min');GS.acc=0;}
 },true);
 
 /* ---------- segmented control ---------- */

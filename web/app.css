@@ -370,11 +370,8 @@ svg .k{fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejo
 #bnav .bdg{position:absolute;top:3px;left:calc(50% + 6px);min-width:18px;height:18px;line-height:18px;padding:0 5px;border-radius:9px;background:var(--red);color:#fff;
   font:600 12px/18px -apple-system,system-ui,sans-serif;text-align:center;z-index:4}
 /* minimized while scrolling down: only the current tab, as a circle */
-#bnav.min .tbcap{max-width:62px}
-#bnav.min .tbcap button:not(.on){flex-grow:0.0001;opacity:0;pointer-events:none}
 #bnav.min .tbcap button span,#bnav.min .bdg{opacity:0}
 #bnav.min .lens{opacity:0}
-#bnav.min{justify-content:space-between}
 
 /* ---------- sheet open: the page steps back ---------- */
 body:before{content:'';position:fixed;inset:0;z-index:-1;background:#000;opacity:0;pointer-events:none;transition:opacity .5s var(--soft-spring)}
@@ -956,10 +953,8 @@ button,.chip-btn,.mu-tile,#bnav,#gnav,[data-go],[data-mu],h2{-webkit-user-select
 img{-webkit-touch-callout:none;-webkit-user-drag:none}
 
 /* minimized circle: the hidden label still held its space under the icon and pushed it up, so collapse it and the gap too */
-#bnav .tbcap button{transition:color .25s,opacity .3s,flex-grow .55s var(--soft-spring),gap .4s var(--soft-spring)}
+#bnav .tbcap button{transition:color .25s,opacity .3s}
 #bnav .tbcap button span{display:block;max-height:14px;transition:opacity .25s,max-height .4s var(--soft-spring)}
-#bnav.min .tbcap button{gap:0}
-#bnav.min .tbcap button span{max-height:0;overflow:hidden}
 
 /* tab-bar alert badges: sit on the icon's top-right corner like iOS, ringed so they never blur into the icon, never wider than the tab.
    Any new badge on a tab just needs the .bdg class. */
@@ -1078,3 +1073,16 @@ table.edge i.b2b{display:inline-block;width:5px;height:5px;border-radius:50%;bac
 #bnav{contain:layout style}
 .tbcap{contain:layout style}
 .wp-bar,.cm-bar,.mu-pd{contain:layout}
+
+/* Tab bar minimize (iOS 26 style) without resizing anything: the full capsule keeps its size and fades/shrinks
+   toward its left end while a separate glass circle with the current tab's icon springs in on top.
+   Only opacity and transform change, so the blur never has to be redrawn at a new size each frame. */
+#bnav .tbcap{transform-origin:31px 50%;transition:opacity .26s var(--ease),transform .55s var(--soft-spring)!important}
+#bnav.min .tbcap{opacity:0;transform:scale(.62,.9);pointer-events:none}
+#bnav .tbmini{position:absolute;left:20px;bottom:calc(max(10px,var(--sab) - 8px));width:62px;height:62px;border-radius:50%!important;border:0!important;padding:0!important;
+  display:flex;align-items:center;justify-content:center;color:var(--tint)!important;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  opacity:0;transform:scale(.55);pointer-events:none!important;transition:opacity .22s var(--ease),transform .5s var(--spring)}
+#bnav .tbmini svg{width:27px;height:27px;fill:none;stroke:currentColor;transition:transform .45s var(--spring)}
+#bnav .tbmini svg .s{stroke-width:2.3}
+#bnav .tbmini:active svg{transform:scale(.86)}
+#bnav.min .tbmini{opacity:1;transform:none;pointer-events:auto!important;transition:opacity .2s .06s var(--ease),transform .55s .04s var(--spring)}
