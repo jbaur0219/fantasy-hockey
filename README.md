@@ -62,3 +62,15 @@ Secrets: `ESPN_2` and `SWID` (ESPN login cookies), `PUSH_CONFIG` (push alerts). 
 bench and IR spots, weekly / per-day / season add limits (`dashboard.move_budget`), matchup lengths and scoring. Leagues
 with separate C / LW / RW slots are modelled with those counted as forward slots (the health badge says so). If the
 settings can't be read the build keeps this league's layout (9 F / 5 D / 1 UTIL / 2 G) and the badge says that too.
+
+## Sign-in (accounts)
+
+The server has real accounts (auth.py): scrypt-hashed passwords, a 180-day HttpOnly session cookie, rate-limited
+sign-in, one-time invite codes. Railway Variables:
+
+- `OWNER_USER`, `OWNER_PASSWORD`: your account, made on boot (changing the password signs every device out).
+- `AUTH=1`: require sign-in for the app, data and every API. Leave unset and the app works exactly as before; only
+  the owner pages need sign-in: `/admin/backtest` (where the plan's bars should move), `/admin/lifetime` (track
+  record), `/admin/invite` (make a code for a friend).
+
+Every account sees the owner's league for now; per-user leagues need per-user ESPN builds (not built yet).

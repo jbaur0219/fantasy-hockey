@@ -94,7 +94,7 @@ function boot(txt){el.textContent=txt;var s=document.createElement('script');s.s
 function fail(){var w=document.querySelector('.wrap');if(w)w.insertAdjacentHTML('afterbegin','<div class="card" style="margin:12px 0">Could not load the latest data. Check your signal, then <a href="" onclick="location.reload();return false">try again</a>.</div>');}
 var pre=null;try{pre=sessionStorage.getItem('fh_pre');sessionStorage.removeItem('fh_pre');}catch(e){}
 if(pre){boot(pre);return;}
-var tries=0;(function go(){fetch('data.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.text();}).then(boot).catch(function(){if(++tries<3)setTimeout(go,800*tries);else fail();});})();
+var tries=0;(function go(){fetch('data.json?t='+Date.now(),{cache:'no-store'}).then(function(r){if(r.status===401){location.replace('login');throw new Error('sign in');}if(!r.ok)throw new Error(r.status);return r.text();}).then(boot).catch(function(){if(++tries<3)setTimeout(go,800*tries);else fail();});})();
 })();</script>"""
 
 

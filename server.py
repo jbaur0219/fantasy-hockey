@@ -30,6 +30,9 @@ Settings (environment variables)
   FRESH_MIN=20           background rebuild when the data is older than this (checked every minute)
   RESEED_STATE=1         one-time: replace the saved state with the copy that came with this deploy
   FH_BUILD_CMD           test hook: run this instead of build.py
+  OWNER_USER, OWNER_PASSWORD   the owner account, made (or its password updated) on boot; see auth.py
+  AUTH=1                 require sign-in for the app, its data and every API. Off (the default) the app works as
+                         before; only the owner pages (/admin/backtest, /admin/lifetime) need sign-in.
 """
 import gzip
 import json
@@ -46,6 +49,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+import auth as AUTHM
+
 CODE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("DATA_DIR") or CODE / "data").resolve()
 PORT = int(os.environ.get("PORT", "8080"))
@@ -56,6 +61,8 @@ SETTLE_S = int(os.environ.get("SETTLE_S", "600"))            # post-game builds 
 BUILD_TIMEOUT = int(os.environ.get("BUILD_TIMEOUT", "1200"))
 STALE_ALERT_H = 14
 SEND_ALERTS = os.environ.get("SEND_ALERTS", "") == "1"
+AUTH_ON = os.environ.get("AUTH", "") == "1"
+AU = AUTHM.Auth(DATA)
 BUILD_CMD = shlex.split(os.environ.get("FH_BUILD_CMD", "")) or [sys.executable, str(CODE / "build.py")]
 PERSIST = ("plan_state.json", "keep.json", "cache", "history")
 LIVE = DATA / "live"
@@ -182,15 +189,19 @@ def load_subs():
         return []
 
 
-def add_sub(sub):
+def add_sub(sub, user=None):
     if not isinstance(sub, dict) or not str(sub.get("endpoint", "")).startswith("https://") \
-            or not isinstance(sub.get("keys"), dict):
+            or not isinstance(sub.get("keys"), dict) or len(sub["endpoint"]) > 1000:
         return False
     with LOCK:
         old = {s.get("endpoint"): s for s in load_subs()}
         welcomed = bool(old.get(sub["endpoint"], {}).get("welcomed"))
         subs = [s for s in old.values() if s.get("endpoint") != sub["endpoint"]]
-        subs.append({"endpoint": sub["endpoint"], "keys": sub["keys"], "welcomed": welcomed})
+        row = {"endpoint": sub["endpoint"], "keys": {k: str(v)[:200] for k, v in sub["keys"].items()
+                                                     if k in ("p256dh", "auth")}, "welcomed": welcomed}
+        if user:
+            row["user"] = user                   # whose phone (alerts are still the owner's league for everyone)
+        subs.append(row)
         write_atomic(DATA / "subs.json", json.dumps(subs[-20:]))
     log(f"phone linked for alerts ({len(subs[-20:])} total)")
     if not welcomed:
@@ -634,6 +645,39 @@ WAIT = (b"<!doctype html><meta charset=utf-8><meta name=viewport content='width=
         b"background:#0b1d3a;color:#fff'><h2>Getting your team ready&hellip;</h2><p>This takes about a minute. The page opens by itself when it is done.</p>")
 
 
+def owner_page(name):
+    """The owner's private pages (never published, never in the app): the backtest report and the track record."""
+    hist = DATA / "history"
+    if name == "backtest":
+        p = hist / "backtest.md"
+        return p.read_text(encoding="utf-8") if p.exists() else "No backtest yet: it is written by the next build."
+    if name == "lifetime":
+        p = hist / "lifetime.json"
+        return p.read_text(encoding="utf-8") if p.exists() else "{}"
+    return None
+
+
+INVITE_PAGE = (b"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+               b"<meta name=color-scheme content='light dark'><body style='font:17px -apple-system,system-ui,sans-serif;"
+               b"max-width:430px;margin:0 auto;padding:56px 20px'><h1 style='font-size:28px'>Invite a friend</h1>"
+               b"<p>Make a one-time code (good for 7 days). They open the app, tap \"Have an invite code?\" and pick a "
+               b"name and password. Everyone sees your league for now.</p><button id=b style='font:inherit;padding:12px 18px;"
+               b"border:0;border-radius:12px;background:#007aff;color:#fff'>Make a code</button><p id=c "
+               b"style='font:600 28px ui-monospace,monospace;margin-top:24px'></p><script>b.onclick=function(){"
+               b"fetch('/api/invite',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})"
+               b".then(function(r){return r.json()}).then(function(j){c.textContent=j.code||j.error})}</script>")
+
+
+# Reachable without signing in even when AUTH=1: the sign-in page and its API, plus what iOS needs to put the app on the
+# home screen (manifest, icons, service worker). None of these carry league data.
+OPEN_PATHS = {"/login", "/api/login", "/api/signup", "/api/logout", "/api/me", "/manifest.webmanifest", "/sw.js",
+              "/icon.svg"}
+
+
+def is_open(path):
+    return path in OPEN_PATHS or (path.endswith(".png") and "/" not in path.lstrip("/"))
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "FantasyHockey"
     protocol_version = "HTTP/1.1"                 # keep the connection open between requests (1.0 closed it every time)
@@ -641,25 +685,61 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def https(self):
+        return (self.headers.get("X-Forwarded-Proto") or "").lower() == "https"
+
     def send(self, code, body, ctype, extra=None):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        self.security_headers()
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
 
-    def json(self, obj, code=200):
-        self.send(code, json.dumps(obj).encode(), "application/json", {"Cache-Control": "no-store"})
+    def security_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
+        if self.https():
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
+
+    def json(self, obj, code=200, extra=None):
+        self.send(code, json.dumps(obj).encode(), "application/json", dict({"Cache-Control": "no-store"}, **(extra or {})))
+
+    # ------------------------------------------------------------ who is asking
+    def client_ip(self):
+        xff = self.headers.get("X-Forwarded-For")
+        return xff.split(",")[-1].strip() if xff else self.client_address[0]   # last hop = added by Railway's proxy
+
+    def token(self):
+        return AUTHM.token_from(self.headers.get("Cookie"))
+
+    def user(self):
+        try:
+            return AU.session(self.token())
+        except Exception:
+            return None
+
+    def same_origin(self):
+        """A POST must come from this app's own pages (blocks other sites posting with your cookie)."""
+        if "application/json" not in (self.headers.get("Content-Type") or ""):
+            return False
+        origin = self.headers.get("Origin")
+        if not origin or origin == "null":
+            return origin is None                 # no Origin header: not a browser cross-site request
+        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+        return urlparse(origin).netloc == host
 
     def do_HEAD(self):
         self.do_GET()
 
     def do_POST(self):
         route = urlparse(self.path).path
-        if route not in ("/api/refresh", "/api/subscribe"):
+        if route not in ("/api/refresh", "/api/subscribe", "/api/login", "/api/signup", "/api/logout", "/api/invite"):
             return self.json({"error": "not found"}, 404)
         try:
             n = int(self.headers.get("Content-Length") or 0)
@@ -671,14 +751,61 @@ class Handler(BaseHTTPRequestHandler):
                 body = {}
         except Exception:
             body = {}
+        # Checked whenever a cookie could matter: the sign-in routes, and everything once sign-in is required.
+        # (With AUTH off /api/refresh and /api/subscribe stay exactly as before: open to the app, no cookie involved.)
+        if (AUTH_ON or route not in ("/api/refresh", "/api/subscribe")) and not self.same_origin():
+            return self.json({"error": "forbidden"}, 403)
+        if route == "/api/login":
+            tok, why = AU.login(str(body.get("name") or "")[:64], str(body.get("password") or "")[:200],
+                                self.client_ip())
+            if not tok:
+                msg = "Too many tries. Wait a few minutes." if why == "slow down" else "Wrong name or password."
+                return self.json({"error": msg}, 429 if why == "slow down" else 401)
+            return self.json({"ok": True}, extra={"Set-Cookie": AUTHM.cookie_header(tok, self.https())})
+        if route == "/api/signup":
+            tok, msg = AU.signup(body.get("code"), str(body.get("name") or "")[:64],
+                                 str(body.get("password") or "")[:200], self.client_ip())
+            if not tok:
+                return self.json({"error": msg}, 400)
+            log(f"new account: {AUTHM.norm_name(body.get('name'))}")
+            return self.json({"ok": True}, extra={"Set-Cookie": AUTHM.cookie_header(tok, self.https())})
+        if route == "/api/logout":
+            AU.logout(self.token())
+            return self.json({"ok": True}, extra={"Set-Cookie": AUTHM.cookie_header("", self.https(), clear=True)})
+        me = self.user()
+        if route == "/api/invite":
+            if not me or me["role"] != "owner":
+                return self.json({"error": "owner only"}, 403)
+            return self.json({"code": AU.invite(me["name"])})
+        if AUTH_ON and not me:
+            return self.json({"error": "sign in"}, 401)
         if route == "/api/subscribe":
-            return self.json({"ok": add_sub(body)})
+            return self.json({"ok": add_sub(body, me and me["name"])})
         keep = body.get("keep")
         keep = None if keep in (None, "") else str(keep)[:300]
         self.json(request_refresh(str(body.get("reason") or "")[:40], keep, bool(body.get("force"))))
 
     def do_GET(self):
         path = unquote(urlparse(self.path).path)
+        if path == "/login":
+            return self.send(200, AUTHM.LOGIN_PAGE.encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+        if path == "/api/me":
+            me = self.user()
+            return self.json({"user": me and {"name": me["name"], "role": me["role"]}, "auth": AUTH_ON})
+        if path.startswith("/admin/"):
+            me = self.user()
+            if not me or me["role"] != "owner":
+                return self.send(404, b"Not found", "text/plain")
+            if path == "/admin/invite":
+                return self.send(200, INVITE_PAGE, "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+            text = owner_page(path[len("/admin/"):])
+            if text is None:
+                return self.send(404, b"Not found", "text/plain")
+            return self.send(200, text.encode(), "text/plain; charset=utf-8", {"Cache-Control": "no-store"})
+        if AUTH_ON and not is_open(path) and not self.user():
+            if path.startswith("/api/") or not (path.endswith("/") or path.endswith(".html")):
+                return self.json({"error": "sign in"}, 401)
+            return self.send(303, b"", "text/plain", {"Location": "/login", "Cache-Control": "no-store"})
         if path == "/api/status":
             return self.json(status())
         if path == "/api/push":
@@ -709,6 +836,7 @@ class Handler(BaseHTTPRequestHandler):
             h["Vary"] = "Accept-Encoding"
         if etag in (self.headers.get("If-None-Match") or ""):    # unchanged since last time: no body to send
             self.send_response(304)
+            self.security_headers()
             for k, v in h.items():
                 self.send_header(k, v)
             self.end_headers()
@@ -724,6 +852,15 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     seed_state()
+    try:
+        owner = AU.ensure_owner(os.environ.get("OWNER_USER", ""), os.environ.get("OWNER_PASSWORD", ""))
+        if owner:
+            log(f"owner account ready: {owner}")
+    except Exception as e:
+        log(f"owner account NOT set up: {e}")
+    if AUTH_ON and not AU.has_owner():
+        log("AUTH=1 but there is no owner account yet: set OWNER_USER and OWNER_PASSWORD (nobody can sign in)")
+    log(f"sign-in {'REQUIRED (AUTH=1)' if AUTH_ON else 'optional (owner pages only)'}")
     shutil.rmtree(DATA / "hotweb", ignore_errors=True)   # this deploy's own web/ is the starting point
     try:
         shell_update("new deploy")                # new app code live before the first visitor, no ESPN build

@@ -3,3 +3,6 @@ __pycache__/
 /snapshot.json.gz
 /notify_payload.json
 /full.html
+
+.env
+/data/
