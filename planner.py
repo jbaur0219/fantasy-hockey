@@ -47,6 +47,7 @@ def _stream(site_data, sp, abbr, games, standings, now_ms, ndays):
     pool = [p for p in site_data["fas"] if p["grp"] == "G" and p["inj"] not in A.BAD_INJURY]
     pool = sorted(pool, key=lambda p: -(p["out"] or 0))[:STREAM_POOL]
     out = []
+    today = D.today_index(games, sp, now_ms)               # the day Daily Faceoff's starters are for
     for p in pool:
         if (p.get("sp") or 0) < STREAM_MIN_START:
             continue
@@ -64,7 +65,7 @@ def _stream(site_data, sp, abbr, games, standings, now_ms, ndays):
                 pw = D.clamp(pw, 0.15, 0.85)
                 e = (p["out"] or 0) + 4 * (pw - s_me)
                 st = None
-                if i == 0 and S.STATE["by_team"].get(p["tm"]):
+                if i == today and S.STATE["by_team"].get(p["tm"]):
                     starter = S.STATE["by_team"][p["tm"]]
                     if S.E.norm(starter["name"]) != S.E.norm(p["n"]):
                         continue                                # someone else is in net today
