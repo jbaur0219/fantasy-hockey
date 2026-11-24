@@ -1508,6 +1508,10 @@ function glReset(){
   var vv=window.visualViewport;
   if(vv&&(vv.offsetTop>1||vv.pageTop<0)&&!document.body.classList.contains('mlock'))window.scrollTo(window.pageXOffset||0,Math.max(0,window.pageYOffset||0));
 }
+/* Safety net: the "page stepped back" state (black backdrop, clipped page, top strip) may only exist while a sheet is open or closing.
+   If anything ever leaves it behind (e.g. a sheet closed by Compare > Try swap while the tab changes), clear it within half a second. */
+function sheetHeal(){var de=document.documentElement;if(!SH.open&&!SH.closing_busy&&de.classList.contains('sheet-on'))glReset();}
+setInterval(sheetHeal,400);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)glReset();});
 window.addEventListener('pageshow',glReset);
 document.addEventListener('focusout',function(e){
@@ -2041,7 +2045,7 @@ function modal(p){
   if(pct==='gl')pcTabSet('gl');
   var sw=$('#pcSwap');
   if(sw&&wk)sw.addEventListener('click',function(){
-    closeModal();
+    closeModal();setTimeout(sheetHeal,600);
     if(typeof showTab==='function')showTab('moves/swap');
     if(typeof wiPick==='function'){wiPick('drop',String(wk.id));wiPick('add',String(p.id));}
     setTimeout(function(){var o=document.getElementById('wiOut');if(o&&o.scrollIntoView){try{o.scrollIntoView({block:'center'});}catch(e){}}},120);
@@ -2294,7 +2298,7 @@ document.addEventListener('click',function(e){
   b=t.closest('[data-cmset]');if(b){var np=ALL[b.getAttribute('data-cmset')];if(np){if(CMP.pick==='a')CMP.a=np;else CMP.b=np;}CMP.pick=null;cmpRender();return;}
   b=t.closest('[data-cmflip]');if(b){var x=CMP.a;CMP.a=CMP.b;CMP.b=x;cmpRender(true);return;}
   b=t.closest('[data-cmtry]');
-  if(b){var ids=b.getAttribute('data-cmtry').split(',');closeModal();
+  if(b){var ids=b.getAttribute('data-cmtry').split(',');closeModal();setTimeout(sheetHeal,600);
     if(typeof showTab==='function')showTab('moves/swap');
     if(typeof wiPick==='function'){wiPick('drop',ids[1]);wiPick('add',ids[0]);}
     setTimeout(function(){var o=document.getElementById('wiOut');if(o&&o.scrollIntoView){try{o.scrollIntoView({block:'center'});}catch(x){}}},120);return;}
