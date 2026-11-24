@@ -22,7 +22,7 @@ FREE_AGENT_LIMIT = 300       # how many free agents/waiver players to look at
 DAYS_AHEAD = 7               # "games in the next N days"
 
 # ESPN lineup slot numbers (verified against this league)
-SLOT_NAMES = {3: "F", 4: "D", 5: "G", 6: "UTIL", 7: "BN"}
+SLOT_NAMES = {0: "F", 1: "F", 2: "F", 3: "F", 4: "D", 5: "G", 6: "UTIL", 7: "BN"}   # C / LW / RW slots are forward slots
 IR_SLOTS = {8, 9, 10}        # injured reserve (anything not in SLOT_NAMES is treated as IR)
 # ESPN position ids
 POS = {1: "C", 2: "LW", 3: "RW", 4: "D", 5: "G"}
@@ -60,6 +60,7 @@ def get_config():
         "league": os.environ.get("LEAGUE_ID", "557638258"),
         "team": int(os.environ.get("TEAM_ID", "1")),
         "season": int(os.environ.get("SEASON", "2027")),
+        "platform": os.environ.get("PLATFORM", "espn"),
         "cookies": {"espn_s2": s2, "SWID": swid},
     }
 

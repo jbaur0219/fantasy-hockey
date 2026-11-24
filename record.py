@@ -90,19 +90,36 @@ def build(mp, write=True):
     changed = False
     rows = []
     seen = set()
+    # One row per pair a week. A pair can be logged twice (skipped Tuesday, made Sunday; or left off the list, then
+    # planned): what you did counts, so a made move beats a skip, and a skip beats a hidden one.
+    rank = {"done": 0, "missed": 1, "hidden": 2}
+    pick = {}
     for e in log:
         k = _key(e)
-        if k in seen:
+        if k not in pick or rank.get(e.get("result"), 3) < rank.get(pick[k].get("result"), 3):
+            pick[k] = e
+    prov = results.get("_inweek")
+    if not isinstance(prov, dict):
+        prov = results["_inweek"] = {}           # latest score seen during the week, until the week is frozen
+    for e in log:
+        k = _key(e)
+        if k in seen or pick.get(k) is not e:
             continue
         seen.add(k)
         final = results.get(k)
         sc = final
         if not final:
             sc = _score(e)
+            if sc is None:
+                sc = prov.get(k)                 # a player fell out of ESPN's free-agent feed: keep the last score seen
             if sc and mp is not None and e.get("mp") is not None and e["mp"] < mp:
                 results[k] = sc               # the week is over: freeze it
+                prov.pop(k, None)
                 changed = True
                 final = sc
+            elif sc and prov.get(k) != sc:
+                prov[k] = sc
+                changed = True
         rows.append({"mp": e.get("mp"), "day": e.get("day"), "logged": e.get("logged"), "result": e.get("result"),
                      "add": e["add"], "drop": e["drop"],
                      "expected": e.get("net") if e.get("net") is not None else e.get("expected_gain"),

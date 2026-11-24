@@ -512,7 +512,8 @@ def model_changed():
     App-look changes (web/, site_builder.py, pwa.py) only need the quick shell update."""
     import hashlib
     h = hashlib.sha1()
-    for p in sorted([p for p in CODE.glob("*.py") if p.name not in APP_ONLY] + list((CODE / "tools").glob("*.py"))):
+    for p in sorted([p for p in CODE.glob("*.py") if p.name not in APP_ONLY] + list((CODE / "tools").glob("*.py"))
+                    + list((CODE / "platforms").glob("*.py"))):
         h.update(p.name.encode())
         h.update(p.read_bytes())
     stamp, f = h.hexdigest(), DATA / "model_stamp.txt"

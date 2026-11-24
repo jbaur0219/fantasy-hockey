@@ -27,6 +27,7 @@ goalie calls, streams and trade ideas. It never adds, drops, trades or changes a
 
 | File | What it does |
 |---|---|
+| `league.py`, `platforms/` | The league's rules (lineup slots, add limits, scoring) read from the platform each build; `platforms/espn.py` is the ESPN adapter |
 | `analyze.py` | Reads ESPN, scores players in this league's points system, base outlook per game |
 | `enrich.py`, `starters.py`, `roles.py` | NHL.com / MoneyPuck stats, today's starting goalies, line and power-play roles |
 | `dashboard.py` | Matchup, schedule helpers, the daily add-lock clock, lineup alerts, standings |
@@ -56,5 +57,8 @@ python -m unittest discover tests
 ```
 
 Secrets: `ESPN_2` and `SWID` (ESPN login cookies), `PUSH_CONFIG` (push alerts). The league and team default to
-`LEAGUE_ID=557638258`, `TEAM_ID=1`. The weekly move limit is read from each league's ESPN settings (`dashboard.move_budget`). Scoring, lineup slots and
-the 9 F / 5 D / 2 G / 1 UTIL layout currently match this league and are not yet read from ESPN for other leagues.
+`LEAGUE_ID=557638258`, `TEAM_ID=1`, `PLATFORM=espn`. Each build reads the league's own rules through a platform adapter
+(`platforms/`: ESPN built, Yahoo and Fantrax stubs) into `league.py`: lineup slots (every module reads `league.SLOTS`),
+bench and IR spots, weekly / per-day / season add limits (`dashboard.move_budget`), matchup lengths and scoring. Leagues
+with separate C / LW / RW slots are modelled with those counted as forward slots (the health badge says so). If the
+settings can't be read the build keeps this league's layout (9 F / 5 D / 1 UTIL / 2 G) and the badge says that too.

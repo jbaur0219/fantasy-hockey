@@ -25,6 +25,7 @@ from pathlib import Path
 import analyze as A
 import dashboard as D
 import enrich as E
+import league as L
 import planner as PL
 import roles as R
 import site_builder as SB
@@ -129,12 +130,13 @@ def values(p, game, ndays, standings, starters, lineup_goalie=False):
 
 
 def day_value(active):
-    """Best lineup score for one day. active = [(group, value)]: 9 F, 5 D, 1 UTIL, 2 G."""
+    """Best lineup score for one day. active = [(group, value)]; this league's slots (9 F, 5 D, 1 UTIL, 2 G here)."""
+    S_ = L.SLOTS
     fwd = sorted((v for g, v in active if g == "F"), reverse=True)
     dfn = sorted((v for g, v in active if g == "D"), reverse=True)
     gk = sorted((v for g, v in active if g == "G"), reverse=True)
-    rest = sorted(fwd[9:] + dfn[5:], reverse=True)
-    return sum(fwd[:9]) + sum(dfn[:5]) + (rest[0] if rest else 0.0) + sum(gk[:2])
+    rest = sorted(fwd[S_["F"]:] + dfn[S_["D"]:], reverse=True)
+    return sum(fwd[:S_["F"]]) + sum(dfn[:S_["D"]]) + sum(rest[:S_["UTIL"]]) + sum(gk[:S_["G"]])
 
 
 def _active(entries, d, skip=None):
@@ -290,16 +292,18 @@ def _opps(p, t, ndays, days, game, standings):
 
 
 def _fill(entries, x, y, t, ndays):
-    slots = {"F": 9, "D": 5, "G": 2}[x["grp"]]
+    S_ = L.SLOTS
     play = fill = 0
     for d in range(t, ndays):
         if x["v"][d] <= 0:
             continue
         play += 1
-        n = sum(1 for e in entries if e["join"] <= d < e["leave"] and e["grp"] == x["grp"] and e["v"][d] > 0)
-        if y["grp"] == x["grp"] and y["v"][d] > 0:
-            n -= 1                                          # y is leaving
-        if n < slots:
+        cnt = {g: sum(1 for e in entries if e["join"] <= d < e["leave"] and e["grp"] == g and e["v"][d] > 0)
+               for g in ("F", "D", "G")}
+        if y["v"][d] > 0:
+            cnt[y["grp"]] -= 1                              # y is leaving
+        util_open = max(0, cnt["F"] - S_["F"]) + max(0, cnt["D"] - S_["D"]) < S_["UTIL"]
+        if cnt[x["grp"]] < S_[x["grp"]] or (x["grp"] != "G" and util_open):
             fill += 1
     return play, fill
 

@@ -25,8 +25,9 @@ import streams as STR
 STATE_FILE = Path(__file__).with_name("plan_state.json")
 LOG_FILE = Path(__file__).with_name("history") / "moves.jsonl"     # every planned move that was made or missed
 KEEP = ("t", "day", "add", "drop", "gain", "cost", "net", "games", "waiver", "tier", "conf", "why1", "base",
-        "nd", "need", "kept", "ga", "gd", "ca", "cd", "g", "dg", "ir", "late", "bar")
-LOG_EXTRA = ("t", "nd", "need", "kept", "ga", "gd", "ca", "cd", "g", "dg", "ir", "cost", "late", "bar")   # backtest.py
+        "nd", "need", "kept", "ga", "gd", "ca", "cd", "g", "dg", "ir", "late", "bar", "marg", "cda", "cdd", "healthy")
+LOG_EXTRA = ("t", "nd", "need", "kept", "ga", "gd", "ca", "cd", "g", "dg", "ir", "cost", "late", "bar", "marg",
+             "games", "waiver", "tier", "cda", "cdd", "healthy")      # how the plan saw each move, for backtest.py
 
 
 def _load():
@@ -154,6 +155,17 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
         print(f"  weekly plan saved for matchup {mp}: {len(fresh['moves'])} moves, {len(done)} done, "
               f"{len(changes)} changed since the last build")
     else:
+        # The plan is not saved, but each move's starting line (ESPN season totals, nothing to do with line data) still
+        # moves with the clock until its day locks, so earlier points never leak into a move's score.
+        import record as RC
+        if state.get("mp") == mp and (state.get("moves") or state.get("small")):
+            for m in (state.get("moves") or []) + (state.get("small") or []):
+                idx = labels.index(m["day"]) if m.get("day") in labels else None
+                if idx is not None and not D.day_locked(clock, idx, now_ms):
+                    m["base"] = RC.snap(m["add"]["id"], m["drop"]["id"], now_ms) or m.get("base")
+            import netcache
+            if netcache.STATE["mode"] != "replay":
+                _save(state)
         print("  weekly plan NOT saved: data was incomplete this build")
     mt = site_data.get("matchup")
     if mt and int(mt.get("days_left", 7)) <= 1:

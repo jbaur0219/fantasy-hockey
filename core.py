@@ -30,6 +30,7 @@ import time
 
 import analyze as A
 import dashboard as D
+import league as L
 import longterm as LT
 import streams as STR
 
@@ -50,7 +51,7 @@ POOL_SK, POOL_G = 45, 8
 DROPS_PER = 7
 MAX_PASSES = 4
 TIME_BUDGET = 25.0
-SLOTS = {"F": 9, "D": 5, "G": 2, "UTIL": 1}
+SLOTS = L.SLOTS            # this league's lineup (league.py, read from the platform each build)
 
 
 # ---------------------------------------------------------------------------
@@ -80,8 +81,9 @@ def day_value(F, Dn, G):
 # Search (plain lists in, move triples out)
 # ---------------------------------------------------------------------------
 class Model:
-    def __init__(self, base, pool, ndays, nxt_games):
+    def __init__(self, base, pool, ndays, nxt_games, per_day=None):
         self.fut = nxt_games
+        self.per_day = per_day                  # league limit on adds per day (None: only the weekly limit)
         self.base, self.pool, self.ndays = base, pool, ndays
         self.cost = {}
         for xi, x in enumerate(pool):
@@ -127,12 +129,18 @@ class Model:
         out.sort()
         return [i for _, i in out[:DROPS_PER]]
 
-    def cands(self, used_x, used_y):
+    def cands(self, used_x, used_y, moves=()):
+        full = set()
+        if self.per_day:
+            n = {}
+            for m in moves:
+                n[m[1]] = n.get(m[1], 0) + 1
+            full = {t for t, k in n.items() if k >= self.per_day}
         for xi, x in enumerate(self.pool):
             if xi in used_x:
                 continue
             for t in range(self.ndays):
-                if x["v"][t] <= 0 or (x["waiver"] and t == 0):
+                if x["v"][t] <= 0 or (x["waiver"] and t == 0) or t in full:
                     continue
                 for yi in self.drop_options(xi, t, used_y):
                     yield (xi, t, yi)
@@ -142,7 +150,7 @@ class Model:
         for _ in range(k):
             ux, uy = {m[0] for m in cur}, {m[2] for m in cur}
             top, topm = best, None
-            for c in self.cands(ux, uy):
+            for c in self.cands(ux, uy, cur):
                 s = self.score(cur + [c])
                 if s > top + 0.05:
                     top, topm = s, c
@@ -169,7 +177,7 @@ class Model:
                 rest = cur[:i] + cur[i + 1:]
                 ux, uy = {m[0] for m in rest}, {m[2] for m in rest}
                 top, topm = best, None
-                for c in self.cands(ux, uy):
+                for c in self.cands(ux, uy, rest):
                     s = adj(rest + [c])
                     if s > top + 0.05:
                         top, topm = s, c
@@ -178,7 +186,7 @@ class Model:
             if len(cur) < k:
                 ux, uy = {m[0] for m in cur}, {m[2] for m in cur}
                 top, topm = best, None
-                for c in self.cands(ux, uy):
+                for c in self.cands(ux, uy, cur):
                     s = adj(cur + [c])
                     if s > top + 0.05:
                         top, topm = s, c
@@ -245,7 +253,7 @@ def show_bar(t, ndays):
 
 
 def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_games, prev=None, reasons=True, only_prev=False,
-         keep_ids=(), healthy=True, ir_free=0):
+         keep_ids=(), healthy=True, ir_free=0, per_day=None):
     """The plan. prev = [(add_id, day_label, drop_id), ...] from the previous build (kept unless clearly beaten).
     keep_ids: players you chose to keep this week (never suggested as drops). healthy: data was complete enough to call
     a move Strong. nxt_games: {team: games} over the long-term horizon after this matchup (longterm.HORIZON_DAYS)."""
@@ -261,7 +269,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
         hurt = sorted((b for b in base if b["p"].get("inj") in IR_STATUSES), key=lambda b: -(b["p"].get("out") or 0))
         for b in hurt[:ir_free]:
             b.update(ok=True, ir=True, bar=STR.MIN_GAIN)
-    M = Model(base, pool, ndays, nxt_games)
+    M = Model(base, pool, ndays, nxt_games, per_day=per_day)
     for (xi, yi) in list(M.cost):
         if base[yi].get("ir"):
             M.cost[(xi, yi)] = 0.0
@@ -274,6 +282,13 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             x = pool[pi[add_id]]
             if x["v"][t] > 0 and not (x["waiver"] and t == 0):
                 keep.append((pi[add_id], t, bi[drop_id]))
+    if per_day:                           # a previous plan can't break the league's per-day limit either
+        n, ok = {}, []
+        for m in keep:
+            n[m[1]] = n.get(m[1], 0) + 1
+            if n[m[1]] <= per_day:
+                ok.append(m)
+        keep = ok
     keep = keep[:moves_left]
     if only_prev:                     # data too incomplete to trust new suggestions: keep the last good plan only
         g, starts = keep, [keep]
@@ -305,7 +320,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             x = pool[xi]["x"]
             y = by_p[base[yi]["p"]["id"]]
             c = M.cost[(xi, yi)]
-            gain, ca, cd = 0.0, 0, 0
+            gain, ca, cd, cda, cdd = 0.0, 0, 0, [], []
             for d in range(t, ndays):
                 act = STR._active(ents, d, skip=y)
                 without = STR.day_value(act)
@@ -314,8 +329,10 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
                 # games that would actually count in your lineup (a game behind a full position sits on the bench)
                 if x["v"][d] > 0 and STR.day_value(act) - without > 0.01:
                     ca += 1
+                    cda.append(d)
                 if y["v"][d] > 0 and days_now[d] - without > 0.01:
                     cd += 1
+                    cdd.append(d)
             mv = {"t": t, "day": days[t], "add": STR._brief(x["p"]), "drop": STR._brief(y["p"]),
                   "gain": round(gain, 2), "cost": c, "net": round(gain - c, 2), "marg": marg, "need": base[yi]["bar"],
                   "games": sum(1 for i in range(t, ndays) if x["v"][i] > 0), "waiver": x["waiver"], "tier": tier,
@@ -326,7 +343,8 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             mv["ir"] = bool(base[yi].get("ir"))
             # how the plan saw the move, logged with it for the backtest (backtest.py): days in the matchup, groups,
             # the show bar for that day and whether it is in the last days
-            mv.update(nd=ndays, g=x["grp"], dg=y["grp"], bar=show_bar(t, ndays), late=ndays - t <= LATE_DAYS)
+            mv.update(nd=ndays, g=x["grp"], dg=y["grp"], bar=show_bar(t, ndays), late=ndays - t <= LATE_DAYS,
+                      cda=cda, cdd=cdd, healthy=healthy)
             mv["conf"] = confidence(mv, y["p"], healthy, x["p"])
             if with_reasons:
                 mv["why1"] = headline(mv, x["p"], y["p"])
@@ -538,9 +556,11 @@ def matchup_projection(my_players, opp_players, game, ndays, standings, starters
         for d in range(ndays):
             act = [(e["grp"], e["v"][d]) for e in ents if e["v"][d] > 0]
             mu += STR.day_value(act)
-            sk = sorted([v for g, v in act if g == "F"], reverse=True)[:9] + sorted([v for g, v in act if g == "D"], reverse=True)[:5]
-            var += (len(sk) + (1 if len(sk) >= 14 else 0)) * D.SKATER_SD ** 2
-            var += min(2, sum(1 for g, v in act if g == "G")) * 0.6 * D.GOALIE_SD ** 2
+            nf, nd = sum(1 for g, _ in act if g == "F"), sum(1 for g, _ in act if g == "D")
+            filled = (min(nf, SLOTS["F"]) + min(nd, SLOTS["D"])
+                      + min(SLOTS["UTIL"], max(0, nf - SLOTS["F"]) + max(0, nd - SLOTS["D"])))
+            var += filled * D.SKATER_SD ** 2
+            var += min(SLOTS["G"], sum(1 for g, v in act if g == "G")) * 0.6 * D.GOALIE_SD ** 2
         return mu, var
 
     mu_me, v_me = team(my_players, True)

@@ -44,7 +44,9 @@ class TrackRecord(unittest.TestCase):
         r = RC.build(8)
         self.assertEqual(r["made"], {"n": 1, "pts": 4.0, "wins": 1, "expected": 2.0})
         self.assertEqual(r["untracked"], 1)
-        self.assertFalse(RC.RESULTS_FILE.exists())                   # same week: not final yet
+        res = json.loads(RC.RESULTS_FILE.read_text())                 # same week: not final yet, only the in-week score
+        self.assertNotIn("8|1|2", res)
+        self.assertEqual(res["_inweek"]["8|1|2"]["actual"], 4.0)
         RC.build(9)
         self.assertEqual(json.loads(RC.RESULTS_FILE.read_text())["8|1|2"]["actual"], 4.0)
         RC.STATE["tot"] = {1: [30.0, 9], 2: [22.0, 9]}               # later games no longer count

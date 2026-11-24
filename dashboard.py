@@ -212,7 +212,8 @@ def move_limit_info(league, days):
     if lim < 0:
         return {"limit": NO_LIMIT, "unlimited": True, "known": True, "season_limit": season}
     if acq.get("matchupLimitPerScoringPeriod"):
-        lim *= max(1, days)                     # the limit is per day: a week allows that many each day
+        # the limit is per day: that many each day, and a day that has gone by can't be used any more
+        return {"limit": lim * max(1, days), "unlimited": False, "known": True, "season_limit": season, "per_day": lim}
     return {"limit": lim, "unlimited": False, "known": True, "season_limit": season}
 
 
@@ -238,7 +239,7 @@ def move_limit(league, days):
     return move_limit_info(league, days)["limit"]
 
 
-def move_budget(league, my_id, days=None):
+def move_budget(league, my_id, days=None, days_left=None):
     """How many adds you can still make this matchup, by this league's own rules.
     {"limit", "used", "left", "unlimited", "known", "used_known", "season_left"}. `left` also respects a season cap."""
     mp = ((league or {}).get("status") or {}).get("currentMatchupPeriod")
@@ -254,6 +255,8 @@ def move_budget(league, my_id, days=None):
     except (TypeError, ValueError):
         used = None
     left = max(0, info["limit"] - (used or 0))
+    if info.get("per_day") and days_left is not None:
+        left = info["per_day"] * max(0, int(days_left))     # unused days don't carry over (today's own adds unknown)
     season_left = None
     if info["season_limit"] is not None:
         try:
@@ -262,7 +265,8 @@ def move_budget(league, my_id, days=None):
         except (TypeError, ValueError):
             season_left = None
     return {"limit": info["limit"], "used": used, "left": left, "unlimited": info["unlimited"],
-            "known": info["known"], "used_known": used is not None, "season_left": season_left}
+            "known": info["known"], "used_known": used is not None, "season_left": season_left,
+            "per_day": info.get("per_day")}
 
 
 def matchup_periods(m, mp, length=7):
@@ -282,6 +286,11 @@ def start_prob(p, standings):
     return clamp(w, 0.2, 0.9)
 
 
+def _slots():
+    import league as L
+    return L.SLOTS
+
+
 def expected_remaining(players, periods, games, now_ms, standings):
     """Expected points + variance for the rest of the week, using the best lineup each day."""
     mu = var = 0.0
@@ -290,16 +299,16 @@ def expected_remaining(players, periods, games, now_ms, standings):
                  if A.slot_name(p["slot"]) != "IR" and p["injury"] not in A.BAD_INJURY
                  and games_on(games, p["team_id"], sp, now_ms)]
         gks = sorted(((p["outlook"] * start_prob(p, standings), start_prob(p, standings))
-                      for p in avail if p["group"] == "G"), reverse=True)[:2]
+                      for p in avail if p["group"] == "G"), reverse=True)[:_slots()["G"]]
         for ev, w in gks:
             mu += ev
             var += w * GOALIE_SD ** 2
         fwd = sorted([p for p in avail if p["group"] == "F"], key=lambda p: -p["outlook"])
         dfn = sorted([p for p in avail if p["group"] == "D"], key=lambda p: -p["outlook"])
-        used = fwd[:9] + dfn[:5]
-        rest = fwd[9:] + dfn[5:]
-        if rest:
-            used.append(max(rest, key=lambda p: p["outlook"]))      # UTIL slot
+        S_ = _slots()
+        used = fwd[:S_["F"]] + dfn[:S_["D"]]
+        rest = sorted(fwd[S_["F"]:] + dfn[S_["D"]:], key=lambda p: -p["outlook"])
+        used += rest[:S_["UTIL"]]                                      # UTIL slot(s)
         for p in used:
             mu += p["outlook"]
             var += SKATER_SD ** 2
@@ -312,7 +321,7 @@ def expected_remaining(players, periods, games, now_ms, standings):
 def goalie_decisions(mine, sp, games, abbr, standings, now_ms):
     """Start / bench calls for every day left in the matchup (see goalies.py)."""
     import goalies
-    return goalies.build(mine, sp, games, abbr, standings, now_ms, CUR_DAYS)
+    return goalies.build(mine, sp, games, abbr, standings, now_ms, CUR_DAYS, slots=_slots()["G"])
 
 
 # ---------------------------------------------------------------------------

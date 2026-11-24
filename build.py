@@ -28,6 +28,7 @@ import enrich as E
 import gamelog as GL
 import gameplan as GP
 import keep as KP
+import league as L
 import ledger as LG
 import netcache as NC
 import planner as PL
@@ -88,6 +89,11 @@ def health_report(site_data, nhl_counts):
         items.append("MoneyPuck expected goals could not be loaded.")
     if not site_data.get("matchup"):
         items.append("This week's matchup was not found.")
+    if not L.STATE["known"]:
+        level = "warn" if level == "ok" else level
+        items.append("Your league's settings couldn't be read, so the lineup (9 F, 5 D, 1 UTIL, 2 G) is assumed.")
+    elif L.settings().approx:
+        items.append("Approximated for your league: " + L.settings().approx + ".")
     return {"level": level, "items": items,
             "lines": lines["state"], "starters": S.HEALTH["state"],
             "healthy_plan": lines["state"] == "live" or (lines["state"] == "cached" and (R.STATE["cache_age_h"] or 0) <= 24)}
@@ -206,6 +212,12 @@ def _main():
     league = A.espn_get(f"{base}/segments/0/leagues/{cfg['league']}", cfg["cookies"],
                         params=[("view", "mSettings"), ("view", "mTeam"),
                                 ("view", "mMatchup"), ("view", "mMatchupScore")])
+    try:                                                # this league's own rules: lineup slots, move limits, scoring
+        import platforms
+        L.install(platforms.get(cfg).settings(league))
+    except Exception as e:                              # keep the defaults; the health badge says so
+        L.install(L.DEFAULT, known=False, note=f"{type(e).__name__}: {e}")
+    print(" ", L.summary())
     standings = D.load_nhl_standings()
     abbr, _ = D.schedule_maps(data["schedules"])
     mp_now = (league.get("status") or {}).get("currentMatchupPeriod")
@@ -243,6 +255,7 @@ def _main():
     site_data = SB.build_site_data(cfg, data, league, standings, now_ms)
     site_data["v"] = now_ms                                 # data version: the open app reloads when this changes
     site_data["scoring"] = scoring_weights(league)          # ESPN stat id -> points, for live points during games
+    site_data["rules"] = L.page_data()                      # the league settings the model used
     _ab, _gm = D.schedule_maps(data["schedules"])
     site_data["g28"] = C.team_games(_gm, _ab, data["roster"].get("scoringPeriodId", 1), 28)   # trade values: next 4 weeks
     PL.budget(league, cfg["team"])                      # this league's own weekly add limit, for every planner below
@@ -251,6 +264,7 @@ def _main():
         _nd = max(1, min(int(_m["days_left"]) if _m else 7, D.MAX_DAYS))
         site_data["clock"] = D.day_clock(data["schedules"], data["roster"].get("scoringPeriodId", 1), _nd, now_ms)
         lk = [i for i in range(_nd) if D.day_locked(site_data["clock"], i, now_ms)]
+        PL.DAYS_LEFT["n"] = _nd - len(lk)                   # open days left, for leagues with a per-day add limit
         first = site_data["clock"]["lock"][0]
         print(f"  day lock: {site_data['clock']['labels'][0]} first puck "
               f"{datetime.fromtimestamp(first / 1000, D.et_zone()).strftime('%I:%M %p') if first else 'no games'}; "

@@ -78,11 +78,14 @@ def _moves_used(league, my_id):
     return D.move_budget(league, my_id)["used"]
 
 
+DAYS_LEFT = {"n": None}      # days left in the matchup, set by build.py once the matchup is known (per-day limits)
+
+
 def budget(league, my_id):
     """This league's own add limit and what is left this matchup (dashboard.move_budget). Also keeps MOVE_LIMIT,
     which a few older callers read, in step with the league's rule."""
     global MOVE_LIMIT
-    b = D.move_budget(league, my_id)
+    b = D.move_budget(league, my_id, days_left=DAYS_LEFT["n"])
     MOVE_LIMIT = b["limit"]
     return b
 

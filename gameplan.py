@@ -5,23 +5,24 @@ the day-by-day lineup table before and after the plan, the best stream targets, 
 """
 import analyze as A
 import dashboard as D
+import league as L
 import planner as PL
 import starters as S
 import streams as STR
 
 INF = STR.INF
-SLOTS = {"F": 9, "D": 5, "G": 2}
 TARGETS_F, TARGETS_D, TARGETS_G = 6, 6, 4
 
 
 def _counts(active):
     """Lineup slots that have a player with a game today. UTIL is filled by the best leftover skater."""
+    S_ = L.SLOTS
     out = {}
-    for g, k in SLOTS.items():
-        out[g] = min(k, sum(1 for gg, v in active if gg == g and v > 0))
-    extra = sum(1 for gg, v in active if gg == "F" and v > 0) - SLOTS["F"]
-    extra += sum(1 for gg, v in active if gg == "D" and v > 0) - SLOTS["D"]
-    out["U"] = 1 if extra > 0 else 0
+    for g in ("F", "D", "G"):
+        out[g] = min(S_[g], sum(1 for gg, v in active if gg == g and v > 0))
+    extra = max(0, sum(1 for gg, v in active if gg == "F" and v > 0) - S_["F"])
+    extra += max(0, sum(1 for gg, v in active if gg == "D" and v > 0) - S_["D"])
+    out["U"] = min(S_["UTIL"], extra)
     return out
 
 
@@ -30,7 +31,7 @@ def _day_rows(entries, ndays, days, game_fn):
     for d in range(ndays):
         act = STR._active(entries, d)
         c = _counts(act)
-        open_slots = sum(SLOTS[g] - c[g] for g in SLOTS) + (1 - c["U"])
+        open_slots = sum(L.SLOTS[g] - c[g] for g in ("F", "D", "G")) + (L.SLOTS["UTIL"] - c["U"])
         rows.append({"day": days[d], "pts": round(STR.day_value(act), 1), "f": c["F"], "d": c["D"], "g": c["G"],
                      "u": c["U"], "open": open_slots})
     return rows
@@ -60,7 +61,8 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
     mp = (league.get("status") or {}).get("currentMatchupPeriod")
     kept = KP.load(mp)
     res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, fut, prev=prev,
-                 only_prev=cautious, keep_ids=kept, healthy=healthy, ir_free=D.ir_free(league, site_data["mine"]))
+                 only_prev=cautious, keep_ids=kept, healthy=healthy, ir_free=D.ir_free(league, site_data["mine"]),
+                 per_day=bg.get("per_day"))
     entries, _, pool = C.build_inputs(site_data["mine"], site_data["fas"], game, ndays, standings, starters)
     before_rows = _day_rows(entries, ndays, days, game)
     after_rows = _day_rows(res["ents"], ndays, days, game)
