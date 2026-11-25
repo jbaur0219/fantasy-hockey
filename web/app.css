@@ -1259,3 +1259,13 @@ body.nophoto .grp>.row.rd-r:not(:first-child):before{left:16px}
 /* Bigger touch target for player names (Apple asks for about 44 pt): an invisible pad around the name, no layout change */
 a.pl{position:relative}
 a.pl:after{content:'';position:absolute;inset:-7px -3px}
+
+/* Swap lab > Your roster: who to look at. Headshot as a block beside the name, tags on their own line. */
+.step.au .au-b{flex:1;min-width:0}
+.au-h{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+.au-h .av{margin:0;width:36px;height:36px}
+.au-t{min-width:0;flex:1}
+.au-n{font-size:17px;line-height:1.25}.au-n a.pl{font-weight:600}.au-n .muted{font-size:13px}
+.au-s{font-size:13px;line-height:1.35;margin-top:1px;color:var(--label2)}.au-s b{color:var(--label);font-weight:600}
+.step.au ul.why{margin:6px 0 0;padding-left:18px}
+.step.au .au-o{margin-top:6px;line-height:1.4}

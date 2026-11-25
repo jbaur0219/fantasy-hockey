@@ -900,11 +900,13 @@ function auditHtml4(){
   h+='<div class="muted">Skaters who are underperforming for their role, have a light schedule, or may be losing ice time. Not automatic drops: the move plan only suggests them when a replacement clearly pays off.</div>';
   if(!A2.length)h+='<div class="good" style="margin-top:6px">No skater on your roster is underperforming, on a light schedule, or losing role right now.</div>';
   A2.forEach(function(a,i){
-    h+='<div class="step"><div class="num" style="background:'+(a.sev>=3?'var(--amber)':'var(--gray)')+'">'+(i+1)+'</div><div>'
-    +'<div><a class="pl" data-id="'+a.id+'">'+esc(a.n)+'</a> <span class="muted">('+esc(a.pos)+', '+esc(a.tm)+', '+esc(a.slot)+')</span> '+(a.rl?'<b>'+esc(rlTxt(a.rl))+'</b> ':'')
-    +a.tags.map(function(t){return '<span class="'+(t.k==='under'||t.k==='role'?'warn':'muted')+'">'+esc(t.t)+'</span>';}).join(' &middot; ')+'</div>'
+    /* headshot sits beside the name as a block (inline headshots overlapped the wrapped line below); names inside sentences get none */
+    var tg=(a.rl?['<b>'+esc(rlTxt(a.rl))+'</b>']:[]).concat(a.tags.map(function(t){return '<span class="'+(t.k==='under'||t.k==='role'?'warn':'muted')+'">'+esc(t.t)+'</span>';}));
+    h+='<div class="step au"><div class="num" style="background:'+(a.sev>=3?'var(--amber)':'var(--gray)')+'">'+(i+1)+'</div><div class="au-b">'
+    +'<div class="au-h">'+avHtml(a.id,a.tm)+'<div class="au-t"><div class="au-n"><a class="pl" data-noav="1" data-id="'+a.id+'">'+esc(a.n)+'</a> <span class="muted">'+esc(a.pos)+' &middot; '+esc(a.tm)+' &middot; '+esc(a.slot)+'</span></div>'
+    +'<div class="au-s">'+tg.join(' &middot; ')+'</div></div></div>'
     +'<ul class="why">'+a.why.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>';
-    if(a.repl&&a.repl.length)h+='<div class="why"><b>Better options this week:</b> '+a.repl.map(function(r){return '<a class="pl" data-id="'+r.id+'">'+esc(r.n)+'</a> ('+esc(r.rl||'')+', '+esc(r.tm)+', '+r.gl+' gm, about '+f(r.e,1)+' pts vs '+f(a.e,1)+')';}).join(' &middot; ')+'</div>';
+    if(a.repl&&a.repl.length)h+='<div class="why au-o"><b>Better options this week:</b> '+a.repl.map(function(r){return '<a class="pl" data-noav="1" data-id="'+r.id+'">'+esc(r.n)+'</a> ('+esc(r.rl||'')+', '+esc(r.tm)+', '+r.gl+' gm, about '+f(r.e,1)+' pts vs '+f(a.e,1)+')';}).join(' &middot; ')+'</div>';
     h+='</div></div>';});
   h+='</div>';
   return h+whatifHtml()+weekHtml();
@@ -1766,9 +1768,11 @@ function sheetOpen(){
   SH.open=true;
   de.classList.add('sheet-on','sh-anim');
   if(RM){spSet(1);return;}
-  bx.style.transition='none';bx.style.transform='translateY(100%)';void bx.offsetWidth;
+  /* one style flush commits both starting points (sheet below the screen, page not stepped back yet); a second flush
+     here used to cost another full-page layout on every open */
+  bx.style.transition='none';bx.style.transform='translateY(100%)';spSet(0);void bx.offsetWidth;
   bx.style.transition='';bx.style.transform='';
-  spSet(0);void bx.offsetWidth;requestAnimationFrame(function(){spSet(1);});
+  requestAnimationFrame(function(){spSet(1);});
   if(!bx._dr){bx._dr=1;sheetDrag(bx);}
 }
 function sheetClose(){
