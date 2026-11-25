@@ -58,8 +58,10 @@ def _why_changed(m, mine_ids, fa_by_id, fresh_add_ids, fresh_drop_ids, small_key
         return f"{a['n']} is no longer a free agent."
     if fa.get("inj") in A.BAD_INJURY:
         return f"{a['n']} is now listed {fa['inj'].replace('_', ' ').lower()}."
-    if d["id"] not in mine_ids:
+    if d["id"] not in mine_ids and not m.get("chain"):       # (a second stream drops a player you haven't added yet)
         return f"{d['n']} is no longer on your roster."
+    if m.get("chain") and d["id"] not in mine_ids and d["id"] not in fresh_add_ids:
+        return f"The earlier stream of {d['n']} is no longer in the plan, so the swap after it goes too."
     if a["id"] in fresh_add_ids:
         return f"{a['n']} is still in the plan, now paired with a different drop or day."
     if (a["id"], d["id"]) in small_keys:

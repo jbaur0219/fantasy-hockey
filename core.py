@@ -91,10 +91,42 @@ class Model:
                 if b["ok"]:
                     self.cost[(xi, yi)] = cost(b["p"], x["p"], nxt_games)
 
+    # A move's drop is a roster player (yi >= 0, index into base) or, for a chain, a free agent an EARLIER move in the
+    # same plan added (yi < 0 is pool player -1 - yi): add A Monday, then drop A for B Wednesday. A chain drop costs
+    # nothing long-term (you streamed him) and is only valid while the move that added him stays in the plan.
+    def who(self, yi):
+        """The player a move drops, shaped like a base row (g, v, ok, bar, p)."""
+        if yi >= 0:
+            return self.base[yi]
+        x = self.pool[-1 - yi]
+        return {"g": x["g"], "v": x["v"], "ok": True, "bar": STR.MIN_GAIN, "p": x["p"], "chain": True}
+
+    def c(self, xi, yi):
+        return 0.0 if yi < 0 else self.cost[(xi, yi)]
+
+    @staticmethod
+    def valid(moves):
+        added = {xi: t for xi, t, _ in moves}
+        return all(yi >= 0 or added.get(-1 - yi, INF) < t for _, t, yi in moves)
+
+    @staticmethod
+    def without(moves, m):
+        """`moves` minus m and any chain move that drops a player m added (and so on down the chain)."""
+        out, gone = [q for q in moves if q is not m and q != m], {m[0]}
+        while True:
+            dep = [q for q in out if q[2] < 0 and -1 - q[2] in gone]
+            if not dep:
+                return out
+            gone |= {q[0] for q in dep}
+            out = [q for q in out if q not in dep]
+
     def lineup_total(self, moves):
-        leave, adds = {}, {}
+        leave, adds, xleave = {}, {}, {}
         for xi, t, yi in moves:
-            leave[yi] = t
+            if yi < 0:
+                xleave[-1 - yi] = t
+            else:
+                leave[yi] = t
             adds.setdefault(t, []).append(xi)
         total, days = 0.0, []
         for d in range(self.ndays):
@@ -105,6 +137,8 @@ class Model:
             for t, xs in adds.items():
                 if t <= d:
                     for xi in xs:
+                        if xleave.get(xi, INF) <= d:
+                            continue                # streamed out again by a later move
                         x = self.pool[xi]
                         (F if x["g"] == "F" else Dn if x["g"] == "D" else G).append(x["v"][d])
             v = day_value(F, Dn, G)
@@ -113,7 +147,9 @@ class Model:
         return total, days
 
     def score(self, moves):
-        return self.lineup_total(moves)[0] - sum(self.cost[(xi, yi)] for xi, _, yi in moves)
+        if not self.valid(moves):
+            return float("-inf")
+        return self.lineup_total(moves)[0] - sum(self.c(xi, yi) for xi, _, yi in moves)
 
     def loss(self, yi, t):
         """Lineup points lost from day t on by dropping roster player yi alone. Games he would spend on your bench (his
@@ -132,9 +168,14 @@ class Model:
             self._loss[k] = tot
         return self._loss[k]
 
-    def drop_options(self, xi, t, used_y):
+    def drop_options(self, xi, t, used_y, moves=()):
         x = self.pool[xi]
         out = []
+        chain = []
+        for xj, tj, _ in moves:                 # a streamer an earlier move added: free to stream out again
+            yj = -1 - xj
+            if tj < t and yj not in used_y and xj != xi and (x["g"] == "G" or self.pool[xj]["g"] in ("F", "D")):
+                chain.append(yj)
         for i, b in enumerate(self.base):
             if not b["ok"] or i in used_y:
                 continue
@@ -148,7 +189,7 @@ class Model:
         # the union never searches less than the old list did.
         by_loss = [i for _, _, i in sorted(out)[:DROPS_PER]]
         by_raw = [i for _, _, i in sorted(out, key=lambda r: (r[1], r[2]))[:DROPS_PER]]
-        return by_loss + [i for i in by_raw if i not in by_loss]
+        return by_loss + [i for i in by_raw if i not in by_loss] + chain
 
     def cands(self, used_x, used_y, moves=()):
         full = set()
@@ -163,7 +204,7 @@ class Model:
             for t in range(self.ndays):
                 if x["v"][t] <= 0 or (x["waiver"] and t == 0) or t in full:
                     continue
-                for yi in self.drop_options(xi, t, used_y):
+                for yi in self.drop_options(xi, t, used_y, moves):
                     yield (xi, t, yi)
 
     def greedy(self, k):
@@ -195,6 +236,8 @@ class Model:
             for i in range(len(cur)):
                 if deadline and time.time() > deadline:
                     return cur
+                if any(q[2] == -1 - cur[i][0] for q in cur):
+                    continue                    # a later move streams this add out again: replace that one first
                 rest = cur[:i] + cur[i + 1:]
                 ux, uy = {m[0] for m in rest}, {m[2] for m in rest}
                 top, topm = best, None
@@ -225,17 +268,17 @@ class Model:
             full = self.score(moves)
             worst = None
             for m in moves:
-                marg = full - self.score([q for q in moves if q is not m])
+                marg = full - self.score(self.without(moves, m))
                 if marg < OPTIONAL_MIN and (worst is None or marg < worst[0]):
                     worst = (marg, m)
             if not worst:
                 break
-            moves.remove(worst[1])
+            moves = self.without(moves, worst[1])
         full = self.score(moves)
         out = []
         for m in moves:
-            marg = full - self.score([q for q in moves if q is not m])
-            out.append((m, round(marg, 2), "make" if marg >= bar(self.base[m[2]]) else "optional"))
+            marg = full - self.score(self.without(moves, m))
+            out.append((m, round(marg, 2), "make" if marg >= bar(self.who(m[2])) else "optional"))
         return out
 
 
@@ -298,11 +341,18 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
     bi = {b["p"]["id"]: i for i, b in enumerate(base)}
     keep = []
     for add_id, day, drop_id in (prev or []):
-        if add_id in pi and drop_id in bi and day in days and base[bi[drop_id]]["ok"]:
-            t = days.index(day)
-            x = pool[pi[add_id]]
-            if x["v"][t] > 0 and not (x["waiver"] and t == 0):
-                keep.append((pi[add_id], t, bi[drop_id]))
+        if add_id not in pi or day not in days:
+            continue
+        t = days.index(day)
+        if drop_id in bi and base[bi[drop_id]]["ok"]:
+            yi = bi[drop_id]
+        elif drop_id in pi and any(q[0] == pi[drop_id] and q[1] < t for q in keep):
+            yi = -1 - pi[drop_id]            # streaming out a player an earlier kept move adds
+        else:
+            continue
+        x = pool[pi[add_id]]
+        if x["v"][t] > 0 and not (x["waiver"] and t == 0):
+            keep.append((pi[add_id], t, yi))
     if per_day:                           # a previous plan can't break the league's per-day limit either
         n, ok = {}, []
         for m in keep:
@@ -311,6 +361,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
                 ok.append(m)
         keep = ok
     keep = keep[:moves_left]
+    keep = [q for q in keep if q[2] >= 0 or any(r[0] == -1 - q[2] and r[1] < q[1] for r in keep)]
     if only_prev:                     # data too incomplete to trust new suggestions: keep the last good plan only
         g, starts = keep, [keep]
     else:
@@ -328,7 +379,10 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
         slack = HOLD_SLACK if mv["kept"] else 0.0
         bar = show_bar(mv["t"], ndays)
         need = mv["need"] if mv["need"] > STR.MIN_GAIN else min(mv["need"], bar)   # producers keep their higher bar
-        return mv["marg"] >= need - slack and round(mv["net"], 1) >= max(OPTIONAL_MIN, bar - slack)
+        # the bar is cleared on the number you see (net) as well as the move's worth inside the whole plan (marg): a
+        # producer's drop can't ride on later moves (a second stream, a later add that benches his last game)
+        worth = min(mv["marg"], mv["net"])
+        return worth >= need - slack and round(mv["net"], 1) >= max(OPTIONAL_MIN, bar - slack)
 
     def sequence(tiers, with_reasons):
         """Moves in day order, each with its own gain (lineup points with the earlier moves made), cost and labels."""
@@ -339,8 +393,9 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
         out = []
         for (xi, t, yi), marg, tier in order:
             x = pool[xi]["x"]
-            y = by_p[base[yi]["p"]["id"]]
-            c = M.cost[(xi, yi)]
+            yid = M.who(yi)["p"]["id"]
+            y = next((e for e in reversed(ents) if e["p"]["id"] == yid), None) or by_p[yid]
+            c = M.c(xi, yi)
             gain, ca, cd, cda, cdd = 0.0, 0, 0, [], []
             for d in range(t, ndays):
                 act = STR._active(ents, d, skip=y)
@@ -355,14 +410,16 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
                     cd += 1
                     cdd.append(d)
             mv = {"t": t, "day": days[t], "add": STR._brief(x["p"]), "drop": STR._brief(y["p"]),
-                  "gain": round(gain, 2), "cost": c, "net": round(gain - c, 2), "marg": marg, "need": base[yi]["bar"],
+                  "gain": round(gain, 2), "cost": c, "net": round(gain - c, 2), "marg": marg, "need": M.who(yi)["bar"],
                   "games": sum(1 for i in range(t, ndays) if x["v"][i] > 0), "waiver": x["waiver"], "tier": tier,
                   "kept": (xi, t, yi) in keep}
             mv["ga"] = mv["games"]
             mv["gd"] = sum(1 for i in range(t, ndays) if y["v"][i] > 0) if y["p"]["inj"] not in A.BAD_INJURY else 0
             mv["ca"], mv["cd"] = ca, min(cd, mv["gd"])
             mv["pa"], mv["pd"] = _pg(x["v"], t), _pg(y["v"], t)   # per game as the plan values them (reasons)
-            mv["ir"] = bool(base[yi].get("ir"))
+            mv["ir"] = bool(M.who(yi).get("ir"))
+            mv["chain"] = yi < 0                  # drops a player an earlier move on this plan adds
+            mv["feeds"] = any(q[0][2] == -1 - xi for q in order)   # a later move streams this add out again
             # how the plan saw the move, logged with it for the backtest (backtest.py): days in the matchup, groups,
             # the show bar for that day and whether it is in the last days
             mv.update(nd=ndays, g=x["grp"], dg=y["grp"], bar=show_bar(t, ndays), late=ndays - t <= LATE_DAYS,
@@ -391,7 +448,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             break
         m = min(weak)[1]
         small.append(m)
-        shown = [q for q, _, _ in tiers if q != m]
+        shown = M.without([q for q, _, _ in tiers], m)
     base_total, before_days = M.lineup_total([])
     after_total, after_days = M.lineup_total([m for m, _, _ in tiers])
     out, order, ents = sequence(tiers, True)
@@ -411,12 +468,13 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
         net = M.score(final + [(xi, t, yi)]) - without
         if net < OPTIONAL_MIN:
             continue
-        c = M.cost[(xi, yi)]
-        hidden.append({"t": t, "day": days[t], "add": STR._brief(pool[xi]["p"]), "drop": STR._brief(base[yi]["p"]),
+        c = M.c(xi, yi)
+        y = M.who(yi)
+        hidden.append({"t": t, "day": days[t], "add": STR._brief(pool[xi]["p"]), "drop": STR._brief(y["p"]),
                        "gain": round(net + c, 2), "cost": c, "net": round(net, 2), "conf": "small",
-                       "waiver": pool[xi]["waiver"], "nd": ndays, "g": pool[xi]["g"], "dg": base[yi]["g"],
-                       "need": base[yi]["bar"], "bar": show_bar(t, ndays), "late": ndays - t <= LATE_DAYS,
-                       "ir": bool(base[yi].get("ir"))})
+                       "waiver": pool[xi]["waiver"], "nd": ndays, "g": pool[xi]["g"], "dg": y["g"],
+                       "need": y["bar"], "bar": show_bar(t, ndays), "late": ndays - t <= LATE_DAYS,
+                       "ir": bool(y.get("ir"))})
     return {"base": round(base_total, 1), "total": round(after_total, 1), "gain": round(after_total - base_total, 1),
             "moves": out, "small": hidden, "before_days": before_days, "after_days": after_days, "ents": ents}
 
@@ -485,7 +543,11 @@ def headline(mv, xp, yp):
         rec = xp.get("rec")
         if rec is not None and rec >= 2.0 and (xp.get("gp") or 0) >= 5:
             who = who[:-1] + f" and is scoring {rec:.1f} pts a game lately."
-    if mv.get("ir"):
+    if mv.get("chain"):
+        # a second stream: the player you added earlier this week is done (or nearly), so his spot goes to the next one
+        left = f"has {_games(cd)} left that count" if cd else "has no games left that count"
+        why = f"{d} is the stream you add earlier this week and {left}; swap him for {a}, who has {_games(ca)} that count."
+    elif mv.get("ir"):
         why = (f"{d} is {yp['inj'].replace('_', ' ').lower()}: move him to your open IR spot (no drop), "
                f"and {a} adds {_games(ca)} that count this week.")
     elif yp["inj"] in A.BAD_INJURY:
@@ -522,6 +584,8 @@ def alternatives(M, final, m, days, ndays, healthy):
     """Other drops for this move's add and day, best first, for when you keep the player it drops."""
     xi, t, yi = m
     rest = [q for q in final if q is not m]
+    if any(q[2] == -1 - xi for q in rest):
+        return []                               # a later move streams this add out again: no simple swap to offer
     used = {q[2] for q in rest}
     without = M.score(rest)
     out = []
