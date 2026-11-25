@@ -2771,7 +2771,7 @@ function muTonight(g,S){
     return '<div><b>'+(pts==null?'0.0':f(pts,1))+'</b><span id="'+id+'">'+(past?'':playing(T)+' playing')+'</span></div>';
   }
   var h='<div class="mu-sumw"><div class="mu-sum">'+side(A,g.ad[i],'muPa')
-    +'<button type="button" class="mu-sk mu-pick'+(MU.dd?' open':'')+(sh!=null?' past':'')+'" data-mud="tg" aria-haspopup="listbox" aria-expanded="'+(MU.dd?'true':'false')+'" aria-label="Choose a day. Showing '+pill+'">'+pill+'<span class="mu-cv">'+MU_CV+'</span></button>'
+    +'<button type="button" class="mu-sk mu-pick'+(MU.dd?' open':'')+(sh==null&&!S.done?' now':'')+'" data-mud="tg" aria-haspopup="listbox" aria-expanded="'+(MU.dd?'true':'false')+'" aria-label="Choose a day. Showing '+pill+'">'+pill+'<span class="mu-cv">'+MU_CV+'</span></button>'
     +side(B,g.bd[i],'muPb')+'</div>'+muDayMenu(g,S,t,i)+'</div>';
   if(past){return h+'<div id="muPast"><div class="gl-wait"><span class="spin"></span>Loading</div></div>';}
   h+=muGroup('Forwards',muSlots(A,'F',S,k),muSlots(B,'F',S,k),S,k)+muGroup('Defense',muSlots(A,'D',S,k),muSlots(B,'D',S,k),S,k)
