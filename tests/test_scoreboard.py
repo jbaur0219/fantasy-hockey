@@ -79,3 +79,19 @@ class FutureLineupsTest(unittest.TestCase):
         fl = SBD.future_lineups(cfg, start=9, today=1, length=4, fetch=fake)
         self.assertEqual(asked, [10, 11, 12])
         self.assertEqual(fl, {"1": {"99": "BN"}, "2": {"99": "D"}})    # day 3 could not be read: left out
+
+
+class LeagueLineupsTest(unittest.TestCase):
+    def test_every_team_each_later_day(self):
+        import scoreboard as SBD
+        seen = []
+
+        def fake(url, cookies, params=None):
+            seen.append(dict(params))
+            slot = 4 if dict(params)["scoringPeriodId"] == 11 else 7
+            return {"teams": [{"id": 3, "roster": {"entries": [{"playerId": 99, "lineupSlotId": slot}]}},
+                              {"id": 4, "roster": {"entries": [{"playerId": 1, "lineupSlotId": 4}]}}]}
+        cfg = {"season": 2027, "league": 1, "cookies": {}, "team": 3}
+        fa = SBD.future_lineups(cfg, start=9, today=1, length=3, fetch=fake, every=True)
+        self.assertTrue(all("forTeamId" not in p for p in seen))         # one request covers the whole league
+        self.assertEqual(fa, {"1": {"3": {"99": "BN"}, "4": {"1": "D"}}, "2": {"3": {"99": "D"}, "4": {"1": "D"}}})

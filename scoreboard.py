@@ -14,7 +14,8 @@ week (rosterForCurrentScoringPeriod / rosterForMatchupPeriod), those are passed 
    "ws": {"EDM": [[puck drop ms, "CAR", 0/1] or 0, ...]}    every team's game on each day of the matchup (0 = no game)
    "pt": {player id: points today}, "pw": {player id: points this week},
    "dp": {day index: {team id: [[player id, slot, points, name, "POS", "TM"], ...]}},   each past day's real lineup
-   "fl": {day index: {player id: slot}}}      your own lineup today and on each later day (ESPN keeps one per day)
+   "fl": {day index: {player id: slot}},      your own lineup today and on each later day (ESPN keeps one per day)
+   "fa": {day index: {team id: {player id: slot}}}}   every team's lineup today and on each later day (matchup sheet)
 slot is F / D / G / UTIL (counted) or BN / IR (did not count). A player is listed when he scored or was in the lineup.
 """
 import math
@@ -81,24 +82,30 @@ def past_lineups(cfg, league, mp, start, today, abbr, fetch=None):
     return out
 
 
-def future_lineups(cfg, start, today, length, fetch=None):
-    """Your own lineup on today and each later day of this matchup. ESPN keeps a separate lineup for every day (you can
-    set Wednesday's on Monday), so the current roster's slots are only right for the current day. One small ESPN
-    request per day (the same view ESPN's own roster page loads when you move to another date).
-    {day index: {player id: "F" | "D" | "UTIL" | "G" | "BN" | "IR"}}. A day that cannot be read is left out, and the
-    page then says it is showing the current lineup for that day and gives no lineup fixes."""
+def future_lineups(cfg, start, today, length, fetch=None, every=False):
+    """Lineups on today and each later day of this matchup. ESPN keeps a separate lineup for every day (you can set
+    Wednesday's on Monday), so the current roster's slots are only right for the current day. One ESPN request per day
+    (the same view ESPN's own roster page loads when you move to another date).
+    every=False: your own lineup, {day index: {player id: "F" | "D" | "UTIL" | "G" | "BN" | "IR"}}.
+    every=True: every team in the league, {day index: {team id: {player id: slot}}}, so the matchup sheet can show who
+    each side has playing on a later day. A day (or team) that cannot be read is left out, and the page then says it is
+    showing the current lineup for that day (and the Roster tab gives no lineup fixes for it)."""
     fetch = fetch or A.espn_get
     base = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/fhl/seasons/{cfg['season']}/segments/0/leagues/{cfg['league']}"
     me = cfg["team"]
     out = {}
     for i in range(max(0, today), length):
+        params = [("view", "mRoster"), ("scoringPeriodId", start + i)]
+        if not every:
+            params.insert(1, ("forTeamId", me))
         try:
-            js = fetch(base, cfg["cookies"], params=[("view", "mRoster"), ("forTeamId", me), ("scoringPeriodId", start + i)])
+            js = fetch(base, cfg["cookies"], params=params)
         except (Exception, SystemExit) as e:         # an extra: one bad day never breaks the build
-            print(f"  your lineup for day {i + 1} skipped ({type(e).__name__}: {e})")
+            print(f"  lineups for day {i + 1} skipped ({type(e).__name__}: {e})")
             continue
+        teams = {}
         for t in (js.get("teams") or []):
-            if t.get("id") != me:
+            if t.get("id") is None or (not every and t.get("id") != me):
                 continue
             day = {}
             for e in ((t.get("roster") or {}).get("entries") or []):
@@ -106,7 +113,12 @@ def future_lineups(cfg, start, today, length, fetch=None):
                 if pid is not None and e.get("lineupSlotId") is not None:
                     day[str(pid)] = A.slot_name(e.get("lineupSlotId"))
             if day:
-                out[str(i)] = day
+                teams[str(t["id"])] = day
+        if every:
+            if teams:
+                out[str(i)] = teams
+        elif str(me) in teams:
+            out[str(i)] = teams[str(me)]
     return out
 
 
@@ -196,9 +208,16 @@ def build(cfg, data, league, standings, now_ms):
         print(f"  past lineups skipped ({type(e).__name__}: {e})")
         dp = {}
     try:
-        fl = future_lineups(cfg, start, today, length)
+        fa = future_lineups(cfg, start, today, length, every=True)
     except Exception as e:
-        print(f"  future lineups skipped ({type(e).__name__}: {e})")
-        fl = {}
+        print(f"  league lineups skipped ({type(e).__name__}: {e})")
+        fa = {}
+    fl = {d: v[str(me)] for d, v in fa.items() if str(me) in v}
+    if any(str(i) not in fl for i in range(today, length)):       # fall back to the one-team request for days the league call missed
+        try:
+            for d, v in future_lineups(cfg, start, today, length).items():
+                fl.setdefault(d, v)
+        except Exception as e:
+            print(f"  future lineups skipped ({type(e).__name__}: {e})")
     return {"mp": mp, "dates": clock["dates"], "labels": clock["labels"], "today": today,
-            "games": out, "tn": tonight(data, sp), "ws": week_games(games, abbr, start, end), "pt": pt, "pw": pw, "done": not left_periods, "dp": dp, "fl": fl}
+            "games": out, "tn": tonight(data, sp), "ws": week_games(games, abbr, start, end), "pt": pt, "pw": pw, "done": not left_periods, "dp": dp, "fl": fl, "fa": fa}
