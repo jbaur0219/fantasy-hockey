@@ -1143,7 +1143,10 @@ function uiDecorate(){
   $$('a.pl:not([data-av])').forEach(function(a){
     a.setAttribute('data-av','1');
     var id=a.getAttribute('data-id'),p=ALL[id];
-    if(!a.hasAttribute('data-noav'))a.insertAdjacentHTML('beforebegin',avHtml(id,p&&p.tm));
+    /* no headshot for a name inside a sentence or list item: an inline circle taller than the line pushes lines apart
+       and its team-logo badge overlaps the line below */
+    if(!a.hasAttribute('data-noav')&&!a.closest('li,.why,p'))a.insertAdjacentHTML('beforebegin',avHtml(id,p&&p.tm));
+    else a.setAttribute('data-noav','1');
     if(mob&&a.closest('td')&&!a.hasAttribute('data-noav')&&a.children.length===0){a.title=a.textContent;a.textContent=shortName(a.textContent);}
   });
 }
