@@ -1754,7 +1754,8 @@ function glWrap(c){
 /* ---------- sheet (player card) ---------- */
 var SH={open:false,closing:0};
 function spSet(v){var w=document.querySelector('.wrap'),m=document.getElementById('modal');
-  [w,m].forEach(function(e){if(!e)return;if(v==null)e.style.removeProperty('--sp');else e.style.setProperty('--sp',String(v));});}
+  if(w){if(v==null)w.style.removeProperty('--sp');else w.style.setProperty('--sp',String(v));}
+  if(m){if(v==null)m.style.removeProperty('--spm');else m.style.setProperty('--spm',String(v));}}
 function sheetOpen(){
   var m=document.getElementById('modal'),bx=m.querySelector('.box'),de=document.documentElement;if(!bx)return;
   clearTimeout(SH.closing);SH.closing_busy=false;
@@ -2657,7 +2658,10 @@ function muImg(t){return t.logo?'<img src="'+esc(t.logo)+'" loading="lazy" alt="
 function muMono(t,cls){return '<span class="mono '+(cls||'')+'" style="--h:'+muHue(t.id)+'">'+esc(muInit(t.name))+muImg(t)+'</span>';}
 function muMe(g){var me=null;D.teams.forEach(function(t){if(t.me)me=t.id;});return me!=null&&(g.a===me||g.b===me);}
 function muDayTxt(S){var n=S.dates.length,i=Math.min(S.today,n-1);return S.done?'Final':'Day '+(i+1)+' of '+n;}
-function muWin(g){var a=Math.round(g.pa*100);return {a:a,b:100-a};}
+/* your own matchup uses the same win chance as the Today card (the league scoreboard's figure can differ by a point) */
+function muWin(g){var a=Math.round(g.pa*100),M=D.matchup;
+  if(M&&M.p_win!=null&&!(D.sb&&D.sb.done)&&muMe(g)){var me=Math.round(M.p_win*100),mi=null;D.teams.forEach(function(t){if(t.me)mi=t.id;});a=g.a===mi?me:100-me;}
+  return {a:a,b:100-a};}
 function muTile(g,i,S){
   var A=muTeam(g.a),B=muTeam(g.b),w=muWin(g),lead=g.as===g.bs?0:(g.as>g.bs?1:-1),mine=muMe(g);
   function row(t,sc,pr,on,left){

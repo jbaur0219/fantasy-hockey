@@ -374,6 +374,10 @@ svg .k{fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejo
 #bnav.min .lens{opacity:0}
 
 /* ---------- sheet open: the page steps back ---------- */
+/* --sp (how far the sheet is up, 0..1) changes every frame while you pull a sheet. Registered as non-inherited so setting it on
+   .wrap restyles only .wrap, not its ~4,500 descendants (an inherited custom property restyled the whole page every frame).
+   The dimming layer reads its own copy, --spm, set on #modal. */
+@property --sp{syntax:'<number>';inherits:false;initial-value:0}
 /* The black behind the stepped-back page is the html background, NOT a fixed full-screen layer: iOS 26 samples fixed layers at the top edge to tint the status-bar area and kept a dark strip after a sheet closed (2026-11-24). */
 html.sheet-on{background:#000}
 html.sheet-on .wrap{transform:translateY(calc(var(--sp,0) * (var(--sat) + 10px))) scale(calc(1 - var(--sp,0) * .075));
@@ -382,7 +386,7 @@ html.sh-anim .wrap{transition:transform .5s var(--soft-spring)}
 html.sheet-on #gnav,html.sheet-on #bnav,html.sheet-on #rfbar{opacity:0;pointer-events:none}
 #modal{display:none;position:fixed;inset:0;z-index:100;padding:0!important;align-items:flex-end!important;justify-content:center;background:none!important;
   -webkit-backdrop-filter:none;backdrop-filter:none;animation:none}
-#modal:before{content:'';position:fixed;inset:0;background:#000;opacity:calc(var(--sp,0) * .22);transition:opacity .5s var(--soft-spring)}
+#modal:before{content:'';position:fixed;inset:0;background:#000;opacity:calc(var(--spm,0) * .22);transition:opacity .5s var(--soft-spring)}
 #modal.open{display:flex}
 #modal .box{position:relative;width:100%;max-width:720px;height:calc(100dvh - var(--sat) - 10px);max-height:none!important;margin:0 auto;border-radius:38px 38px 0 0;
   background:var(--card);padding:0 20px calc(34px + var(--sab));overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
