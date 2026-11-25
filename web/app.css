@@ -1269,3 +1269,41 @@ a.pl:after{content:'';position:absolute;inset:-7px -3px}
 .au-s{font-size:13px;line-height:1.35;margin-top:1px;color:var(--label2)}.au-s b{color:var(--label);font-weight:600}
 .step.au ul.why{margin:6px 0 0;padding-left:18px}
 .step.au .au-o{margin-top:6px;line-height:1.4}
+
+/* ---------- Today: Tonight (2026-11-25) ----------
+   One tile per game in a sideways row (Apple Sports style) so Today stays short. Tiles are equal height; the row bleeds
+   to the screen edges and snaps tile by tile. Press feedback is transform only. */
+.tn .tn-r b{color:var(--label);font-weight:600;font-variant-numeric:tabular-nums}
+.tn .tn-r .sb-live{margin-right:2px}
+.tn-car{display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;margin:0 -16px;padding:0 16px;scroll-padding:0 16px;scroll-snap-type:x mandatory;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y}
+.tn-car::-webkit-scrollbar{display:none}
+.tn-g{flex:0 0 174px;min-width:0;scroll-snap-align:start;display:flex;flex-direction:column;padding:13px 14px 13px;border:0;border-radius:24px;
+  background:var(--card);color:var(--label);font:inherit;text-align:left;cursor:pointer;transition:transform .45s var(--spring)}
+.tn-g:active{transform:scale(.965);transition:transform .14s var(--ease)}
+.tn-car.few .tn-g{flex:1 1 0}
+.tn-st{display:flex;align-items:center;gap:6px;height:18px;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--label2);font-variant-numeric:tabular-nums;letter-spacing:-.005em;white-space:nowrap}
+.tn-g.live .tn-st{color:var(--red)}
+.tn-tm{display:flex;align-items:center;gap:9px;height:30px}
+.tn-lgw{display:inline-flex;flex:none;width:24px;height:24px}
+.tn-lg{width:24px;height:24px;object-fit:contain;flex:none}
+.tn-ab{font-size:17px;font-weight:600;letter-spacing:-.02em;color:var(--label2)}
+.tn-tm.my .tn-ab{color:var(--label)}
+.tn-sc{margin-left:auto;font-size:21px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.tn-tm.lo .tn-ab,.tn-tm.lo .tn-sc{color:var(--label3)}
+.tn-ps{flex:1;display:flex;flex-direction:column;gap:8px;margin-top:10px;padding-top:11px;border-top:.5px solid var(--sep)}
+.tn-p{display:flex;align-items:center;gap:8px;min-width:0;height:26px}
+.tn-p.off{opacity:.42}
+.tn-av{display:inline-flex;flex:none}
+.tn-av .av{width:26px!important;height:26px!important;margin:0!important;background:var(--fill3)}
+.tn-av .av .tl{display:none!important}
+.tn-pn{flex:1;min-width:0;font-size:15px;font-weight:500;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn-pn i{font-style:normal;font-size:11px;font-weight:600;color:var(--label2);margin-left:5px;letter-spacing:0}
+.tn-pv{flex:none;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.tn-pv.pj{color:var(--label2);font-weight:500}.tn-pv.z{color:var(--label3);font-weight:500}.tn-pv.up{color:var(--green)}
+.tn-more,.tn-none{font-size:13px;color:var(--label2);padding-left:34px}.tn-none{padding-left:0}
+.tn-op{display:block;margin-top:11px;font-size:13px;line-height:17px;color:var(--label2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn-op b{font-weight:600;color:var(--label);margin-right:5px;font-variant-numeric:tabular-nums}
+/* the sideways row must never widen the Today card (a grid item grows to its content's min width otherwise) */
+.card[data-ut="Today"]>.cbody{grid-template-columns:minmax(0,1fr)}
+.card[data-ut="Today"] .cin,#livebox,.tn{min-width:0}

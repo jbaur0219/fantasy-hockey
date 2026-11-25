@@ -3283,27 +3283,91 @@ function lvBox(e,sm){
   });
 }
 function lvSum(list){var s=0,n=0;lvStarters(list).forEach(function(p){var L=LIVE.pts[p.id];if(L){s+=L.p;n++;}});return {s:s,n:n};}
-function lvHtml(){
-  var mine=LIVE.ev.filter(function(e){return lvMineIn(e).length;});
-  if(!mine.length)return '';
-  var on=mine.some(function(e){return e.st==='in';}),any=mine.some(function(e){return e.st!=='pre';});
-  var h='<div class="sec"><div class="sec-h"><span>Tonight</span>'+(on?'<span class="sec-r"><span class="sb-live"></span>Live</span>':'')+'</div><div class="grp">';
-  if(any){
-    var me=lvSum(D.mine),op=lvSum(lvOpp()),M=D.matchup;
-    h+='<div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">You +'+me.s.toFixed(1)+(M?' &middot; '+esc(M.opp_name||'Them')+' +'+op.s.toFixed(1):'')+'</div><div class="row-s">Points from tonight\'s games so far (close estimate)</div></div></div>';
+/* ---------- Tonight (Today tab): one tile per game that matters to your matchup, Apple Sports style (2026-11-25) ----------
+   A sideways row of game tiles so Today stays short: both teams' logos, puck drop / live score / final, your players in
+   that game with their gray projection (or live points), and the opponent's starters in the same game. The header sums
+   tonight for both sides. Tapping a tile opens the matchup sheet (both full lineups). Projections and "not playing" use
+   the matchup sheet's own rules (muStatus, p.out) so the two screens always agree. */
+function lvMe(){var t=(D.teams||[]).filter(function(x){return x.me;})[0];return t?t.players:(D.mine||[]);}
+function lvIn(list,e){var a=[e.h.ab,e.a.ab];return (list||[]).filter(function(p){return a.indexOf(lvAb(p.tm))>=0;});}
+function lvSt(p){var S=D.sb;if(!S||!S.tn)return {on:true,np:false};try{return muStatus(p,S);}catch(x){return {on:true,np:false};}}
+function lvOut(p){return p.inj==='OUT'||p.inj==='INJURY_RESERVE'||p.inj==='SUSPENSION'||(p.grp==='G'&&p.ns);}
+function lvPlays(p){return p.slot!=='BN'&&p.slot!=='IR'&&!lvOut(p);}
+function lvLogo(t){
+  if(!t.lg)return '<span class="tn-lg nl"></span>';
+  var lp=String(t.lg).replace(/^https?:\/\/a\.espncdn\.com/,''),rs=function(x){return ESPN_RS+x+'&w=72&h=72&scale=crop';};
+  if(lp===t.lg)return '<img class="tn-lg" src="'+esc(t.lg)+'" alt="" decoding="async" onerror="this.style.visibility=\'hidden\'">';
+  var dk=lp.replace('/500/','/500-dark/');
+  return '<picture class="tn-lgw">'+(dk!==lp?'<source media="(prefers-color-scheme: dark)" srcset="'+rs(dk)+'">':'')
+    +'<img class="tn-lg" src="'+rs(lp)+'" data-full="'+esc(t.lg)+'" alt="" decoding="async" onerror="lgErr(this)"></picture>';
+}
+window.lgErr=function(i){           /* dark logo missing -> light one -> the original file -> nothing (the abbreviation stays) */
+  var s=i.parentNode&&i.parentNode.querySelector('source');
+  if(s){s.parentNode.removeChild(s);i.src=i.src;return;}
+  var f=i.getAttribute('data-full');if(f){i.removeAttribute('data-full');i.src=f;return;}
+  i.style.visibility='hidden';
+};
+function lvLast(n){var w=String(n||'').trim().split(/\s+/);return w.length>1?w.slice(1).join(' '):n;}
+function lvPts(p,e){
+  var L=LIVE.pts[p.id];
+  if(e.st!=='pre')return L?'<span class="tn-pv'+(L.p>0?' up':'')+'">'+(L.p>0?'+':'')+L.p.toFixed(1)+'</span>':'<span class="tn-pv z">0.0</span>';
+  if(lvOut(p))return '<span class="tn-pv z">&ndash;</span>';
+  return p.out!=null?'<span class="tn-pv pj">'+f(p.out,1)+'</span>':'';
+}
+function lvTile(e,mi){
+  var mine=lvIn(lvMe(),e),theirs=lvStarters(lvIn(lvOpp(),e)),pre=e.st==='pre',fin=e.st==='post';
+  var mt={};mine.forEach(function(p){mt[lvAb(p.tm)]=1;});
+  mine.sort(function(a,b){return (lvPlays(b)-lvPlays(a))||((b.out||0)-(a.out||0));});
+  var st=pre?etTime(e.start):(fin?'Final'+(/OT|SO/.test(e.det)?(/SO/.test(e.det)?'/SO':'/OT'):''):'<span class="sb-live"></span>'+esc(String(e.det||'Live').replace(/\s*-\s*/,' · ')));
+  function tm(t,o){
+    var win=fin&&t.sc>o.sc;
+    return '<span class="tn-tm'+(mt[t.ab]?' my':'')+(fin&&!win?' lo':'')+'">'+lvLogo(t)+'<span class="tn-ab">'+esc(t.ab)+'</span>'+(pre?'':'<span class="tn-sc">'+t.sc+'</span>')+'</span>';
   }
-  mine.sort(function(a,b){var o={in:0,pre:1,post:2};return (o[a.st]-o[b.st])||(a.start-b.start);});
-  mine.forEach(function(e){
-    var ps=lvMineIn(e),bench=function(p){return p.slot==='BN'||p.slot==='IR';};
-    var who=ps.map(function(p){var L=LIVE.pts[p.id];return esc(shortName(p.n))+(L&&e.st!=='pre'?' <b>'+(L.p>=0?'+':'')+L.p.toFixed(1)+'</b>':'')+(bench(p)?' <span class="muted">(bench)</span>':'');}).join(', ');
-    var sc=e.st==='pre'?etTime(e.start):(e.a.ab+' '+e.a.sc+' &ndash; '+e.h.sc+' '+e.h.ab);
-    h+='<div class="row"><span class="ric '+(e.st==='in'?'wn':'gy')+'">'+SF.clock+'</span><div class="row-m"><div class="row-t">'+sc+(e.st!=='pre'?' <span class="muted">&middot; '+esc(e.det)+'</span>':' <span class="muted">&middot; '+esc(e.a.ab+' @ '+e.h.ab)+'</span>')+'</div><div class="row-s">'+who+'</div></div></div>';
-  });
-  h+='</div>';
-  if(any)h+='<div class="sec-f">Power-play points show up after the next full update.'+(LIVE.at?' Checked '+etTime(LIVE.at)+'.':'')+'</div>';
+  var show=mine.slice(0,3),more=mine.length-show.length;
+  var ps=show.map(function(p){
+    var bn=p.slot==='BN'||p.slot==='IR',off=bn||lvOut(p);
+    return '<span class="tn-p'+(off?' off':'')+'"><span class="tn-av">'+avHtml(p.id,p.tm)+'</span><span class="tn-pn">'+esc(lvLast(p.n))+(bn?'<i>BN</i>':(p.grp==='G'&&p.ns?'<i>Not starting</i>':''))+'</span>'+(bn?'':lvPts(p,e))+'</span>';
+  }).join('');
+  if(more>0)ps+='<span class="tn-more">+'+more+' more</span>';
+  if(!mine.length)ps='<span class="tn-none">None of yours</span>';
+  var op='';
+  if(theirs.length){
+    var os=0;theirs.forEach(function(p){var L=LIVE.pts[p.id];if(L)os+=L.p;});
+    op='<span class="tn-op"><b>'+(pre?'Them':'Them '+(os>0?'+':'')+os.toFixed(1))+'</b>'+esc(theirs.map(function(p){return lvLast(p.n);}).join(', '))+'</span>';
+  }
+  var tag=mi>=0?'button type="button"':'div',cls='tn-g'+(e.st==='in'?' live':'')+(fin?' fin':'');
+  var lbl=e.a.ab+' at '+e.h.ab+', '+(pre?etTime(e.start):(e.a.sc+' to '+e.h.sc))+'. Yours: '+mine.map(function(p){return lvLast(p.n);}).join(', ');
+  return '<'+tag+' class="'+cls+'"'+(mi>=0?' data-mu="'+mi+'"':'')+' aria-label="'+esc(lbl)+'"><span class="tn-st">'+st+'</span>'+tm(e.a,e.h)+tm(e.h,e.a)
+    +'<span class="tn-ps">'+ps+'</span>'+op+'</'+(mi>=0?'button':'div')+'>';
+}
+function lvHtml(){
+  var me=lvMe(),them=lvStarters(lvOpp());
+  var evs=LIVE.ev.filter(function(e){return lvIn(me,e).length||lvIn(them,e).length;});
+  if(!evs.some(function(e){return lvIn(me,e).length;}))return '';
+  var on=evs.some(function(e){return e.st==='in';}),any=evs.some(function(e){return e.st!=='pre';}),M=D.matchup;
+  var mi=(typeof muMine==='function'&&D.sb)?muMine():-1;
+  var o={in:0,pre:1,post:2};
+  evs.sort(function(a,b){return (o[a.st]-o[b.st])||(a.start-b.start)||(lvIn(me,b).length-lvIn(me,a).length);});
+  /* the head-to-head for tonight: points so far once a game is on, projected points before */
+  var r='';
+  if(any){var a=lvSum(me),b=lvSum(them);r='You <b>+'+a.s.toFixed(1)+'</b>'+(M?' &middot; Them <b>+'+b.s.toFixed(1)+'</b>':'');}
+  else{
+    var pj=function(L){var s=0;L.forEach(function(p){if(!lvPlays(p))return;if(!evs.some(function(e){return lvIn([p],e).length;}))return;var st=lvSt(p);if(st.np)return;s+=p.out||0;});return s;};
+    r='Proj <b>'+f(pj(lvStarters(me)),1)+'</b>'+(M?' &ndash; <b>'+f(pj(them),1)+'</b>':'');
+  }
+  var h='<div class="sec tn"><div class="sec-h"><span>Tonight</span><span class="sec-r tn-r">'+(on?'<span class="sb-live"></span>':'')+r+'</span></div>';
+  h+='<div class="tn-car'+(evs.length<=2?' few':'')+'" id="tnCar">'+evs.map(function(e){return lvTile(e,mi);}).join('')+'</div>';
+  var n=lvStarters(me).filter(function(p){return lvPlays(p)&&evs.some(function(e){return lvIn([p],e).length;});}).length;
+  h+='<div class="sec-f">'+(any?'Live points are a close estimate.':n+' of yours play tonight'+(mi>=0?'. Tap a game for both lineups.':'.'))+'</div>';
   return h+'</div>';
 }
-function lvPaint(){var el=document.getElementById('livebox');if(el)el.innerHTML=lvHtml();try{rdLive();}catch(e){}}
+function lvPaint(){
+  var el=document.getElementById('livebox');if(!el)return;
+  var c=document.getElementById('tnCar'),x=c?c.scrollLeft:0;   /* a refresh never throws you back to the first game */
+  el.innerHTML=lvHtml();
+  c=document.getElementById('tnCar');if(c&&x)c.scrollLeft=x;
+  try{rdLive();}catch(e){}
+}
 function lvLater(ms){clearTimeout(LIVE.tm);LIVE.tm=setTimeout(lvFetch,ms);}
 function lvNext(){
   var mine=LIVE.ev.filter(function(e){return lvMineIn(e).length;}),now=Date.now();
@@ -3319,7 +3383,7 @@ function lvFetch(){
   fetch(LV_URL+'scoreboard?dates='+lvDay(Date.now()-5*3600000)).then(lvJ).then(function(s){
     LIVE.ev=(s.events||[]).map(function(e){
       var c=(e.competitions||[])[0]||{},cs=c.competitors||[];
-      var side=function(w){var x=cs.filter(function(q){return q.homeAway===w;})[0]||{};return {ab:lvAb(x.team&&x.team.abbreviation),sc:+x.score||0,w:!!x.winner};};
+      var side=function(w){var x=cs.filter(function(q){return q.homeAway===w;})[0]||{};return {ab:lvAb(x.team&&x.team.abbreviation),sc:+x.score||0,w:!!x.winner,lg:(x.team&&x.team.logo)||''};};
       var t=(e.status&&e.status.type)||{};
       return {id:e.id,st:t.state||'pre',det:t.shortDetail||'',start:Date.parse(e.date),h:side('home'),a:side('away')};
     });
