@@ -1034,6 +1034,25 @@ function appServerKey(){   /* on the always-on server the alert key comes from t
 function appSame(sub,key){
   try{var k=new Uint8Array(sub.options.applicationServerKey),w=appB64(key);if(k.length!==w.length)return false;for(var i=0;i<k.length;i++)if(k[i]!==w[i])return false;return true;}catch(e){return true;}
 }
+function appCheck(){   /* stays hidden while alerts work; says what is wrong (and offers a test) when they do not */
+  var always=/[?&]alerts\b/.test(location.search);
+  fetch('api/alerts',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).then(function(j){
+    if(!j)return;
+    var last=(j.recent||[]).slice(-1)[0],bad=null;
+    if(!j.phones)bad='This phone is not linked to the server yet. Close the app and open it again.';
+    else if(!j.on)bad='Alerts are switched off on the server (SEND_ALERTS).';
+    else if(last&&last.phones.some(function(p){return !p.ok;}))bad='The last alert did not reach this phone ('+last.phones.filter(function(p){return !p.ok;}).map(function(p){return p.code+' '+p.detail;}).join('; ')+').';
+    if(!bad&&!always){appBox('');return;}
+    appBox('<b>Alerts:</b> <span class="muted" id="appMsg">'+esc(bad||'Working. Last alert: '+(last?last.title:'none yet')+'.')+'</span> <button class="chip-btn" id="appTest" style="margin-left:6px">Send test alert</button>');
+    var b=document.getElementById('appTest');
+    if(b)b.addEventListener('click',function(){
+      var m=document.getElementById('appMsg');if(m)m.textContent='Sending...';
+      fetch('api/alerts/test',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(function(r){return r.json();}).then(function(t){
+        if(m)m.textContent=t.ok?'Sent. It should appear in a few seconds.':(t.why||('Not delivered: '+(t.errors||[]).join('; ')||'unknown'));
+      }).catch(function(){if(m)m.textContent='Could not reach the server.';});
+    });
+  }).catch(function(){});
+}
 function appRender(done){
   var mobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   var canPush=('serviceWorker' in navigator)&&('PushManager' in window)&&('Notification' in window);
@@ -1066,7 +1085,8 @@ function appRender(done){
           return;
         }
         if(srvKey){   /* quietly (re)register this phone with the server every time the app opens */
-          fetch('api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)}).catch(function(){});
+          fetch('api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)}).catch(function(){})
+            .then(function(){return new Promise(function(r){setTimeout(r,2500);});}).then(appCheck);   /* give the confirmation push a moment, then see how it went */
           appBox('');return;
         }
         if(!/[?&]setup\b/.test(location.search)){appBox('');return;}   /* GitHub Pages: alerts already on, hide the box (add ?setup to the address to bring the phone code back) */

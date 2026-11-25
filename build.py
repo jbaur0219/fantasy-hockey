@@ -181,6 +181,36 @@ def notify_texts(site_data, now_ms):
     return morning, reminder
 
 
+INJURY_WORD = {"OUT": "is out", "INJURY_RESERVE": "is on injured reserve", "SUSPENSION": "is suspended"}
+
+
+def injury_alerts(site_data, now_ms):
+    """{player id: push} for every player on your roster who is OUT / on IR / suspended and not already sitting in an IR
+    spot. The server sends a push the first time a player shows up here (a new injury), with the plan's answer: the pickup
+    that replaces him, or the plain statement that no pickup beats keeping him."""
+    clock = site_data.get("clock")
+    moves = (site_data.get("gameplan") or {}).get("moves") or []
+    out = {}
+    for p in site_data.get("mine") or []:
+        if p.get("inj") not in INJURY_WORD or p.get("slot") == "IR":
+            continue
+        mv = next((m for m in moves if (m.get("drop") or {}).get("id") == p["id"]), None) or (moves[0] if moves else None)
+        head = f"{p['n']} {INJURY_WORD[p['inj']]}."
+        if mv:
+            dl = _deadline(clock, mv["t"]) if clock and mv.get("t") is not None else None
+            when = mv["day"].split()[0] + (f" before {dl}" if dl else "")
+            if (mv.get("drop") or {}).get("id") == p["id"]:     # the plan already replaces him
+                act = f"{'Move' if mv.get('ir') else 'Drop'} {p['n']}{' to IR' if mv.get('ir') else ''} and add {mv['add']['n']}"
+            else:
+                act = f"Next move: add {mv['add']['n']}, drop {mv['drop']['n']}"
+            body = f"{head} {act} ({mv['add']['tm']}) {when} (+{mv['gain']:.1f} pts)."
+        else:
+            body = f"{head} No pickup beats keeping him this week, so no move is needed."
+        out[str(p["id"])] = {"title": f"Fantasy Hockey \u00b7 {p['n']} {INJURY_WORD[p['inj']].replace('is ', '')}",
+                             "body": body, "url": "./", "tag": f"fh-injury-{p['id']}"}
+    return out
+
+
 def write_notify_payload(site_data, now_ms):
     """The morning push notification (notify_payload.json) and, when today has moves, the pre-game reminder
     (reminder_payload.json). The server sends the reminder with the pre-game build; the plan only lists moves you
@@ -194,6 +224,10 @@ def write_notify_payload(site_data, now_ms):
         print(f"  reminder text: {reminder['title']} | {reminder['body']}")
     elif rp.exists():
         rp.unlink()
+    try:                                                    # who is hurt right now, with the plan's answer for each
+        Path("injury_state.json").write_text(json.dumps(injury_alerts(site_data, now_ms)), encoding="utf-8")
+    except Exception as e:
+        print(f"  injury alerts skipped ({type(e).__name__}: {e})")
 
 
 def main():

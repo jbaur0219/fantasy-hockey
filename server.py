@@ -195,10 +195,10 @@ def add_sub(sub, user=None):
         return False
     with LOCK:
         old = {s.get("endpoint"): s for s in load_subs()}
-        welcomed = bool(old.get(sub["endpoint"], {}).get("welcomed"))
+        welcomed = bool(old.get(sub["endpoint"], {}).get("welcome_ok"))   # only a push that went through counts
         subs = [s for s in old.values() if s.get("endpoint") != sub["endpoint"]]
         row = {"endpoint": sub["endpoint"], "keys": {k: str(v)[:200] for k, v in sub["keys"].items()
-                                                     if k in ("p256dh", "auth")}, "welcomed": welcomed}
+                                                     if k in ("p256dh", "auth")}, "welcome_ok": welcomed}
         if user:
             row["user"] = user                   # whose phone (alerts are still the owner's league for everyone)
         subs.append(row)
@@ -209,36 +209,65 @@ def add_sub(sub, user=None):
     return True
 
 
-def welcome(endpoint):
-    """One confirmation push per phone, so you know alerts really work."""
+ALERT_LOG = DATA / "alert_log.json"
+
+
+def _short(endpoint):
+    return "..." + str(endpoint)[-10:]
+
+
+def record_sends(title, results, kind="alert"):
+    """Keep the last 20 pushes and what each phone's push service answered, so a silent phone can be diagnosed."""
+    with LOCK:
+        try:
+            rows = json.loads(ALERT_LOG.read_text(encoding="utf-8"))
+        except Exception:
+            rows = []
+        rows.append({"at": int(time.time()), "kind": kind, "title": str(title)[:80],
+                     "phones": [{"phone": _short(r["endpoint"]), "ok": r["ok"], "code": r["code"],
+                                 "detail": r["detail"]} for r in results]})
+        write_atomic(ALERT_LOG, json.dumps(rows[-20:]))
+    for r in results:
+        log(f"push '{str(title)[:50]}' to {_short(r['endpoint'])}: "
+            + ("sent" if r["ok"] else f"FAILED {r['code']} {r['detail']}"))
+
+
+def push_to(subs, payload, kind="alert"):
+    """Send to these phones now. Phones whose alert link the phone maker says is gone are forgotten (the app links the
+    phone again by itself next time it opens). Returns the per-phone results."""
+    if not subs:
+        log("push skipped: no phone is linked yet")
+        return []
+    import notify as N
     try:
-        f = DATA / f"welcome-{abs(hash(endpoint)) % 10**8}.json"
-        write_atomic(f, json.dumps({"title": "Alerts are on", "body": "Your daily Fantasy Hockey alerts will show up here.",
-                                 "url": "./", "tag": "fh-welcome"}), encoding="utf-8")
-        env = push_env()
-        cfg = json.loads(env["PUSH_CONFIG"])
-        cfg["subscriptions"] = [x for x in cfg["subscriptions"] if x.get("endpoint") == endpoint]
-        env["PUSH_CONFIG"] = json.dumps(cfg)
-        r = subprocess.run([sys.executable, str(CODE / "notify.py"), str(f)], cwd=CODE, timeout=60, env=env,
-                           capture_output=True, text=True)
-        log("welcome push: " + (r.stdout.strip().splitlines() or ["no output"])[-1][:160])
-        f.unlink(missing_ok=True)
+        res = N.send({"vapid_private": vapid()["private"], "subscriptions": subs}, payload)
+    except Exception as e:                                       # never let an alert break a build
+        log(f"push crashed: {type(e).__name__}: {e}")
+        return []
+    record_sends(payload.get("title", ""), res, kind)
+    dead = {r["endpoint"] for r in res if r.get("dead")}
+    if dead:
         with LOCK:
-            subs = load_subs()
-            for x in subs:
-                if x.get("endpoint") == endpoint:
-                    x["welcomed"] = True
-            write_atomic(DATA / "subs.json", json.dumps(subs))
+            write_atomic(DATA / "subs.json", json.dumps([x for x in load_subs() if x.get("endpoint") not in dead]))
+    return res
+
+
+def welcome(endpoint):
+    """One confirmation push per phone, so you know alerts really work. Only a push that went through counts: a failed
+    one is tried again the next time the app opens (it used to be marked done even when it failed)."""
+    try:
+        mine = [x for x in load_subs() if x.get("endpoint") == endpoint]
+        res = push_to(mine, {"title": "Alerts are on", "body": "Your Fantasy Hockey alerts will show up here.",
+                             "url": "./", "tag": "fh-welcome"}, "welcome")
+        if res and all(r["ok"] for r in res):
+            with LOCK:
+                subs = load_subs()
+                for x in subs:
+                    if x.get("endpoint") == endpoint:
+                        x["welcome_ok"] = True
+                write_atomic(DATA / "subs.json", json.dumps(subs))
     except Exception as e:
         log(f"welcome push failed: {e}")
-
-
-def push_env():
-    env = dict(os.environ)
-    subs = load_subs()
-    if subs:
-        env["PUSH_CONFIG"] = json.dumps({"vapid_private": vapid()["private"], "subscriptions": subs})
-    return env
 
 
 # ---------------------------------------------------------------- building
@@ -247,7 +276,7 @@ def notify(payload_file):
         log("alert skipped (SEND_ALERTS is off)")
         return
     try:
-        subprocess.run([sys.executable, str(CODE / "notify.py"), str(payload_file)], cwd=CODE, timeout=120, env=push_env())
+        push_to(load_subs(), json.loads(Path(payload_file).read_text(encoding="utf-8")))
     except Exception as e:
         log(f"alert failed: {e}")
 
@@ -256,6 +285,34 @@ def alert(title, body, tag="fh-health"):
     f = DATA / "alert.json"
     write_atomic(f, json.dumps({"title": title, "body": body, "url": "./", "tag": tag}))
     notify(f)
+
+
+
+def alerts_info():
+    """What the app needs to tell you why alerts are quiet: phones linked, whether the switch is on, the last pushes."""
+    try:
+        rows = json.loads(ALERT_LOG.read_text(encoding="utf-8"))
+    except Exception:
+        rows = []
+    return {"on": SEND_ALERTS, "phones": len(load_subs()), "recent": rows[-5:]}
+
+
+TEST = {"at": 0.0}
+
+
+def send_test():
+    """A test push to every linked phone, on demand (once every 20 s). Works even with SEND_ALERTS off, so you can tell
+    a broken phone link from a switched-off morning alert. Says plainly what each phone's push service answered."""
+    if time.time() - TEST["at"] < 20:
+        return {"ok": False, "why": "wait a few seconds", **alerts_info()}
+    TEST["at"] = time.time()
+    subs = load_subs()
+    if not subs:
+        return {"ok": False, "why": "no phone is linked to the server yet", **alerts_info()}
+    res = push_to(subs, {"title": "Test alert", "body": "If you can read this, alerts work on this phone.",
+                         "url": "./", "tag": "fh-test"}, "test")
+    return {"ok": bool(res) and all(r["ok"] for r in res), "sent": sum(r["ok"] for r in res), "of": len(res),
+            "errors": [f"{r['code']} {r['detail']}" for r in res if not r["ok"]], **alerts_info()}
 
 
 LOGIN_SIGNS = ("rejected your login cookies", "Missing login cookies")
@@ -313,6 +370,29 @@ def _publish(site):
         shutil.rmtree(old, ignore_errors=True)
 
 
+def injury_alerts_for(work):
+    """Push once for each player who has just become OUT / IR / suspended on your roster. The very first build only
+    records who is already hurt, so turning this on never fires a burst of old news. A player who gets healthy and is
+    hurt again alerts again."""
+    try:
+        cur = read_json(work / "injury_state.json")
+        if not isinstance(cur, dict):
+            return
+        seen_f = DATA / "injury_seen.json"
+        seen = read_json(seen_f)
+        write_atomic(seen_f, json.dumps(sorted(cur)))
+        if seen is None:
+            log(f"injury alerts: started with {len(cur)} player(s) already hurt")
+            return
+        for pid in sorted(set(cur) - set(seen)):
+            log(f"injury alert: {cur[pid]['title']} | {cur[pid]['body']}")
+            f = DATA / "injury_alert.json"
+            write_atomic(f, json.dumps(cur[pid]))
+            notify(f)
+    except Exception as e:                                        # an extra: never fail a build over it
+        log(f"injury alerts skipped: {type(e).__name__}: {e}")
+
+
 def do_build(reason, keep):
     work = DATA / "work"
     shutil.rmtree(work, ignore_errors=True)
@@ -364,6 +444,7 @@ def do_build(reason, keep):
     if (work / "snapshot.json.gz").exists():
         shutil.copyfile(work / "snapshot.json.gz", DATA / "last_snapshot.json.gz")
     publish(site)
+    injury_alerts_for(work)
     ST["last_error"] = None
     log(f"build published in {time.time() - t0:.0f}s: {reason} ({why})")
     try:                                          # the app code changed while this build ran: put the newest code on top
@@ -769,7 +850,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         route = urlparse(self.path).path
-        if route not in ("/api/refresh", "/api/subscribe", "/api/login", "/api/signup", "/api/logout", "/api/invite"):
+        if route not in ("/api/refresh", "/api/subscribe", "/api/login", "/api/signup", "/api/logout", "/api/invite",
+                         "/api/alerts/test"):
             return self.json({"error": "not found"}, 404)
         try:
             n = int(self.headers.get("Content-Length") or 0)
@@ -811,6 +893,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"error": "sign in"}, 401)
         if route == "/api/subscribe":
             return self.json({"ok": add_sub(body, me and me["name"])})
+        if route == "/api/alerts/test":
+            return self.json(send_test())
         keep = body.get("keep")
         keep = None if keep in (None, "") else str(keep)[:300]
         self.json(request_refresh(str(body.get("reason") or "")[:40], keep, bool(body.get("force"))))
@@ -840,6 +924,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(status())
         if path == "/api/push":
             return self.json({"key": vapid()["public"]})
+        if path == "/api/alerts":
+            return self.json(alerts_info())
         if path.startswith("/api/"):
             return self.json({"error": "not found"}, 404)
         root = live_dir()
