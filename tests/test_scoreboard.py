@@ -60,3 +60,22 @@ class WeekGamesTest(unittest.TestCase):
         ws = SBD.week_games(games, abbr, 10, 12)
         self.assertEqual(ws["BUF"], [[100, "NYR", 1], 0, [300, "DET", 0]])
         self.assertEqual(ws["NYR"], [[100, "BUF", 0], 0, 0])
+
+
+class FutureLineupsTest(unittest.TestCase):
+    def test_reads_each_day_from_today_on(self):
+        import scoreboard as SBD
+        asked = []
+
+        def fake(url, cookies, params=None):
+            sp = dict(params)["scoringPeriodId"]
+            asked.append(sp)
+            if sp == 12:
+                raise RuntimeError("ESPN said no")
+            slot = 4 if sp == 11 else 7          # Wednesday: in a D slot; other days: bench
+            return {"teams": [{"id": 3, "roster": {"entries": [{"playerId": 99, "lineupSlotId": slot}]}},
+                              {"id": 4, "roster": {"entries": [{"playerId": 1, "lineupSlotId": 4}]}}]}
+        cfg = {"season": 2027, "league": 1, "cookies": {}, "team": 3}
+        fl = SBD.future_lineups(cfg, start=9, today=1, length=4, fetch=fake)
+        self.assertEqual(asked, [10, 11, 12])
+        self.assertEqual(fl, {"1": {"99": "BN"}, "2": {"99": "D"}})    # day 3 could not be read: left out

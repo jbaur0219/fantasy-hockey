@@ -136,7 +136,13 @@ var R={pos:'All',q:'',view:'day',day:null};
 try{R.view=localStorage.getItem('fh_rv')==='table'?'table':'day';}catch(e){}
 var RD_SLOTS=[['F','Forwards'],['D','Defense'],['UTIL','Utility'],['G','Goalies'],['BN','Bench'],['IR','Injured reserve']];
 function rdLineup(){var L=(D.rules&&D.rules.lineup)||{};return {F:L.F!=null?L.F:9,D:L.D!=null?L.D:5,UTIL:L.UTIL!=null?L.UTIL:1,G:L.G!=null?L.G:2};}
-function rdActive(p){return ['F','D','UTIL','G'].indexOf(p.slot)>=0;}
+/* ESPN keeps a lineup for every day. S.fl[day] = your lineup that day (read from ESPN for today and later days);
+   without it the current slots are used and the page says so. */
+function rdKnown(i,S){return !!(S&&S.fl&&S.fl[String(i)])||i===rdT(S);}
+function rdSl(p,i,S){var d=S&&S.fl&&S.fl[String(i)];return (d&&d[String(p.id)])||p.slot;}
+function rdAct(i,S){return function(p){return ['F','D','UTIL','G'].indexOf(rdSl(p,i,S))>=0;};}
+/* the day to call "Today": the real date in New York once ESPN's day lags behind it after midnight */
+function rdNow(S){var k=S&&S.dates?S.dates.indexOf(muEtd(Date.now())):-1;return k>=0?k:rdT(S);}
 function rdT(S){return S?Math.min(S.today,S.dates.length-1):0;}
 function rdGame(p,i,S){
   if(!S)return null;
@@ -215,14 +221,14 @@ function rdEmpty(lab){return '<div class="row rd-r rd-e"><span class="rd-ei">+</
 /* lineup fixes for a day that has not started: a healthy bench player has a game and someone in a spot he can fill does not */
 function rdFixes(i,S){
   var t=rdT(S),mine=D.mine||[],L=rdLineup(),out=[],used={};
-  if(i<t)return out;
+  if(i<t||!rdKnown(i,S))return out;
   var fits={F:['F','UTIL'],D:['D','UTIL'],G:['G']};
-  var bench=mine.filter(function(p){var s=rdState(p,i,S);return p.slot==='BN'&&s.g&&!s.np&&s.st==='up';}).sort(function(a,b){return (b.out||0)-(a.out||0);});
+  var bench=mine.filter(function(p){var s=rdState(p,i,S);return rdSl(p,i,S)==='BN'&&s.g&&!s.np&&s.st==='up';}).sort(function(a,b){return (b.out||0)-(a.out||0);});
   bench.forEach(function(b){
     var ok=fits[b.grp]||[],cand=null;
     ok.forEach(function(sl){
       if(cand)return;
-      var have=mine.filter(function(p){return p.slot===sl;});
+      var have=mine.filter(function(p){return rdSl(p,i,S)===sl;});
       if(have.length<(L[sl]||0)){cand={empty:sl};return;}
       have.forEach(function(a){var s=rdState(a,i,S);if(!cand&&!used[a.id]&&(!s.g||s.np)&&(s.st==='up'||!s.g))cand={a:a,s:s};});
     });
@@ -233,17 +239,17 @@ function rdFixes(i,S){
   return out;
 }
 function rdStrip(S){
-  var n=S.dates.length,t=rdT(S),act=(D.mine||[]).filter(rdActive),L=rdLineup(),tot=L.F+L.D+L.UTIL+L.G;
+  var n=S.dates.length,t=rdT(S),tn=rdNow(S),L=rdLineup(),tot=L.F+L.D+L.UTIL+L.G;
   var h='<div class="rd-days" id="rdDays" style="--n:'+n+'" role="tablist" aria-label="Matchup day"><span class="rd-sel" id="rdSel"></span>';
   S.dates.forEach(function(d,k){
-    var lab=String(S.labels[k]||'').split(' '),c=act.filter(function(p){return rdPlays(p,k,S);}).length,fr=tot?Math.min(1,c/tot):0;
-    h+='<button type="button" class="rd-d'+(k===t&&!S.done?' t':'')+(k<t?' past':'')+'" data-rday="'+k+'" role="tab" aria-label="'+esc(S.labels[k])+', '+c+' of '+tot+' lineup spots have a game">'
-      +'<span class="rd-dn">'+esc(k===t&&!S.done?'Today':lab[0])+'</span><span class="rd-dd">'+esc(lab[2]||'')+'</span><span class="rd-m"><i style="transform:scaleX('+fr.toFixed(3)+')"></i></span></button>';
+    var act=(D.mine||[]).filter(rdAct(k,S)),lab=String(S.labels[k]||'').split(' '),c=act.filter(function(p){return rdPlays(p,k,S);}).length,fr=tot?Math.min(1,c/tot):0;
+    h+='<button type="button" class="rd-d'+(k===tn&&!S.done?' t':'')+(k<tn?' past':'')+'" data-rday="'+k+'" role="tab" aria-label="'+esc(S.labels[k])+', '+c+' of '+tot+' lineup spots have a game">'
+      +'<span class="rd-dn">'+esc(k===tn&&!S.done?'Today':lab[0])+'</span><span class="rd-dd">'+esc(lab[2]||'')+'</span><span class="rd-m"><i style="transform:scaleX('+fr.toFixed(3)+')"></i></span></button>';
   });
   return h+'</div>';
 }
 function rdSum(i,S){
-  var t=rdT(S),act=(D.mine||[]).filter(rdActive),L=rdLineup(),tot=L.F+L.D+L.UTIL+L.G;
+  var t=rdT(S),act=(D.mine||[]).filter(rdAct(i,S)),L=rdLineup(),tot=L.F+L.D+L.UTIL+L.G;
   var st=act.map(function(p){return {p:p,s:rdState(p,i,S)};}),on=st.filter(function(x){return x.s.g&&!x.s.np;});
   function tile(v,k,cls){return '<div class="rd-tile"><b class="'+(cls||'')+'">'+v+'</b><span>'+k+'</span></div>';}
   var me=(D.teams.filter(function(x){return x.me;})[0]||{}).id,mg=null;
@@ -290,7 +296,7 @@ function rdBody(i,S){
   }
   var mine=D.mine||[];
   RD_SLOTS.forEach(function(sc){
-    var ps=mine.filter(function(p){return p.slot===sc[0];});
+    var ps=mine.filter(function(p){return rdSl(p,i,S)===sc[0];});
     var need=L[sc[0]]||0,empty=sc[0]!=='BN'&&sc[0]!=='IR'?Math.max(0,need-ps.length):0;
     if(!ps.length&&!empty)return;
     var st=ps.map(function(p){return {p:p,s:rdState(p,i,S)};});
@@ -302,7 +308,8 @@ function rdBody(i,S){
     h+='</div>';
   });
   var note=past?'ESPN\'s lineup for this day is not available, so this is your roster now.':
-    (i===t?'Gray numbers are projections. Tap a score to see how it was made.':'Your lineup as it is set now. Gray numbers are projections.');
+    (!rdKnown(i,S)?'ESPN\'s lineup for '+esc(S.labels[i])+' could not be read, so this shows today\'s lineup. Gray numbers are projections.':
+    (i===t?'Gray numbers are projections. Tap a score to see how it was made.':'Your lineup for '+esc(S.labels[i])+' as set in ESPN. Gray numbers are projections.'));
   return h+'<div class="rd-note">'+note+'</div>';
 }
 function rdPill(i,n,anim){
@@ -366,7 +373,7 @@ function rosterRender(){
   var ctl=document.getElementById('rosterCtl'),box=$('#rosterTbl'),S=D.sb;
   if(ctl)ctl.style.display=R.view==='table'?'':'none';
   if(R.view==='day'&&S&&S.dates&&S.dates.length){
-    if(R.day==null)R.day=rdT(S);
+    if(R.day==null)R.day=rdNow(S);
     box.innerHTML=rdStrip(S)+'<div id="rdBody" class="rd-body"></div>';
     rdPill(R.day,S.dates.length,false);rdPaint(0);
     return;
