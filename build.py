@@ -211,6 +211,43 @@ def injury_alerts(site_data, now_ms):
     return out
 
 
+SWING_DAYS = 2            # the matchup swing alert only runs in the last two days of the matchup
+
+
+def extra_alerts(site_data, now_ms):
+    """What the server needs for the three 'stay up to date' alerts, as plain data (alerts_state.json):
+      lineup    : today's lineup problems (a starter with no game while a bench player has one), only before the day's
+                  first puck drop, when you can still fix them. Injured starters are left to the injury alert.
+      swing     : the matchup numbers in the last two days, so the server can tell when your win chance moves a lot
+      lookahead : next week's plan, written once per matchup for the server to send on the last evening."""
+    out = {"lineup": None, "swing": None, "lookahead": None}
+    clock = site_data.get("clock")
+    today = datetime.fromtimestamp(now_ms / 1000, D.et_zone()).strftime("%Y-%m-%d")
+    if clock and clock.get("dates") and clock["dates"][0] == today and not D.day_locked(clock, 0, now_ms):
+        items = [{"key": a["t"], "text": a["t"]} for a in site_data.get("alerts") or [] if a.get("k") == "warn"]
+        if items:
+            out["lineup"] = {"date": today, "items": items, "deadline": _deadline(clock, 0)}
+    m = site_data.get("matchup")
+    if m and int(m.get("days_left", 99)) <= SWING_DAYS:
+        out["swing"] = {"p": round(float(m["p_win"]), 4), "me": round(float(m["me_now"]), 1),
+                        "opp": round(float(m["opp_now"]), 1), "opp_name": m.get("opp_name") or "your opponent",
+                        "days_left": int(m["days_left"])}
+    wp = site_data.get("weekplan") or {}
+    pv = wp.get("preview")
+    if pv and wp.get("mp") is not None:
+        mv = pv.get("moves") or []
+        if mv:
+            parts = [f"{x['day'].split()[0]}: add {x['add']['n']} ({x['add']['tm']}), drop {x['drop']['n']} "
+                     f"(+{x['gain']:.1f})" for x in mv[:3]]
+            more = f" and {len(mv) - 3} more" if len(mv) > 3 else ""
+            body = (f"Next week starts tomorrow. Your plan has {len(mv)} move{'s' if len(mv) != 1 else ''}"
+                    f" (+{pv['gain']:.1f} pts): " + "; ".join(parts) + more + ".")
+        else:
+            body = "Next week starts tomorrow. No move is worth making yet; check again Monday morning."
+        out["lookahead"] = {"mp": wp["mp"], "title": "Fantasy Hockey \u00b7 Next week's plan", "body": body}
+    return out
+
+
 def write_notify_payload(site_data, now_ms):
     """The morning push notification (notify_payload.json) and, when today has moves, the pre-game reminder
     (reminder_payload.json). The server sends the reminder with the pre-game build; the plan only lists moves you
@@ -228,6 +265,10 @@ def write_notify_payload(site_data, now_ms):
         Path("injury_state.json").write_text(json.dumps(injury_alerts(site_data, now_ms)), encoding="utf-8")
     except Exception as e:
         print(f"  injury alerts skipped ({type(e).__name__}: {e})")
+    try:
+        Path("alerts_state.json").write_text(json.dumps(extra_alerts(site_data, now_ms)), encoding="utf-8")
+    except Exception as e:
+        print(f"  lineup / swing / lookahead alerts skipped ({type(e).__name__}: {e})")
 
 
 def main():

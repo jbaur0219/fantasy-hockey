@@ -393,6 +393,54 @@ def injury_alerts_for(work):
         log(f"injury alerts skipped: {type(e).__name__}: {e}")
 
 
+SWING = 0.15                 # win chance has to move this much (15 points) since the last look to send a swing alert
+SWING_MAX_PER_DAY = 3
+
+
+def extra_alerts_for(work):
+    """Lineup problems, matchup swings in the last two days, and next week's plan on the last evening of a matchup.
+    What was already sent lives in alerts_seen.json so each one goes out once."""
+    if not SEND_ALERTS:
+        return
+    try:
+        st = read_json(work / "alerts_state.json")
+        if not isinstance(st, dict):
+            return
+        seen_f = DATA / "alerts_seen.json"
+        seen = read_json(seen_f) or {}
+        today = et_now().strftime("%Y-%m-%d")
+        lu = st.get("lineup")
+        if lu and lu.get("date") == today:
+            old = seen.get("lineup") or {}
+            keys = set(old.get("keys", [])) if old.get("date") == today else set()
+            new = [i for i in lu["items"] if i["key"] not in keys]
+            if new:
+                dl = f" Fix it in ESPN before {lu['deadline']}." if lu.get("deadline") else ""
+                alert("Fantasy Hockey \u00b7 Fix your lineup", " ".join(i["text"] for i in new[:2]) + dl, "fh-lineup")
+            seen["lineup"] = {"date": today, "keys": sorted(keys | {i["key"] for i in lu["items"]})}
+        sw = st.get("swing")
+        if sw:
+            b = seen.get("swing") or {}
+            if b.get("date") != today:
+                b = {"date": today, "p": sw["p"], "n": 0}               # the day's starting point; no alert yet
+            elif abs(sw["p"] - b["p"]) >= SWING and b["n"] < SWING_MAX_PER_DAY:
+                up = sw["p"] > b["p"]
+                lead = "lead" if sw["me"] > sw["opp"] else ("trail" if sw["me"] < sw["opp"] else "are tied with")
+                alert(f"Fantasy Hockey \u00b7 Win chance {'up' if up else 'down'} to {sw['p'] * 100:.0f}%",
+                      f"It was {b['p'] * 100:.0f}%. You {lead} {sw['opp_name']} "
+                      + (f"{sw['me']:.1f} to {sw['opp']:.1f}" if lead != "are tied with" else f"at {sw['me']:.1f}")
+                      + f" with {sw['days_left']} day{'s' if sw['days_left'] != 1 else ''} left.", "fh-swing")
+                b = {"date": today, "p": sw["p"], "n": b["n"] + 1}
+            seen["swing"] = b
+        la = st.get("lookahead")
+        if la and et_now().hour >= 17 and seen.get("lookahead") != la["mp"]:
+            alert(la["title"], la["body"], "fh-lookahead")
+            seen["lookahead"] = la["mp"]
+        write_atomic(seen_f, json.dumps(seen))
+    except Exception as e:                                        # an extra: never fail a build over it
+        log(f"extra alerts skipped: {type(e).__name__}: {e}")
+
+
 def do_build(reason, keep):
     work = DATA / "work"
     shutil.rmtree(work, ignore_errors=True)
@@ -445,6 +493,7 @@ def do_build(reason, keep):
         shutil.copyfile(work / "snapshot.json.gz", DATA / "last_snapshot.json.gz")
     publish(site)
     injury_alerts_for(work)
+    extra_alerts_for(work)
     ST["last_error"] = None
     log(f"build published in {time.time() - t0:.0f}s: {reason} ({why})")
     try:                                          # the app code changed while this build ran: put the newest code on top
