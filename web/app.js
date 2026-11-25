@@ -194,6 +194,11 @@ function rdGameTxt(p,s,i,S){
   return opp+' &middot; '+(i===t?etTime(g[0]):esc(dayShort(S.labels[i]).split(' ')[0])+' '+etTime(g[0]));
 }
 function lastName(n){var w=String(n||'').trim().split(/\s+/);return w.length>1?w.slice(1).join(' '):n;}
+/* recent form vs season (same test as the old roster list): only today and later, only with 6+ games */
+function rdForm(p){
+  if(p.rec==null||p.ppg==null||p.gp<6)return '';
+  var d=p.rec-p.ppg;return d>=0.4?'<i class="rd-fm hot">Hot</i>':(d<=-0.4?'<i class="rd-fm cold">Cold</i>':'');
+}
 function rdInj(p){return (p.inj&&p.inj!=='ACTIVE')?'<i class="rd-inj">'+esc(injShort(p.inj))+'</i>':'';}
 function rdRow(p,s,i,S,pts,bench){
   var off=!s.g||s.np||bench;
@@ -202,7 +207,7 @@ function rdRow(p,s,i,S,pts,bench){
   else if(s.g&&!s.np&&s.st==='up'&&p.out!=null)right='<b class="rd-pj">'+f(p.out,1)+'</b><span class="rd-k">proj</span>';
   else right='<b class="rd-dash">&ndash;</b>';
   return '<div class="row rd-r'+(off?' off':'')+'" data-rid="'+p.id+'">'+avHtml(p.id,p.tm)
-    +'<div class="row-m"><div class="row-t rd-n"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a>'+(i<rdT(S)&&p.slot!=='IR'?'':rdInj(p))+'</div>'
+    +'<div class="row-m"><div class="row-t rd-n"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a>'+(i<rdT(S)&&p.slot!=='IR'?'':rdInj(p)+rdForm(p))+'</div>'
     +'<div class="row-s rd-s">'+esc(p.pos)+' '+esc(p.tm)+' &middot; '+rdGameTxt(p,s,i,S)+'</div></div>'
     +'<div class="rd-pt">'+right+'</div></div>';
 }
@@ -316,6 +321,34 @@ function rdDay(i){
   var S=D.sb;if(!S||i===R.day||i<0||i>=S.dates.length)return;
   var dir=i>R.day?1:-1;R.day=i;rdPill(i,S.dates.length,true);rdPaint(dir);
 }
+/* Swipe the list sideways to move a day. The selection pill follows the finger (transform only, passive listeners,
+   no layout reads while moving: the width is read once at touchstart); the list gives a little with the drag. */
+var RSW=null;
+document.addEventListener('touchstart',function(e){
+  var b=e.target&&e.target.closest&&e.target.closest('#rdBody');RSW=null;
+  if(!b||!D.sb||e.touches.length!==1||e.target.closest('.mu-bk'))return;
+  var t=e.touches[0];RSW={x:t.clientX,y:t.clientY,dx:0,lock:0,w:b.offsetWidth||360,b:b,sel:document.getElementById('rdSel')};
+},{passive:true});
+document.addEventListener('touchmove',function(e){
+  var g=RSW;if(!g)return;
+  var t=e.touches[0],dx=t.clientX-g.x,dy=t.clientY-g.y;
+  if(!g.lock){if(Math.abs(dx)<8&&Math.abs(dy)<8)return;g.lock=Math.abs(dx)>Math.abs(dy)*1.3?1:-1;
+    if(g.lock>0){if(g.sel)g.sel.classList.add('nt');g.b.classList.remove('in-r','in-l');g.b.classList.add('rd-drag');}}
+  if(g.lock<0)return;
+  var n=D.sb.dates.length,i=R.day,edge=(dx>0&&i===0)||(dx<0&&i===n-1);
+  g.dx=edge?dx*0.25:dx;
+  if(g.sel)g.sel.style.transform='translateX('+((i-g.dx/g.w)*100)+'%)';
+  g.b.style.transform='translate3d('+(g.dx*0.3)+'px,0,0)';
+},{passive:true});
+function rdSwEnd(){
+  var g=RSW;RSW=null;if(!g||g.lock<1)return;
+  if(g.sel){void g.sel.offsetWidth;g.sel.classList.remove('nt');}
+  g.b.classList.remove('rd-drag');g.b.style.transform='';
+  var n=D.sb.dates.length,j=R.day+(g.dx<-50?1:(g.dx>50?-1:0));
+  if(j!==R.day&&j>=0&&j<n)rdDay(j);else rdPill(R.day,n,true);
+}
+document.addEventListener('touchend',rdSwEnd,{passive:true});
+document.addEventListener('touchcancel',rdSwEnd,{passive:true});
 /* fresh live scores: repaint today in place, unless a score breakdown is open */
 function rdLive(){
   var S=D.sb;if(!S||R.view!=='day'||R.day!==rdT(S))return;

@@ -1242,3 +1242,9 @@ table.edge thead th{font-size:11px;font-weight:600;letter-spacing:.04em;color:va
 @media (prefers-reduced-motion:reduce){.rd-sel{transition:none}.rd-body.in-r,.rd-body.in-l{animation:none}}
 body.nophoto .rd-r .av{display:none!important}
 body.nophoto .grp>.row.rd-r:not(:first-child):before{left:16px}
+.rd-body{touch-action:pan-y;transition:transform .45s var(--soft-spring)}
+.rd-body.rd-drag{transition:none}
+.rd-fm{flex:none;font-style:normal;font-size:10.5px;line-height:16px;font-weight:700;letter-spacing:.03em;border-radius:5px;padding:0 5px}
+.rd-fm.hot{color:var(--orange);background:color-mix(in srgb,var(--orange) 16%,transparent)}
+.rd-fm.cold{color:var(--tint);background:color-mix(in srgb,var(--tint) 14%,transparent)}
+.rd-d.on,.rd-d.on .rd-dn,.rd-d.on .rd-dd{transition-delay:.06s}
