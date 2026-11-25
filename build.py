@@ -398,6 +398,7 @@ def _main():
         site_data["sb"] = SBD.build(cfg, data, league, standings, now_ms)   # every matchup in the league, Matchups tab
     except Exception as e:                                  # an extra: never fail the build over it
         print(f"  league scoreboard skipped ({type(e).__name__}: {e})")
+    site_data["df"] = dict(S.STATE.get("by_team") or {})   # today's starting goalies (Daily Faceoff), for the game page
     gamelog = None
     try:
         gamelog = GL.build(cfg, data, site_data, now_ms)  # recent games, for the Game log tab and Compare
