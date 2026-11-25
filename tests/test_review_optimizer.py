@@ -59,7 +59,8 @@ class Bars(unittest.TestCase):
             bars = {b[0]["id"]: b[2] for b in ro}
             for m in res["moves"]:
                 bar = C.show_bar(m["t"], 4)
-                need = bars[m["drop"]["id"]] if bars[m["drop"]["id"]] > 1.0 else bar
+                own = bars.get(m["drop"]["id"], 1.0)          # a streamer the plan added earlier: the normal bar
+                need = own if own > 1.0 else bar
                 self.assertGreaterEqual(round(m["net"], 1), max(bar, need) - 1e-9, m)
                 self.assertNotEqual(m["conf"], "optional")
             self.assertLessEqual(len(res["moves"]), 7)
@@ -139,7 +140,6 @@ class Bugs(unittest.TestCase):
         res = run(ro, [(player(1, "Free Goalie", grp="G"), [3.0] * 4)])
         self.assertEqual(pairs(res), [("Free Goalie", "Spare D")])
 
-    @unittest.expectedFailure
     def test_streamer_can_be_dropped_for_a_later_stream(self):
         # BUG A2: drops only come from your current roster, so the plan can never stream a spot twice (add A Monday,
         # drop A for B on Wednesday). One open spot, A plays Mon/Tue, B plays Wed/Thu: the chain is worth +8, the
