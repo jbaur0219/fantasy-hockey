@@ -14,8 +14,8 @@ import enrich as E
 import starters as S
 
 
-def _status(p, i, sp_chance):
-    s = S.STATE["by_team"].get(p["team"]) if i == 0 else None
+def _status(p, i, sp_chance, today=0):
+    s = S.STATE["by_team"].get(p["team"]) if i == today else None
     if s:
         if E.norm(s["name"]) == E.norm(p["name"]):
             st = s.get("status") or "Unconfirmed"
@@ -33,6 +33,7 @@ def _status(p, i, sp_chance):
 def build(mine, sp, games, abbr, standings, now_ms, ndays, slots=2):
     goalies = [p for p in mine if p["group"] == "G" and A.slot_name(p["slot"]) != "IR"]
     out = {id(p): {"p": p, "rows": []} for p in goalies}
+    today = D.today_index(games, sp, now_ms)               # the day Daily Faceoff's starters are for
     for i in range(ndays):
         day_rows = []
         for p in goalies:
@@ -44,9 +45,9 @@ def build(mine, sp, games, abbr, standings, now_ms, ndays, slots=2):
                 if p.get("svp") and p["gp"] >= 5:
                     pw += D.clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
                 pw = D.clamp(pw, 0.15, 0.85)
-                e = p["outlook"] + 4 * (pw - s_me)
+                e = p["outlook"] + _win_pts() * (pw - s_me)
                 spc = D.start_prob(p, standings)
-                st, conf, sure = _status(p, i, spc)
+                st, conf, sure = _status(p, i, spc, today)
                 day, tm = D.fmt_game(g.get("date", 0))
                 r = {"day": day, "time": tm, "opp": opp, "home": home, "p": pw, "e": e, "sp": round(st, 2),
                      "ev": round(e * st, 2), "conf": conf, "sure": sure, "started": g.get("date", 0) <= now_ms}
@@ -69,3 +70,9 @@ def build(mine, sp, games, abbr, standings, now_ms, ndays, slots=2):
             if r["started"]:
                 r["verdict"], r["cls"] = "GAME STARTED", "done"
     return [v for v in out.values()]
+
+
+def _win_pts():
+    """This league's points for a goalie win (league.py; 4 when the settings can't be read)."""
+    import league as L
+    return L.settings().win_points()

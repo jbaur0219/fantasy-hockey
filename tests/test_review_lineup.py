@@ -115,7 +115,6 @@ class LineupRules(unittest.TestCase):
 # Bugs (reproduced). Each asserts the correct behaviour.
 # ---------------------------------------------------------------------------
 class LineupBugs(unittest.TestCase):
-    @unittest.expectedFailure
     def test_your_goalie_start_chance_is_not_inflated(self):
         # BUG B1: lineup_goalie floors your G-slot goalies' start chance at 50% (Hill 45% -> 50%, a 30% backup -> 50%).
         # A goalie only scores when he starts, whoever rosters him.
@@ -124,7 +123,6 @@ class LineupBugs(unittest.TestCase):
         fa = STR._base_values(goalie(sp=0.3, slot=None), game, 1, {}, {}, lineup_goalie=False)
         self.assertAlmostEqual(mine[0], fa[0])
 
-    @unittest.expectedFailure
     def test_matchup_projection_is_symmetric(self):
         # BUG B1 (second effect): only your goalies get the floor, so identical rosters do not project to 50%.
         game = STR.make_game_fn(ABBR, two_day_games(), 50, ms(2026, 11, 24, 9))
@@ -133,7 +131,6 @@ class LineupBugs(unittest.TestCase):
         self.assertAlmostEqual(r["proj_me"], r["proj_opp"], places=6)
         self.assertAlmostEqual(r["p_win"], 0.5, places=3)
 
-    @unittest.expectedFailure
     def test_todays_starters_apply_to_today_even_before_espn_rolls_over(self):
         # BUG B2: starters (today's Daily Faceoff page) only apply to day index 0. At 1 AM ET on Wed Nov 25 ESPN can
         # still be on Tuesday's scoring period (day 0, locked), so Wednesday is day 1 and the confirmed other goalie

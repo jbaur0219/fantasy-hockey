@@ -84,6 +84,7 @@ def make_game_fn(abbr, games, sp, now_ms):
         home = g.get("homeProTeamId") == tid
         opp = abbr.get(g.get("awayProTeamId") if home else g.get("homeProTeamId"), "?")
         return opp, home
+    game.today = D.today_index(games, sp, now_ms)          # the day today's starting goalies are for
     return game
 
 
@@ -104,11 +105,11 @@ def _base_values(p, game, ndays, standings, starters, lineup_goalie=False):
             if p.get("svp") and p["gp"] >= 5:
                 pw += D.clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
             pw = D.clamp(pw, 0.15, 0.85)
-            e = (p["out"] or 0) + 4 * (pw - s_me)
+            e = (p["out"] or 0) + _win_pts() * (pw - s_me)
             st = p.get("sp") or 0.5
-            if lineup_goalie:
-                st = max(st, 0.5)
-            s = starters.get(p["tm"]) if i == 0 else None
+            # (review B1, 2026-11-25: your own goalies' start chance is no longer floored at 50%; a goalie only
+            # scores when he starts, whoever rosters him)
+            s = starters.get(p["tm"]) if i == getattr(game, "today", 0) else None
             if s:
                 st = 1.0 if E.norm(s["name"]) == E.norm(p["n"]) else 0.0
             v[i] = max(0.0, e * st * fac)
@@ -518,3 +519,9 @@ def slim_roles(d, p):
 def install():
     STATE["watch"] = load_watchlist()
     print(f"  streams: this-week-first drops on, {len(STATE['watch'])} on the watch list")
+
+
+def _win_pts():
+    """This league's points for a goalie win (league.py; 4 when the settings can't be read)."""
+    import league as L
+    return L.settings().win_points()

@@ -37,8 +37,13 @@ class Lineup(unittest.TestCase):
 
 
 class Cost(unittest.TestCase):
-    def test_injured_drop_costs_nothing(self):
-        self.assertEqual(C.cost(sk("a", inj="OUT", out=3.0), sk("b", out=1.0), {"AAA": 4}), 0.0)
+    def test_injured_drop_costs_only_the_games_he_misses(self):
+        # (changed 2026-11-25, review C3: an injured star is not free to drop; a stream-level injured player still is)
+        fut = {"AAA": 10, "BBB": 10}
+        self.assertGreater(C.cost(sk("a", inj="OUT", out=3.0, own=95), sk("b", out=1.0, tm="BBB"), fut), 2.0)
+        self.assertEqual(C.cost(sk("a", inj="OUT", out=1.4), sk("b", out=1.5, tm="BBB"), fut), 0.0)
+        self.assertLess(C.cost(sk("a", inj="INJURY_RESERVE", out=3.0, own=95), sk("b", out=1.0, tm="BBB"), fut),
+                        C.cost(sk("a", inj="OUT", out=3.0, own=95), sk("b", out=1.0, tm="BBB"), fut))
 
     def test_dropping_the_better_player_costs_points(self):
         nxt = {"AAA": 10, "BBB": 10}           # games over the three weeks after this matchup
@@ -75,10 +80,13 @@ class LongTerm(unittest.TestCase):
         self.assertIn("bounce back", text)
         self.assertIn("60%", text)
 
-    def test_injured_drop_has_no_long_term_cost(self):
+    def test_injured_star_drop_shows_a_long_term_cost(self):
+        # (changed 2026-11-25, review C3) the card agrees with the number: an injured star is not free to drop
         import longterm as LT
         r = LT.assess(sk("a", inj="OUT", out=3.0), sk("b"), {"AAA": 10})
-        self.assertEqual(r["v"], "none")
+        self.assertEqual(r["v"], "real")
+        self.assertIn("once he's back", " ".join(r["lines"]))
+        self.assertEqual(LT.assess(sk("a", inj="OUT", out=1.4), sk("b"), {"AAA": 10})["v"], "none")
 
 
 class Settings(unittest.TestCase):

@@ -23,6 +23,11 @@ FIX_SHARE = 0.35           # share of the gap you lose even if he is still a fre
 SMALL, REAL = 0.5, 2.0     # verdict cut-offs, in points over the horizon
 REPLACEMENT = {"F": 1.45, "D": 1.5, "G": 1.0}   # what a typical free agent gives per game (same as streams.py)
 LUCK_GOALS = 2.5           # goals above / below expected worth calling out
+# Injured or suspended players: dropping one gives up the value he has once he is back, so his cost is what a healthy
+# version of him would cost, scaled by how much of it you are likely to get back soon. ESPN's OUT covers anything from
+# a few days to weeks, injured reserve is usually long, suspensions are short. (Review C3, 2026-11-25: it used to be 0,
+# so the plan could drop an injured star for a one-week stream.)
+INJ_BACK = {"OUT": 0.5, "INJURY_RESERVE": 0.25, "SUSPENSION": 0.75}
 
 
 def true_pg(p):
@@ -44,14 +49,18 @@ def gone_chance(p):
     return max(0.05, min(0.95, g))
 
 
+def back_share(y):
+    """1 for a healthy player; for an injured or suspended one, how much of his value you are likely to get back soon."""
+    return INJ_BACK.get(y.get("inj"), 0.0) if y.get("inj") in A.BAD_INJURY else 1.0
+
+
 def cost(y, x, fut):
-    """Points you give up after this week by dropping roster player y and keeping free agent x."""
-    if y.get("inj") in A.BAD_INJURY:
-        return 0.0
+    """Points you give up after this week by dropping roster player y and keeping free agent x. An injured player costs
+    his healthy value times back_share() (dropping an injured star is not free; a stream-level injured player is)."""
     gy, gx = fut.get(y["tm"], 0), fut.get(x["tm"], 0)
     floor = REPLACEMENT.get(y["grp"], 1.45) * (0.5 if y["grp"] == "G" else 1.0)
     gap = true_pg(y) * gy - max(true_pg(x), floor) * gx
-    return round(max(0.0, gap) * (FIX_SHARE + (1 - FIX_SHARE) * gone_chance(y)), 3)
+    return round(max(0.0, gap) * (FIX_SHARE + (1 - FIX_SHARE) * gone_chance(y)) * back_share(y), 3)
 
 
 def verdict(c):
@@ -81,8 +90,8 @@ def assess(y, x, fut, c=None):
     d, a = _last(y["n"]), _last(x["n"])
     lines = []
     if y.get("inj") in A.BAD_INJURY:
-        lines.append(f"{d} is {y['inj'].replace('_', ' ').lower()}, so he isn't scoring for you now.")
-        return {"v": "none", "pts": 0.0, "lines": lines, "gy": 0, "gx": fut.get(x["tm"], 0)}
+        lines.append(f"{d} is {y['inj'].replace('_', ' ').lower()}, so he isn't scoring for you now. What he's worth "
+                     f"once he's back is counted below.")
     py, px = true_pg(y), true_pg(x)
     gy, gx = fut.get(y["tm"], 0), fut.get(x["tm"], 0)
     if abs(py - px) < 0.05:

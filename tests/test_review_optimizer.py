@@ -130,7 +130,6 @@ class InjuredReserve(unittest.TestCase):
 
 
 class Bugs(unittest.TestCase):
-    @unittest.expectedFailure
     def test_goalie_add_can_replace_a_spare_defenseman(self):
         # BUG A1: drop_options() lets a goalie add drop a G or an F, never a D. Here your 6th defenseman sits on the
         # bench every day (5 D slots full, UTIL taken by a forward) and one goalie slot is empty all week: adding a
@@ -151,7 +150,6 @@ class Bugs(unittest.TestCase):
         self.assertAlmostEqual(res["gain"], 8.0, places=1)
         self.assertIn(("Stream B", "Stream A"), pairs(res))
 
-    @unittest.expectedFailure
     def test_benched_player_is_considered_as_a_drop(self):
         # BUG A3: drop_options() keeps the DROPS_PER cheapest drops by raw value (his own points), not by what he adds
         # to your lineup. Yama's 3 points all sit on the bench (forwards full on his days), but nine cheaper
@@ -166,7 +164,6 @@ class Bugs(unittest.TestCase):
         self.assertEqual(pairs(res), [("Upgrade", "Kailer Yamamoto")])
         self.assertAlmostEqual(res["moves"][0]["net"], 2.0, places=1)
 
-    @unittest.expectedFailure
     def test_reason_never_shows_identical_per_game_numbers(self):
         # BUG A4: headline() quotes per_game() (season outlook), not the per-game values the plan used (opponent
         # strength and home ice included). Two 1.5 players, same 3 games, Brown's opponents are weak: +1.8, and the

@@ -88,6 +88,21 @@ def day_clock_games(games, sp, ndays, now_ms):
             "lock": firsts}
 
 
+def today_index(games, sp, now_ms, ndays=MAX_DAYS):
+    """Which day index (scoring period sp + i) has its games on today's Eastern date: the day Daily Faceoff's starting
+    goalies are for. Usually 0, but between midnight and ESPN's overnight rollover yesterday is still period sp."""
+    today = datetime.fromtimestamp(now_ms / 1000, et_zone()).date()
+    for i in range(ndays):
+        st = [g.get("date") for gl in games.values() for g in gl.get(str(sp + i), []) if g.get("date")]
+        if st:
+            d = datetime.fromtimestamp(min(st) / 1000, et_zone()).date()
+            if d == today:
+                return i
+            if d > today:
+                break
+    return 0
+
+
 def day_locked(clock, i, now_ms):
     """True once day i can no longer take adds (its first puck has dropped, or the day is over)."""
     ms = clock["lock"][i] if i < len(clock["lock"]) else None

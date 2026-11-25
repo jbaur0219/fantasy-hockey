@@ -85,7 +85,7 @@ class Model:
         self.fut = nxt_games
         self.per_day = per_day                  # league limit on adds per day (None: only the weekly limit)
         self.base, self.pool, self.ndays = base, pool, ndays
-        self.cost = {}
+        self.cost, self._loss = {}, {}
         for xi, x in enumerate(pool):
             for yi, b in enumerate(base):
                 if b["ok"]:
@@ -115,19 +115,40 @@ class Model:
     def score(self, moves):
         return self.lineup_total(moves)[0] - sum(self.cost[(xi, yi)] for xi, _, yi in moves)
 
+    def loss(self, yi, t):
+        """Lineup points lost from day t on by dropping roster player yi alone. Games he would spend on your bench (his
+        position already full that day) cost nothing, so a benched player is never ranked as an expensive drop."""
+        k = (yi, t)
+        if k not in self._loss:
+            tot = 0.0
+            for d in range(t, self.ndays):
+                full, less = ([], [], []), ([], [], [])
+                for i, b in enumerate(self.base):
+                    j = 0 if b["g"] == "F" else 1 if b["g"] == "D" else 2
+                    full[j].append(b["v"][d])
+                    if i != yi:
+                        less[j].append(b["v"][d])
+                tot += day_value(*full) - day_value(*less)
+            self._loss[k] = tot
+        return self._loss[k]
+
     def drop_options(self, xi, t, used_y):
         x = self.pool[xi]
         out = []
         for i, b in enumerate(self.base):
             if not b["ok"] or i in used_y:
                 continue
-            if not b.get("ir") and x["g"] == "G" and b["g"] not in ("G", "F"):
-                continue
+            if not b.get("ir") and x["g"] == "G" and b["g"] not in ("G", "F", "D"):
+                continue                    # a goalie add can take any skater's roster spot (a bench spot is a spot)
             if not b.get("ir") and x["g"] != "G" and b["g"] not in ("F", "D"):
                 continue                    # (moving an injured player to IR frees a spot for anyone)
-            out.append((sum(b["v"][t:]) + self.cost[(xi, i)], i))
-        out.sort()
-        return [i for _, i in out[:DROPS_PER]]
+            out.append((self.loss(i, t) + self.cost[(xi, i)], sum(b["v"][t:]) + self.cost[(xi, i)], i))
+        # Try the cheapest drops by lineup points lost (a player whose games sit on your bench costs nothing) AND by his
+        # own points. Lineup loss alone is measured one drop at a time, so it can hide drops that are cheap together;
+        # the union never searches less than the old list did.
+        by_loss = [i for _, _, i in sorted(out)[:DROPS_PER]]
+        by_raw = [i for _, _, i in sorted(out, key=lambda r: (r[1], r[2]))[:DROPS_PER]]
+        return by_loss + [i for i in by_raw if i not in by_loss]
 
     def cands(self, used_x, used_y, moves=()):
         full = set()
@@ -340,6 +361,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             mv["ga"] = mv["games"]
             mv["gd"] = sum(1 for i in range(t, ndays) if y["v"][i] > 0) if y["p"]["inj"] not in A.BAD_INJURY else 0
             mv["ca"], mv["cd"] = ca, min(cd, mv["gd"])
+            mv["pa"], mv["pd"] = _pg(x["v"], t), _pg(y["v"], t)   # per game as the plan values them (reasons)
             mv["ir"] = bool(base[yi].get("ir"))
             # how the plan saw the move, logged with it for the backtest (backtest.py): days in the matchup, groups,
             # the show bar for that day and whether it is in the last days
@@ -375,7 +397,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
     out, order, ents = sequence(tiers, True)
     for mv in out:
         if mv["conf"] == "optional":
-            mv["conf"] = "lean"                 # an already-planned move kept by HOLD_SLACK: on the list, so not optional
+            mv["conf"] = "lean"                 # every move on the list is one to make: never rated optional
     final = [m for m, _, _ in tiers]
     for mv, (m, _, _) in zip(out, order):
         mv["alts"] = alternatives(M, final, m, days, ndays, healthy)
@@ -411,7 +433,7 @@ def confidence(mv, drop_p, healthy, add_p=None):
     """'strong', 'lean' or 'optional' (back-end track record only; the app shows every planned move the same way)."""
     if mv["tier"] != "make":
         return "optional"
-    sched = mv["ga"] > mv["gd"] or drop_p["inj"] in A.BAD_INJURY
+    sched = mv.get("ca", mv["ga"]) > mv.get("cd", mv["gd"]) or drop_p["inj"] in A.BAD_INJURY   # games that count
     net = round(mv["net"], 1)                 # judged on the number the page shows
     if net >= STRONG_NET or (sched and net >= STRONG_SCHED_NET):
         c = "strong"
@@ -424,6 +446,12 @@ def confidence(mv, drop_p, healthy, add_p=None):
     if c == "strong" and day_to_day(add_p):
         c = "lean"                        # the player you'd add might not play: never a sure thing
     return c
+
+
+def _pg(v, t):
+    """Points a game from day t on, as the plan values them (opponents, home ice and start chance included)."""
+    g = [x for x in v[t:] if x > 0]
+    return sum(g) / len(g) if g else 0.0
 
 
 def _last(n):
@@ -476,8 +504,11 @@ def headline(mv, xp, yp):
         why = f"{_games(ga)} left this week; {d} has {gd}."
         why = why[0].upper() + why[1:]
     else:
-        pa, pd = per_game(xp), per_game(yp)
-        if ga == gd:
+        pa, pd = mv.get("pa", per_game(xp)), mv.get("pd", per_game(yp))
+        if ga == gd and round(pa, 1) == round(pd, 1):
+            # same games and the same rounded points a game: never show two equal numbers, give the real edge
+            why = f"Both play {ga} more; {a} projects {pa:.2f} pts a game to {d}'s {pd:.2f} (easier opponents or home ice)."
+        elif ga == gd:
             why = f"Both play {ga} more; {a} projects {pa:.1f} pts a game to {d}'s {pd:.1f}."
         else:
             why = f"{a} projects {pa:.1f} pts a game to {d}'s {pd:.1f}, enough to beat {d}'s extra game."
@@ -498,7 +529,7 @@ def alternatives(M, final, m, days, ndays, healthy):
         if j == yi or j in used or not b["ok"] or (xi, j) not in M.cost:
             continue
         xg, bg = M.pool[xi]["g"], b["g"]
-        if not b.get("ir") and ((xg == "G" and bg not in ("G", "F")) or (xg != "G" and bg not in ("F", "D"))):
+        if not b.get("ir") and ((xg == "G" and bg not in ("G", "F", "D")) or (xg != "G" and bg not in ("F", "D"))):
             continue
         net = M.score(rest + [(xi, t, j)]) - without
         sb = show_bar(t, ndays)
@@ -511,6 +542,7 @@ def alternatives(M, final, m, days, ndays, healthy):
               "waiver": M.pool[xi]["waiver"], "tier": "make" if net >= b["bar"] else "optional"}
         mv["ga"] = mv["games"]
         mv["gd"] = sum(1 for i in range(t, ndays) if b["v"][i] > 0) if yp["inj"] not in A.BAD_INJURY else 0
+        mv["pa"], mv["pd"] = _pg(M.pool[xi]["v"], t), _pg(b["v"], t)
         mv["ir"] = bool(b.get("ir"))
         mv["conf"] = confidence(mv, yp, healthy, xp)
         mv["why1"] = headline(mv, xp, yp)

@@ -47,6 +47,7 @@ def _stream(site_data, sp, abbr, games, standings, now_ms, ndays):
     pool = [p for p in site_data["fas"] if p["grp"] == "G" and p["inj"] not in A.BAD_INJURY]
     pool = sorted(pool, key=lambda p: -(p["out"] or 0))[:STREAM_POOL]
     out = []
+    today = D.today_index(games, sp, now_ms)               # the day Daily Faceoff's starters are for
     for p in pool:
         if (p.get("sp") or 0) < STREAM_MIN_START:
             continue
@@ -62,9 +63,9 @@ def _stream(site_data, sp, abbr, games, standings, now_ms, ndays):
                 if p.get("svp") and p["gp"] >= 5:
                     pw += D.clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
                 pw = D.clamp(pw, 0.15, 0.85)
-                e = (p["out"] or 0) + 4 * (pw - s_me)
+                e = (p["out"] or 0) + _win_pts() * (pw - s_me)
                 st = None
-                if i == 0 and S.STATE["by_team"].get(p["tm"]):
+                if i == today and S.STATE["by_team"].get(p["tm"]):
                     starter = S.STATE["by_team"][p["tm"]]
                     if S.E.norm(starter["name"]) != S.E.norm(p["n"]):
                         continue                                # someone else is in net today
@@ -100,3 +101,9 @@ def build(cfg, data, league, standings, now_ms, site_data):
     return {"days": days, "teams": _grid(data["schedules"], sp, abbr, games, now_ms, ndays),
             "stream": _stream(site_data, sp, abbr, games, standings, now_ms, ndays),
             "moves_used": bg["used"], "limit": bg["limit"], "unlimited": bg["unlimited"], "limit_known": bg["known"]}
+
+
+def _win_pts():
+    """This league's points for a goalie win (league.py; 4 when the settings can't be read)."""
+    import league as L
+    return L.settings().win_points()
