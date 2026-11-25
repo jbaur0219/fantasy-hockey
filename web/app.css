@@ -1167,3 +1167,78 @@ html.sheet-on:not(:has(#modal.open)) .wrap{transform:none!important;clip-path:no
 .edge-shin th{box-sizing:border-box;overflow:hidden;border-bottom-color:transparent!important}
 /* header labels: small, quiet, evenly tracked */
 table.edge thead th{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--label2);text-transform:uppercase}
+
+/* =====================================================================================================
+   ROSTER: day-by-day lineup (2026-11-25). Week strip with a sliding selection pill (transform only), a three-number
+   summary, lineup fixes, then inset-grouped lists by lineup spot. The strip and the segmented control are persistent
+   elements; only the list below them is redrawn, and it slides in with a compositor-only animation.
+   ===================================================================================================== */
+.card[data-ut="My roster"] .cin{background:none;padding:0;border-radius:0;overflow:visible;min-width:0}
+.card[data-ut="My roster"] .cbody{grid-template-columns:minmax(0,1fr)}
+#rosterTbl{min-width:0}
+.rd-seg{margin:0 0 14px}
+#rosterCtl{margin:0 0 10px}
+/* week strip */
+.rd-days{position:relative;display:grid;grid-template-columns:repeat(var(--n,7),minmax(0,1fr));background:var(--card);border-radius:24px;padding:6px;margin:0 0 14px;contain:layout}
+.rd-sel{position:absolute;top:6px;bottom:6px;left:6px;width:calc((100% - 12px) / var(--n,7));border-radius:18px;background:var(--tint);
+  transition:transform .55s var(--spring);will-change:transform;pointer-events:none}
+.rd-sel.nt{transition:none}
+.rd-d{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 9px;border:0;background:none;color:var(--label);
+  cursor:pointer;font:inherit;-webkit-tap-highlight-color:transparent;transition:color .3s var(--ease)}
+.rd-d:active .rd-dd{transform:scale(.9);transition-duration:.1s}
+.rd-dn{font-size:11px;line-height:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--label2);transition:color .3s var(--ease)}
+.rd-dd{font:600 20px/24px ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums;transition:transform .35s var(--spring)}
+.rd-d.past .rd-dd{color:var(--label2)}
+.rd-d.t .rd-dn{color:var(--tint)}
+.rd-m{display:block;width:24px;height:3px;border-radius:2px;background:var(--fill);overflow:hidden}
+.rd-m i{display:block;height:100%;background:var(--green);transform-origin:0 50%;border-radius:2px}
+.rd-d.on,.rd-d.on .rd-dn,.rd-d.on .rd-dd{color:#fff}
+.rd-d.on .rd-m{background:rgba(255,255,255,.3)}.rd-d.on .rd-m i{background:#fff}
+/* summary */
+.rd-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 6px}
+.rd-tile{background:var(--card);border-radius:20px;padding:11px 12px 10px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.rd-tile b{font:700 22px/26px ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap}
+.rd-tile b i{font-style:normal;font-size:15px;font-weight:600;color:var(--label3)}
+.rd-tile b.ok{color:var(--green)}.rd-tile b.neg{color:var(--red)}
+.rd-tile span{font-size:12px;line-height:15px;color:var(--label2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* lineup fix */
+.rd-fix{margin-top:10px}
+.rd-fix .row-s{color:var(--label2)}
+/* sections and rows */
+.rd-sec{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:20px 16px 7px;font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--label2)}
+.rd-sr{font-weight:500;text-transform:none;letter-spacing:-.01em;font-size:13px;color:var(--label2)}
+.grp>.row.rd-r{gap:12px;min-height:66px;padding:10px 12px 10px 16px;cursor:pointer}
+.grp>.row.rd-r:active{background:var(--fill4);transition:none}
+.grp>.row.rd-r:not(:first-child):before{left:68px}
+.rd-r .av,.scroll .rd-r .av{width:40px!important;height:40px!important;margin:0!important;flex:none}
+.rd-r .av .tl{display:block!important;width:18px;height:18px;right:-5px;bottom:-4px}
+.rd-n{display:flex;align-items:center;gap:6px;min-width:0}
+.rd-n a.pl{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;color:var(--label)}
+.rd-s{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.rd-s .sb-live{margin:0 2px 1px 1px;vertical-align:middle}
+.rd-no{font-weight:600;color:var(--orange)}
+.rd-inj{flex:none;font-style:normal;font-size:10.5px;line-height:16px;font-weight:700;letter-spacing:.03em;color:#fff;background:var(--red);border-radius:5px;padding:0 5px}
+.rd-pt{flex:none;width:52px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;text-align:right}
+.rd-pt>b,.rd-pt .mu-nb b{font:600 18px/22px ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.rd-pj{color:var(--label3)}.rd-dash{color:var(--label3);font-weight:400!important}
+.rd-k{font-size:11px;line-height:13px;color:var(--label3);font-weight:500}
+.rd-k.lv{color:var(--red);font-weight:600}
+.rd-pt button.mu-nb{appearance:none;-webkit-appearance:none;border:0;margin:-6px -8px -2px 0;padding:4px 8px;border-radius:10px;background:transparent;color:var(--label);font:inherit;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:background .15s}
+.rd-pt button.mu-nb:active,.rd-pt button.mu-nb.on{background:var(--fill3)}
+.rd-r.off .row-m,.rd-r.off .av{opacity:.45}
+.rd-r.off .rd-pt b{color:var(--label3)}
+.rd-e{cursor:default!important}
+.rd-ei{width:40px;height:40px;flex:none;border-radius:50%;border:1.5px dashed var(--label3);color:var(--label3);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:300}
+.rd-e .row-t{color:var(--label2)}
+.grp>.mu-bk{padding:0 12px 12px;border:0}
+.rd-note{font-size:13px;line-height:1.35;color:var(--label2);padding:10px 16px 0}
+.rd-tbl{background:var(--card);border-radius:22px;padding:6px 12px;overflow:hidden;min-width:0;max-width:100%}
+/* the list slides in from the side you moved toward (transform + opacity only) */
+.rd-body.in-r{animation:rdInR .42s var(--soft-spring) both}
+.rd-body.in-l{animation:rdInL .42s var(--soft-spring) both}
+@keyframes rdInR{from{opacity:0;transform:translateX(26px)}}
+@keyframes rdInL{from{opacity:0;transform:translateX(-26px)}}
+@media (prefers-reduced-motion:reduce){.rd-sel{transition:none}.rd-body.in-r,.rd-body.in-l{animation:none}}
+body.nophoto .rd-r .av{display:none!important}
+body.nophoto .grp>.row.rd-r:not(:first-child):before{left:16px}

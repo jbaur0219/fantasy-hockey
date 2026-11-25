@@ -49,3 +49,14 @@ class PastLineups(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WeekGamesTest(unittest.TestCase):
+    def test_each_day_of_the_matchup(self):
+        import scoreboard as SBD
+        games = {1: {"10": [{"date": 100, "homeProTeamId": 1, "awayProTeamId": 2}], "12": [{"date": 300, "homeProTeamId": 3, "awayProTeamId": 1}]},
+                 2: {"10": [{"date": 100, "homeProTeamId": 1, "awayProTeamId": 2}]}}
+        abbr = {1: "BUF", 2: "NYR", 3: "DET"}
+        ws = SBD.week_games(games, abbr, 10, 12)
+        self.assertEqual(ws["BUF"], [[100, "NYR", 1], 0, [300, "DET", 0]])
+        self.assertEqual(ws["NYR"], [[100, "BUF", 0], 0, 0])

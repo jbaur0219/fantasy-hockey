@@ -11,6 +11,7 @@ week (rosterForCurrentScoringPeriod / rosterForMatchupPeriod), those are passed 
    "games": [{"a": team id, "b": team id, "as": pts, "bs": pts, "ap": proj, "bp": proj, "pa": win chance of a,
               "ad": [pts per day], "bd": [...], "al": games left a, "bl": games left b}],
    "tn": {"EDM": [puck drop ms, "CAR", 0 = away / 1 = home]},
+   "ws": {"EDM": [[puck drop ms, "CAR", 0/1] or 0, ...]}    every team's game on each day of the matchup (0 = no game)
    "pt": {player id: points today}, "pw": {player id: points this week},
    "dp": {day index: {team id: [[player id, slot, points, name, "POS", "TM"], ...]}}}    each past day's real lineup
 slot is F / D / G / UTIL (counted) or BN / IR (did not count). A player is listed when he scored or was in the lineup.
@@ -93,6 +94,27 @@ def tonight(data, sp):
     return tn
 
 
+def week_games(games, abbr, start, end):
+    """Each NHL team's game on every day of the matchup, for the Roster tab's day view: [ms, opponent, home] or 0."""
+    ws = {}
+    for tid, by in games.items():
+        ab = abbr.get(tid, "?")
+        if ab == "?" or ab == "FA":
+            continue
+        row = []
+        for s in range(start, end + 1):
+            gl = [g for g in by.get(str(s), []) if g.get("date")]
+            if gl:
+                g = gl[0]
+                home = g.get("homeProTeamId") == tid
+                opp = g.get("awayProTeamId") if home else g.get("homeProTeamId")
+                row.append([g["date"], abbr.get(opp, "?"), 1 if home else 0])
+            else:
+                row.append(0)
+        ws[ab] = row
+    return ws
+
+
 def build(cfg, data, league, standings, now_ms):
     season = cfg["season"]
     abbr, games = D.schedule_maps(data["schedules"])
@@ -144,4 +166,4 @@ def build(cfg, data, league, standings, now_ms):
         print(f"  past lineups skipped ({type(e).__name__}: {e})")
         dp = {}
     return {"mp": mp, "dates": clock["dates"], "labels": clock["labels"], "today": today,
-            "games": out, "tn": tonight(data, sp), "pt": pt, "pw": pw, "done": not left_periods, "dp": dp}
+            "games": out, "tn": tonight(data, sp), "ws": week_games(games, abbr, start, end), "pt": pt, "pw": pw, "done": not left_periods, "dp": dp}

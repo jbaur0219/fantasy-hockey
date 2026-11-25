@@ -124,37 +124,234 @@ function overview(){
   $$('#t-overview table').forEach(function(t){wireSort(t.parentNode);});
 }
 
-/* ---------- roster ---------- */
-var R={pos:'All',q:'',view:'list'};
-var SLOTN={F:'Forward slot',D:'Defense slot',G:'Goalie slot',UTIL:'UTIL slot',BN:'Bench',IR:'Injured reserve'};
-function rosterRow(p){
-  var bits=[esc(p.pos)+' '+esc(p.tm)];
-  if(p.slot==='BN')bits.push('Bench');
-  if(p.rl&&p.rl!=='Not listed')bits.push(esc(rlTxt(p.rl)));
-  if(p.gl!=null)bits.push(p.gl+' game'+(p.gl===1?'':'s')+' left');
-  var trend=(p.rec!=null&&p.ppg!=null&&p.gp>=6)?(p.rec-p.ppg>=0.4?' <span class="good">hot</span>':(p.rec-p.ppg<=-0.4?' <span class="warn">cold</span>':'')):'';
-  var inj=(p.inj&&p.inj!=='ACTIVE')?' <span class="bad">'+esc(injLabel(p.inj).toLowerCase())+'</span>':'';
-  var av=(typeof avHtml==='function')?avHtml(p.id,p.tm):'';
-  return '<div class="srow rsrow"><div class="sm rrow">'+av+'<div class="rtx"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a>'+inj+trend+'<div class="muted">'+bits.join(' &middot; ')+'</div></div></div>'
-    +'<div class="sr rpts"><b>'+f(p.out,1)+'</b><span class="muted">'+(p.grp==='G'?'per start':'per game')+'</span></div></div>';
+/* ---------- roster ----------
+   Two views, one segmented control:
+   - Lineup (default): your lineup on one day of the matchup. A week strip on top (each day shows how full your lineup is),
+     a short summary of that day, any lineup fix (a bench player has a game and a starter does not), then every player by
+     lineup spot with his game that day: puck drop, live score, or final, and his projection or points (tap to see how they
+     were made). Past days use ESPN's real lineup for that day (D.sb.dp); today uses live scores when they are in.
+   - All stats: the full sortable table, as before.
+   The week strip and the segmented control are built once and never rebuilt, so their selection pills slide (transform only). */
+var R={pos:'All',q:'',view:'day',day:null};
+try{R.view=localStorage.getItem('fh_rv')==='table'?'table':'day';}catch(e){}
+var RD_SLOTS=[['F','Forwards'],['D','Defense'],['UTIL','Utility'],['G','Goalies'],['BN','Bench'],['IR','Injured reserve']];
+function rdLineup(){var L=(D.rules&&D.rules.lineup)||{};return {F:L.F!=null?L.F:9,D:L.D!=null?L.D:5,UTIL:L.UTIL!=null?L.UTIL:1,G:L.G!=null?L.G:2};}
+function rdActive(p){return ['F','D','UTIL','G'].indexOf(p.slot)>=0;}
+function rdT(S){return S?Math.min(S.today,S.dates.length-1):0;}
+function rdGame(p,i,S){
+  if(!S)return null;
+  if(S.ws&&S.ws[p.tm])return S.ws[p.tm][i]||null;
+  return (i===rdT(S)&&S.tn&&S.tn[p.tm])||null;
 }
-function rosterList(rows){
-  var bench=function(p){return p.slot==='BN'?1:0;},by=function(a,b){return (bench(a)-bench(b))||(b.out-a.out);};
-  var secs=[['Forwards',function(p){return p.grp==='F'&&p.slot!=='IR';}],['Defense',function(p){return p.grp==='D'&&p.slot!=='IR';}],
-            ['Goalies',function(p){return p.grp==='G'&&p.slot!=='IR';}],['Injured reserve',function(p){return p.slot==='IR';}]];
-  return secs.map(function(sc){
-    var rs=rows.filter(sc[1]).sort(by);
-    return rs.length?'<div class="rsec">'+sc[0]+' <span class="muted">'+rs.length+'</span></div>'+rs.map(rosterRow).join(''):'';
-  }).join('');
+/* the live game (today's ESPN scoreboard) for a team, if it is the same game */
+function rdLv(p,g){
+  if(typeof LIVE==='undefined'||!LIVE||!LIVE.ev||!g)return null;
+  var ab=lvAb(p.tm);
+  for(var k=0;k<LIVE.ev.length;k++){var e=LIVE.ev[k];if((e.h.ab===ab||e.a.ab===ab)&&Math.abs(e.start-g[0])<6*3600e3)return e;}
+  return null;
+}
+/* one player's day: game, state (none | up | live | final), whether he is not going to play, and points */
+function rdState(p,i,S){
+  var g=rdGame(p,i,S),t=rdT(S),o={g:g,st:'none',np:false,pts:null};
+  if(!g)return o;
+  o.np=BAD.indexOf(p.inj)>=0||(i===t&&p.grp==='G'&&!!p.ns);
+  var now=Date.now();
+  if(i>t){o.st='up';return o;}
+  if(i<t){o.st='final';return o;}
+  var e=rdLv(p,g);
+  if(e&&e.st==='in')o.st='live';
+  else if(e&&e.st==='post')o.st='final';
+  else if(e&&e.st==='pre')o.st=now<g[0]+15*60e3?'up':'live';
+  else o.st=now<g[0]?'up':(now<g[0]+3*3600e3?'live':'final');
+  o.e=e;
+  if(o.st!=='up'){
+    var L=(typeof LIVE!=='undefined'&&LIVE&&LIVE.pts&&LIVE.pts[p.id])||null,sp=S.pt?S.pt[p.id]:null;
+    o.pts=o.st==='final'&&sp!=null?sp:(L?Math.round(L.p*10)/10:(sp!=null?sp:null));
+    if(L&&L.s&&o.st==='live')o.line=L.s;
+  }
+  return o;
+}
+function rdPlays(p,i,S){var s=rdState(p,i,S);return !!s.g&&!s.np;}
+function rdGameTxt(p,s,i,S){
+  var g=s.g,t=rdT(S);
+  if(!g){
+    if(i<t)return 'No game';
+    var n=null;if(S&&S.ws&&S.ws[p.tm])for(var k=i+1;k<S.dates.length;k++)if(S.ws[p.tm][k]){n=k;break;}
+    return n!=null?'No game &middot; next '+esc(dayShort(S.labels[n]).split(' ')[0]):'No more games this week';
+  }
+  var opp=(g[2]?'vs ':'@')+esc(g[1]);
+  if(i>=t&&BAD.indexOf(p.inj)>=0)return opp+' &middot; <b class="rd-no">'+esc(injLabel(p.inj))+'</b>';
+  if(i===t&&p.grp==='G'&&p.ns&&s.st==='up')return opp+' &middot; <b class="rd-no">Not starting</b>';
+  var e=s.e;
+  if(s.st==='live'){
+    var sc='';if(e){var ab=lvAb(p.tm),me=e.h.ab===ab?e.h:e.a,ot=me===e.h?e.a:e.h;sc=' &middot; '+me.sc+'&ndash;'+ot.sc+(e.det?' &middot; '+esc(e.det):'');}
+    return '<span class="sb-live"></span> '+opp+sc;
+  }
+  if(s.st==='final'){
+    if(e&&e.st==='post'){var ab2=lvAb(p.tm),m2=e.h.ab===ab2?e.h:e.a,o2=m2===e.h?e.a:e.h;return opp+' &middot; '+(m2.sc>o2.sc?'W':'L')+' '+m2.sc+'&ndash;'+o2.sc;}
+    return opp+' &middot; Final';
+  }
+  return opp+' &middot; '+(i===t?etTime(g[0]):esc(dayShort(S.labels[i]).split(' ')[0])+' '+etTime(g[0]));
+}
+function lastName(n){var w=String(n||'').trim().split(/\s+/);return w.length>1?w.slice(1).join(' '):n;}
+function rdInj(p){return (p.inj&&p.inj!=='ACTIVE')?'<i class="rd-inj">'+esc(injShort(p.inj))+'</i>':'';}
+function rdRow(p,s,i,S,pts,bench){
+  var off=!s.g||s.np||bench;
+  var right;
+  if(pts!=null)right=muNum(p.id,pts,i===rdT(S)?'t':'d'+i,pts<0?'mu-neg':'')+'<span class="rd-k'+(s.st==='live'?' lv':'')+'">'+(s.st==='live'?'live':(bench?'bench':'pts'))+'</span>';
+  else if(s.g&&!s.np&&s.st==='up'&&p.out!=null)right='<b class="rd-pj">'+f(p.out,1)+'</b><span class="rd-k">proj</span>';
+  else right='<b class="rd-dash">&ndash;</b>';
+  return '<div class="row rd-r'+(off?' off':'')+'" data-rid="'+p.id+'">'+avHtml(p.id,p.tm)
+    +'<div class="row-m"><div class="row-t rd-n"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a>'+(i<rdT(S)&&p.slot!=='IR'?'':rdInj(p))+'</div>'
+    +'<div class="row-s rd-s">'+esc(p.pos)+' '+esc(p.tm)+' &middot; '+rdGameTxt(p,s,i,S)+'</div></div>'
+    +'<div class="rd-pt">'+right+'</div></div>';
+}
+function rdEmpty(lab){return '<div class="row rd-r rd-e"><span class="rd-ei">+</span><div class="row-m"><div class="row-t">Empty</div><div class="row-s">Open '+lab+' spot</div></div></div>';}
+/* lineup fixes for a day that has not started: a healthy bench player has a game and someone in a spot he can fill does not */
+function rdFixes(i,S){
+  var t=rdT(S),mine=D.mine||[],L=rdLineup(),out=[],used={};
+  if(i<t)return out;
+  var fits={F:['F','UTIL'],D:['D','UTIL'],G:['G']};
+  var bench=mine.filter(function(p){var s=rdState(p,i,S);return p.slot==='BN'&&s.g&&!s.np&&s.st==='up';}).sort(function(a,b){return (b.out||0)-(a.out||0);});
+  bench.forEach(function(b){
+    var ok=fits[b.grp]||[],cand=null;
+    ok.forEach(function(sl){
+      if(cand)return;
+      var have=mine.filter(function(p){return p.slot===sl;});
+      if(have.length<(L[sl]||0)){cand={empty:sl};return;}
+      have.forEach(function(a){var s=rdState(a,i,S);if(!cand&&!used[a.id]&&(!s.g||s.np)&&(s.st==='up'||!s.g))cand={a:a,s:s};});
+    });
+    if(!cand)return;
+    if(cand.a)used[cand.a.id]=1;
+    out.push({b:b,a:cand.a,why:cand.a?(cand.s.np?(BAD.indexOf(cand.a.inj)>=0?injLabel(cand.a.inj).toLowerCase():'not starting'):'no game'):'',empty:cand.empty});
+  });
+  return out;
+}
+function rdStrip(S){
+  var n=S.dates.length,t=rdT(S),act=(D.mine||[]).filter(rdActive),L=rdLineup(),tot=L.F+L.D+L.UTIL+L.G;
+  var h='<div class="rd-days" id="rdDays" style="--n:'+n+'" role="tablist" aria-label="Matchup day"><span class="rd-sel" id="rdSel"></span>';
+  S.dates.forEach(function(d,k){
+    var lab=String(S.labels[k]||'').split(' '),c=act.filter(function(p){return rdPlays(p,k,S);}).length,fr=tot?Math.min(1,c/tot):0;
+    h+='<button type="button" class="rd-d'+(k===t&&!S.done?' t':'')+(k<t?' past':'')+'" data-rday="'+k+'" role="tab" aria-label="'+esc(S.labels[k])+', '+c+' of '+tot+' lineup spots have a game">'
+      +'<span class="rd-dn">'+esc(k===t&&!S.done?'Today':lab[0])+'</span><span class="rd-dd">'+esc(lab[2]||'')+'</span><span class="rd-m"><i style="transform:scaleX('+fr.toFixed(3)+')"></i></span></button>';
+  });
+  return h+'</div>';
+}
+function rdSum(i,S){
+  var t=rdT(S),act=(D.mine||[]).filter(rdActive),L=rdLineup(),tot=L.F+L.D+L.UTIL+L.G;
+  var st=act.map(function(p){return {p:p,s:rdState(p,i,S)};}),on=st.filter(function(x){return x.s.g&&!x.s.np;});
+  function tile(v,k,cls){return '<div class="rd-tile"><b class="'+(cls||'')+'">'+v+'</b><span>'+k+'</span></div>';}
+  var me=(D.teams.filter(function(x){return x.me;})[0]||{}).id,mg=null;
+  (S.games||[]).forEach(function(g){if(!mg&&(g.a===me||g.b===me))mg=g;});
+  var dayPts=mg?(mg.a===me?mg.ad[i]:mg.bd[i]):null;
+  var first=on.map(function(x){return x.s.g[0];}).sort()[0];
+  var h='<div class="rd-sum">';
+  if(i<t){
+    var dp=S.dp&&S.dp[String(i)]&&S.dp[String(i)][String(me)];
+    var pl=dp?dp.filter(function(e){return e[1]!=='BN'&&e[1]!=='IR'&&S.ws&&S.ws[e[5]]&&S.ws[e[5]][i];}).length:on.length;
+    h+=tile(dayPts==null?'&ndash;':f(dayPts,1),'points')+tile(pl,'played')+(function(){var op=mg?(mg.a===me?mg.bd[i]:mg.ad[i]):null;if(dayPts==null||op==null)return tile('&ndash;','vs opponent');var d=dayPts-op;return tile(sgn(d,1),'vs opponent',d>0?'ok':(d<0?'neg':''));})();
+  }else{
+    var proj=0,got=0,any=false;
+    on.forEach(function(x){if(x.s.st==='up')proj+=(x.p.out||0);else{any=true;if(x.s.pts!=null)got+=x.s.pts;}});
+    h+=tile(on.length+'<i>/'+tot+'</i>','playing',on.length<tot?'':'ok');
+    if(i===t&&any)h+=tile(f(dayPts!=null&&dayPts>got?dayPts:got,1),'points so far')+tile(f(proj,1),'still to come');
+    else h+=tile(f(proj,1),'projected')+tile(first?etTime(first).replace(':00',''):'&ndash;',first?'first game':'no games');
+  }
+  return h+'</div>';
+}
+function rdBody(i,S){
+  var t=rdT(S),h=rdSum(i,S),L=rdLineup();
+  var fx=rdFixes(i,S);
+  if(fx.length){
+    h+='<div class="grp rd-fix">'+fx.map(function(x){
+      var b=x.b,gb=rdGame(b,i,S);
+      return '<div class="row"><span class="ric wn">'+(typeof SF!=='undefined'&&SF.warn?SF.warn:'!')+'</span><div class="row-m"><div class="row-t">Start '+esc(shortName(b.n))+(x.a?' over '+esc(shortName(x.a.n)):'')+'</div>'
+        +'<div class="row-s">'+esc(lastName(b.n))+' plays '+(gb[2]?'vs ':'@')+esc(gb[1])+'. '+(x.a?esc(lastName(x.a.n))+(x.why==='no game'?' has no game.':' is '+esc(x.why)+'.'):'Your '+(x.empty==='UTIL'?'utility':x.empty)+' spot is empty.')+' Set it in ESPN.</div></div></div>';
+    }).join('')+'</div>';
+  }
+  var past=i<t,dp=past&&S.dp&&S.dp[String(i)],me=(D.teams.filter(function(x){return x.me;})[0]||{}).id,rows=dp&&dp[String(me)];
+  if(past&&rows){
+    var by={};rows.forEach(function(e){var sl=e[1]==='UTIL'?'UTIL':e[1];(by[sl]=by[sl]||[]).push(e);});
+    RD_SLOTS.forEach(function(sc){
+      var L2=(by[sc[0]]||[]).slice().sort(function(a,b){return b[2]-a[2];});if(!L2.length)return;
+      var bn=sc[0]==='BN'||sc[0]==='IR';
+      h+='<div class="rd-sec"><span>'+sc[1]+'</span><span class="rd-sr">'+(bn?'did not count':f(L2.reduce(function(s,e){return s+e[2];},0),1)+' pts')+'</span></div><div class="grp">';
+      h+=L2.map(function(e){
+        var k=ALL[e[0]],p=k||{id:e[0],n:e[3],pos:e[4],tm:e[5],grp:e[4]==='G'?'G':e[4]==='D'?'D':'F'};
+        var s=rdState(p,i,S);return rdRow(p,s,i,S,(s.g&&e[1]!=='IR')||e[2]?e[2]:null,bn);
+      }).join('')+'</div>';
+    });
+    return h+'<div class="rd-note">ESPN\'s lineup for '+esc(S.labels[i])+'. Bench points did not count. Tap a score to see how it was made.</div>';
+  }
+  var mine=D.mine||[];
+  RD_SLOTS.forEach(function(sc){
+    var ps=mine.filter(function(p){return p.slot===sc[0];});
+    var need=L[sc[0]]||0,empty=sc[0]!=='BN'&&sc[0]!=='IR'?Math.max(0,need-ps.length):0;
+    if(!ps.length&&!empty)return;
+    var st=ps.map(function(p){return {p:p,s:rdState(p,i,S)};});
+    st.sort(function(a,b){var x=a.s.g&&!a.s.np?0:1,y=b.s.g&&!b.s.np?0:1;return (x-y)||((a.s.g?a.s.g[0]:0)-(b.s.g?b.s.g[0]:0))||((b.p.out||0)-(a.p.out||0));});
+    var on=st.filter(function(x){return x.s.g&&!x.s.np;}).length,lineup=sc[0]!=='BN'&&sc[0]!=='IR';
+    h+='<div class="rd-sec"><span>'+sc[1]+'</span><span class="rd-sr">'+(lineup?on+' of '+(ps.length+empty)+' playing':(sc[0]==='BN'&&on?on+' with a game':''))+'</span></div><div class="grp">';
+    h+=st.map(function(x){return rdRow(x.p,x.s,i,S,x.s.pts,!lineup);}).join('');
+    for(var k=0;k<empty;k++)h+=rdEmpty(sc[0]==='UTIL'?'utility':sc[0]);
+    h+='</div>';
+  });
+  var note=past?'ESPN\'s lineup for this day is not available, so this is your roster now.':
+    (i===t?'Gray numbers are projections. Tap a score to see how it was made.':'Your lineup as it is set now. Gray numbers are projections.');
+  return h+'<div class="rd-note">'+note+'</div>';
+}
+function rdPill(i,n,anim){
+  var el=document.getElementById('rdSel');if(!el)return;
+  if(!anim)el.classList.add('nt');
+  el.style.transform='translateX('+(i*100)+'%)';
+  if(!anim){void el.offsetWidth;el.classList.remove('nt');}
+  $$('#rdDays .rd-d').forEach(function(b){var on=+b.getAttribute('data-rday')===i;b.classList.toggle('on',on);b.setAttribute('aria-selected',on?'true':'false');});
+}
+function rdPaint(dir){
+  var S=D.sb,b=document.getElementById('rdBody');if(!S||!b)return;
+  b.innerHTML=rdBody(R.day,S);
+  if(dir&&!RM){b.classList.remove('in-r','in-l');void b.offsetWidth;b.classList.add(dir>0?'in-r':'in-l');}
+}
+function rdDay(i){
+  var S=D.sb;if(!S||i===R.day||i<0||i>=S.dates.length)return;
+  var dir=i>R.day?1:-1;R.day=i;rdPill(i,S.dates.length,true);rdPaint(dir);
+}
+/* fresh live scores: repaint today in place, unless a score breakdown is open */
+function rdLive(){
+  var S=D.sb;if(!S||R.view!=='day'||R.day!==rdT(S))return;
+  var b=document.getElementById('rdBody');if(!b||b.querySelector('.mu-bk'))return;
+  b.innerHTML=rdBody(R.day,S);
+}
+function rdSeg(){
+  var sg=document.getElementById('rosterSeg');if(!sg)return;
+  if(!sg.firstChild)sg.innerHTML='<div class="pcseg rd-seg"><span class="th"></span><button type="button" data-rv="day">Lineup</button><button type="button" data-rv="table">All stats</button></div>';
+  var p=sg.firstChild;p.classList.toggle('two',R.view==='table');
+  $$('button',p).forEach(function(x){x.classList.toggle('on',x.getAttribute('data-rv')===R.view);});
 }
 function rosterRender(){
+  rdSeg();
+  var ctl=document.getElementById('rosterCtl'),box=$('#rosterTbl'),S=D.sb;
+  if(ctl)ctl.style.display=R.view==='table'?'':'none';
+  if(R.view==='day'&&S&&S.dates&&S.dates.length){
+    if(R.day==null)R.day=rdT(S);
+    box.innerHTML=rdStrip(S)+'<div id="rdBody" class="rd-body"></div>';
+    rdPill(R.day,S.dates.length,false);rdPaint(0);
+    return;
+  }
+  if(R.view==='day'){box.innerHTML='<div class="rd-note">Your day-by-day lineup shows up after the next data refresh.</div>';return;}
   chips('#rosterPos',['All','F','D','G'],R.pos,function(v){R.pos=v;rosterRender();});
   var rows=D.mine.filter(function(p){return (R.pos==='All'||p.grp===R.pos)&&(!R.q||p.n.toLowerCase().indexOf(R.q)>=0);});
-  var tg='<div class="controls"><button type="button" class="chip-btn'+(R.view==='list'?' on':'')+'" data-rv="list">Simple</button><button type="button" class="chip-btn'+(R.view==='table'?' on':'')+'" data-rv="table">All stats</button></div>';
-  if(R.view==='list'){$('#rosterTbl').innerHTML=tg+rosterList(rows)+'<div class="muted" style="margin-top:8px">The number on the right is projected points per game from here on (per start for goalies). Tap a name for the full card.</div>';return;}
-  $('#rosterTbl').innerHTML=tg+mkTable(rosterCols,rows);wireSort($('#rosterTbl'));
+  box.innerHTML='<div class="rd-tbl">'+mkTable(rosterCols,rows)+'</div><div class="rd-note">PPG = points per game so far. Luck-adj = what he would average if puck luck evened out. Proj = ESPN\'s projection. Proj/gm = our projection, used for every suggestion. Games left = games left in this matchup week.</div>';
+  wireSort(box);
 }
-document.addEventListener('click',function(e){var b=e.target.closest?e.target.closest('[data-rv]'):null;if(b){R.view=b.getAttribute('data-rv');rosterRender();}});
+document.addEventListener('click',function(e){
+  var t=e.target;if(!t||!t.closest)return;
+  var b=t.closest('[data-rv]');
+  if(b){var v=b.getAttribute('data-rv');if(v!==R.view){R.view=v;try{localStorage.setItem('fh_rv',v);}catch(x){}rosterRender();}return;}
+  var d=t.closest('[data-rday]');if(d){rdDay(+d.getAttribute('data-rday'));return;}
+  var r=t.closest('.rd-r[data-rid]');
+  if(r&&!t.closest('.mu-nb,a.pl')){var p=ALL[r.getAttribute('data-rid')];if(p)modal(p);}
+});
 
 /* ---------- free agents ---------- */
 var FA={pos:'Skaters',q:'',hide:true,games:false,n:50};
@@ -2673,7 +2870,7 @@ function muFlip(anchor,fn){
   setTimeout(function(){moved.forEach(function(e){e.classList.remove('flip');});},470);
 }
 function muBd(btn){
-  var row=btn.closest('.mu-lr');if(!row)return;
+  var row=btn.closest('.mu-lr,.rd-r');if(!row)return;
   var id=btn.getAttribute('data-bd'),sc=btn.getAttribute('data-bs'),v=+btn.getAttribute('data-bv'),key=id+'|'+sc;
   var nx=row.nextElementSibling,wasOpen=!!(nx&&nx.classList&&nx.classList.contains('mu-bk')&&nx.getAttribute('data-bdk')===key);
   function go(){
@@ -2990,7 +3187,7 @@ function lvHtml(){
   if(any)h+='<div class="sec-f">Power-play points show up after the next full update.'+(LIVE.at?' Checked '+etTime(LIVE.at)+'.':'')+'</div>';
   return h+'</div>';
 }
-function lvPaint(){var el=document.getElementById('livebox');if(el)el.innerHTML=lvHtml();}
+function lvPaint(){var el=document.getElementById('livebox');if(el)el.innerHTML=lvHtml();try{rdLive();}catch(e){}}
 function lvLater(ms){clearTimeout(LIVE.tm);LIVE.tm=setTimeout(lvFetch,ms);}
 function lvNext(){
   var mine=LIVE.ev.filter(function(e){return lvMineIn(e).length;}),now=Date.now();
@@ -3010,7 +3207,7 @@ function lvFetch(){
       var t=(e.status&&e.status.type)||{};
       return {id:e.id,st:t.state||'pre',det:t.shortDetail||'',start:Date.parse(e.date),h:side('home'),a:side('away')};
     });
-    var rel={};lvStarters(D.mine).concat(lvStarters(lvOpp())).forEach(function(p){rel[lvAb(p.tm)]=1;});
+    var rel={};(D.mine||[]).concat(lvStarters(lvOpp())).forEach(function(p){rel[lvAb(p.tm)]=1;});
     var need=LIVE.ev.filter(function(e){return e.st!=='pre'&&!LIVE.done[e.id]&&(rel[e.h.ab]||rel[e.a.ab]);});
     return Promise.all(need.map(function(e){
       return fetch(LV_URL+'summary?event='+e.id).then(lvJ).then(function(sm){lvBox(e,sm);if(e.st==='post')LIVE.done[e.id]=1;}).catch(function(){});
