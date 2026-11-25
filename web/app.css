@@ -450,11 +450,12 @@ html.sheet-on #gnav,html.sheet-on #bnav,html.sheet-on #rfbar{opacity:0;pointer-e
 .sb-sc .dim{opacity:.5}.sb-d{width:10px;height:3px;border-radius:2px;background:rgba(255,255,255,.35)}
 .wp{margin-top:14px}
 .wp-h{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:7px;text-align:center}
-.wp-bar{display:flex;gap:3px;height:6px}
-.wp-bar i{display:block;height:100%;border-radius:3px}
-.wp-bar .a{width:var(--w);background:hsl(var(--h1) 90% 62%);animation:grow 1.1s .15s var(--soft-spring) both}
-.wp-bar .b{flex:1;background:hsl(var(--h2) 75% 60%)}
-@keyframes grow{from{width:50%}}
+.wp-bar{position:relative;height:6px;border-radius:3px;overflow:hidden}
+.wp-bar i{position:absolute;top:0;bottom:0;width:100%;border-radius:3px;animation:wpIn 1.1s .15s var(--soft-spring) both}
+.wp-bar .a{left:calc(var(--w) - 1.5px - 100%);background:hsl(var(--h1) 90% 62%)}
+.wp-bar .b{left:calc(var(--w) + 1.5px);background:hsl(var(--h2) 75% 60%)}
+/* both pills slide together from a 50/50 split to the real one: transform only, the bar's layout never changes */
+@keyframes wpIn{from{transform:translate3d(var(--t,0%),0,0)}}
 .wp-l{display:flex;justify-content:space-between;margin-top:6px;font-size:15px;font-variant-numeric:tabular-nums}
 .wp-l span:last-child{color:rgba(255,255,255,.55)}
 .sb-ft{display:flex;justify-content:center;gap:6px;margin-top:10px;padding-top:11px;border-top:.5px solid rgba(255,255,255,.14);font-size:13px;color:rgba(255,255,255,.55)}
@@ -1094,7 +1095,7 @@ body.nophoto .ps-r+.ps-r:before{left:16px}
 #s-players-main.ps-busy>.card{display:none}
 .mu-pw{position:relative}
 .mu-ghost{position:absolute;left:0;right:0;top:0;pointer-events:none}
-.mu-page .sb,.mu-page .wp-bar .a{animation:none}     /* pages swap under your finger: no entrance animation */
+.mu-page .sb,.mu-page .wp-bar i{animation:none}     /* pages swap under your finger: no entrance animation */
 .mu-page{display:flow-root}
 
 /* ---------- feel like an app, not a website ---------- */
@@ -1250,3 +1251,7 @@ body.nophoto .grp>.row.rd-r:not(:first-child):before{left:16px}
 .rd-fm.hot{color:var(--orange);background:color-mix(in srgb,var(--orange) 16%,transparent)}
 .rd-fm.cold{color:var(--tint);background:color-mix(in srgb,var(--tint) 14%,transparent)}
 .rd-d.on,.rd-d.on .rd-dn,.rd-d.on .rd-dd{transition-delay:.06s}
+
+/* Bigger touch target for player names (Apple asks for about 44 pt): an invisible pad around the name, no layout change */
+a.pl{position:relative}
+a.pl:after{content:'';position:absolute;inset:-7px -3px}

@@ -1890,7 +1890,7 @@ function uiToday(){
       +'<div class="sb-tm"><div class="mono" style="--h:'+h2+'">'+esc(initials(op))+muImg(todayTeam(false,M))+'</div><div class="sb-n">'+esc(op)+'</div><div class="sb-r">'+esc(M.opp_rec||'')+'</div></div>'
       +'</div>'
       +'<div class="wp"><div class="wp-h"><span>Win probability</span></div>'
-      +'<div class="wp-bar"><i class="a" style="--w:'+pw+'%"></i><i class="b"></i></div>'
+      +'<div class="wp-bar" style="'+wpVars(pw)+'"><i class="a"></i><i class="b"></i></div>'
       +'<div class="wp-l"><span><b data-cu="'+pw+'" data-suf="%">'+pw+'%</b></span><span><b>'+(100-pw)+'%</b></span></div></div>'
       +'<div class="sb-ft"><span>Projected</span><b>'+Math.round(M.proj_me)+'</b><span>&ndash;</span><b>'+Math.round(M.proj_opp)+'</b>'+(mi>=0?'<span class="sb-go" aria-hidden="true">'+SF.chev+'</span>':'')+'</div>'
       +'</section>';
@@ -2173,8 +2173,11 @@ function uiEdge(){
   (D.mine||[]).forEach(function(p){if(p.slot!=='IR'&&!isInj(p))mineBy[p.tm]=(mineBy[p.tm]||0)+1;});
   E.forEach(function(x,i){h+='<button type="button" class="chip-btn'+(i===UI.edgeWin?' on':'')+'" data-ew="'+i+'">'+esc(x.label)+'</button>';});
   h+='</div><div class="muted" style="margin:6px 0">Teams ranked by games and opponent strength (3 easy games beat 3 average ones). Green = weak opponent, red = strong. @ = away. Blue teams are ones you own players on. A dot marks the second game of a back-to-back. Best free-agent skaters from each team are on the right.</div>';
+  /* a day with no games left for any team (today after puck drop) is an empty column: leave it out */
+  var used={};w.rows.forEach(function(r){r.opps.forEach(function(o){used[o.d]=1;});});
+  var days=w.days.filter(function(d){return used[d];});if(!days.length)days=w.days;
   var hd='<th>Team</th><th>GP</th>';
-  w.days.forEach(function(d){hd+='<th>'+esc(d)+'</th>';});
+  days.forEach(function(d){hd+='<th>'+esc(d)+'</th>';});
   hd+='<th>Best adds</th>';
   /* pinned copy of the header row (see edgeStick): sits exactly over the real header at rest, stays under the nav bar when scrolling */
   h+='<div class="edge-wrap"><div class="edge-sent"></div><div class="edge-sh" aria-hidden="true"><div class="edge-shbg"><div class="edge-shin scroll"><table class="edge"><thead><tr>'+hd+'</tr></thead></table></div></div></div>';
@@ -2183,7 +2186,7 @@ function uiEdge(){
     var by={};r.opps.forEach(function(o){by[o.d]=o;});
     var n=mineBy[r.tm]||0;
     h+='<tr><td><b'+(n?' class="own"':'')+'>'+esc(r.tm)+'</b></td><td><b>'+r.g+'</b></td>';
-    w.days.forEach(function(d,di){var o=by[d],b2b=o&&di>0&&by[w.days[di-1]];h+='<td>'+(o?'<span class="'+(o.t==='weak'?'good':o.t==='strong'?'bad':'muted')+'">'+(o.h?'':'@')+esc(o.o)+'</span>'+(b2b?'<i class="b2b"></i>':''):'')+'</td>';});
+    days.forEach(function(d){var di=w.days.indexOf(d),o=by[d],b2b=o&&di>0&&by[w.days[di-1]];h+='<td>'+(o?'<span class="'+(o.t==='weak'?'good':o.t==='strong'?'bad':'muted')+'">'+(o.h?'':'@')+esc(o.o)+'</span>'+(b2b?'<i class="b2b"></i>':''):'')+'</td>';});
     h+='<td>'+(r.fa.length?r.fa.map(function(p){return '<a class="pl" data-id="'+p.id+'" data-noav="1">'+esc(shortName(p.n))+'</a> <span class="muted">'+esc(p.pos)+(p.w?' W':'')+'</span>';}).join('<br>'):'<span class="muted">none</span>')+'</td></tr>';
   });
   h+='</tbody></table></div></div>';
@@ -2962,6 +2965,10 @@ function muBd(btn){
   }
   if(typeof glLoad==='function')glLoad().then(go,go);else go();
 }
+/* win-probability bar: two full-width pills clipped by the rounded track; the split between them is laid out once at its
+   final place and both pills slide in from 50/50 together (--t, translateX: compositor only, nothing stretches).
+   The old version animated width, which re-laid-out the page every frame for a second each time Today opened. */
+function wpVars(a){a=Math.max(0,Math.min(100,+a||0));return '--w:'+a+'%;--t:'+(50-a)+'%';}
 /* your own matchup's place in the list (-1 when the league scoreboard is missing) */
 function muMine(){var S=D.sb,k=-1;if(S&&S.games)S.games.forEach(function(g,i){if(k<0&&muMe(g))k=i;});return k;}
 /* one matchup: the scoreboard, the Tonight / Week switch and the two lineups. This is the part that slides. */
@@ -2970,7 +2977,7 @@ function muPageHtml(i){
   function side(t,sc,pr){return '<div class="sb-tm">'+muMono(t)+'<div class="sb-n">'+esc(t.name)+'</div><div class="sb-r">'+esc(t.rec)+' &middot; proj '+f(pr,0)+'</div></div>';}
   var h='<div class="sb mu-sb" style="--h1:'+muHue(A.id)+';--h2:'+muHue(B.id)+'"><div class="sb-row">'+side(A,g.as,g.ap)
     +'<div class="sb-sc"><span class="'+(g.as<g.bs?'dim':'')+'">'+f(g.as,1)+'</span><i class="sb-d"></i><span class="'+(g.bs<g.as?'dim':'')+'">'+f(g.bs,1)+'</span></div>'+side(B,g.bs,g.bp)+'</div>'
-    +'<div class="wp"><div class="wp-bar" style="--w:'+w.a+'%"><i class="a"></i><i class="b"></i></div><div class="wp-l"><span>'+w.a+'%</span><span>'+(S.done?'Final':'Win chance')+'</span><span>'+w.b+'%</span></div></div></div>';
+    +'<div class="wp"><div class="wp-bar" style="'+wpVars(w.a)+'"><i class="a"></i><i class="b"></i></div><div class="wp-l"><span>'+w.a+'%</span><span>'+(S.done?'Final':'Win chance')+'</span><span>'+w.b+'%</span></div></div></div>';
   h+='<div class="pcseg mu-seg'+(MU.tab==='wk'?' two':'')+'" id="muSeg"><span class="th"></span><button type="button" data-mut="tn"'+(MU.tab==='tn'?' class="on"':'')+'>'+(S.done?'Lineups':'Tonight')+'</button><button type="button" data-mut="wk"'+(MU.tab==='wk'?' class="on"':'')+'>Week</button></div>';
   h+='<div class="mu-hh"><span>'+esc(A.name)+'</span><span>'+esc(B.name)+'</span></div><div id="muBody"></div>';
   return h;
