@@ -115,8 +115,34 @@ class ServerTest(unittest.TestCase):
             c.request("GET", "/api/status")
             r = c.getresponse()
             self.assertTrue(json.loads(r.read())["ok"])
+            c.close()
         finally:
             srv.shutdown()
+            srv.server_close()
+
+    def test_hot_update_checks_files_and_keeps_live_code_on_failure(self):
+        S = self.S
+        web = ROOT / "web"
+        good = {f: (web / f).read_bytes() for f in ("page.html", "app.css", "app.js")}
+        self.assertIsNone(S.hot_ok(good))
+        self.assertIsNotNone(S.hot_ok(dict(good, **{"app.js": good["app.js"][:5000]})))       # cut-off download
+        self.assertIsNotNone(S.hot_ok(dict(good, **{"page.html": b"<html></html>"})))          # slots gone
+        S.HOT.update(web=None, sha=None)
+        new = dict(good, **{"app.js": good["app.js"] + b"\n;"})
+        orig = S.shell_update
+        try:
+            def boom(why):
+                raise RuntimeError("bad page")
+            S.shell_update = boom
+            self.assertFalse(S.hot_apply("a" * 40, new))
+            self.assertIsNone(S.HOT["web"])                                                     # builds keep the last good code
+            S.shell_update = lambda why: True
+            self.assertTrue(S.hot_apply("b" * 40, new))
+            self.assertEqual(S.HOT["sha"], "b" * 40)
+            self.assertFalse(S.hot_apply("c" * 40, new))                                       # nothing changed: nothing to do
+        finally:
+            S.shell_update = orig
+            S.HOT.update(web=None, sha=None)
 
 
 if __name__ == "__main__":

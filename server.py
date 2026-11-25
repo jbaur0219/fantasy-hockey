@@ -580,6 +580,47 @@ def _get(url):
     return urlopen(Request(url, headers={"User-Agent": "fantasy-hockey-server"}), timeout=20).read()
 
 
+def hot_ok(files):
+    """A quick sanity check before new app code goes live for everyone: complete files, page slots in place.
+    (A cut-off download or a broken page.html would otherwise blank the app until the next push.)"""
+    page, css, js = (files.get(f, b"") for f in ("page.html", "app.css", "app.js"))
+    if any(k not in page for k in (b"__CSS__", b"__JS__", b"__DATA__")):
+        return "page.html is missing a slot"
+    if len(js) < 10000 or len(css) < 2000:
+        return "app.js or app.css looks cut off"
+    if not js.rstrip().endswith((b"}", b")", b";")):
+        return "app.js does not end cleanly"
+    return None
+
+
+def hot_apply(sha, files):
+    """Put GitHub's web/ files live. Anything wrong: keep the code that is live now (and the builds keep using it)."""
+    cur = web_dir()
+    if not any((cur / f).read_bytes() != b for f, b in files.items()):
+        return False
+    bad = hot_ok(files)
+    if bad:
+        log(f"hot update {sha[:7]} skipped: {bad}")
+        return False
+    d = DATA / "hotweb" / sha[:12]
+    d.mkdir(parents=True, exist_ok=True)
+    for f, b in files.items():
+        (d / f).write_bytes(b)
+    prev = dict(HOT)
+    HOT["web"], HOT["sha"] = d, sha
+    try:
+        shell_update(f"GitHub {sha[:7]}")
+    except Exception as e:
+        HOT.update(prev)                          # the builds go on with the last code that worked
+        log(f"hot update {sha[:7]} failed, kept the live code: {type(e).__name__}: {e}")
+        return False
+    # keep the two before it: a build that started a moment ago may still be reading one of them
+    olds = sorted((p for p in (DATA / "hotweb").iterdir() if p != d and p != prev.get("web")), key=lambda p: p.stat().st_mtime)
+    for old in olds[:-2]:
+        shutil.rmtree(old, ignore_errors=True)
+    return True
+
+
 def hot_loop():
     """Every few seconds: has main moved on GitHub? If its web/ files differ, put them live right away."""
     import re
@@ -593,18 +634,7 @@ def hot_loop():
             if sha and sha != last:
                 files = {f: _get(f"https://raw.githubusercontent.com/{REPO}/{sha}/web/{f}")
                          for f in ("page.html", "app.css", "app.js")}
-                cur = web_dir()
-                if any((cur / f).read_bytes() != b for f, b in files.items()):
-                    d = DATA / "hotweb" / sha[:12]
-                    d.mkdir(parents=True, exist_ok=True)
-                    for f, b in files.items():
-                        (d / f).write_bytes(b)
-                    # keep the two before it: a build that started a moment ago may still be reading one of them
-                    olds = sorted((p for p in (DATA / "hotweb").iterdir() if p != d), key=lambda p: p.stat().st_mtime)
-                    for old in olds[:-2]:
-                        shutil.rmtree(old, ignore_errors=True)
-                    HOT["web"], HOT["sha"] = d, sha
-                    shell_update(f"GitHub {sha[:7]}")
+                hot_apply(sha, files)
                 last = sha
         except Exception as e:
             log(f"hot update check failed: {type(e).__name__}: {e}")
