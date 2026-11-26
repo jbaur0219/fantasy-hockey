@@ -1362,8 +1362,8 @@ a.pl:after{content:'';position:absolute;inset:-7px -3px}
 .gm-stl{display:flex;align-items:baseline;justify-content:space-between;font-size:15px;font-variant-numeric:tabular-nums}
 .gm-stl span{font-size:13px;color:var(--label2)}
 .gm-stl b{font-weight:500;color:var(--label2)}.gm-stl b.w{font-weight:700;color:var(--label)}
-.gm-stb{display:flex;gap:4px;height:6px;margin-top:6px}
-.gm-stb i{flex:var(--s) 1 0;min-width:4px;border-radius:3px;background:var(--c)}
+.gm-stb{margin-top:7px}
+.gm-stb .a{background:var(--c1)}.gm-stb .b{background:var(--c2)}
 .gm-ft{margin:18px 8px 6px;text-align:center;font-size:12px;color:var(--label3)}
 .tn-g:focus-visible{outline:2px solid var(--tint)}
 #gmBody .grp{background:var(--card2)}
@@ -1371,3 +1371,17 @@ a.pl:after{content:'';position:absolute;inset:-7px -3px}
 .gm-hero{background:radial-gradient(120% 110% at 0% 0%,color-mix(in srgb,var(--ca) 88%,transparent),transparent 66%),radial-gradient(120% 110% at 100% 0%,color-mix(in srgb,var(--ch) 82%,transparent),transparent 66%),#141416}
 .gm-warn{color:var(--orange);font-weight:600}
 .gm-gch{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px}.gm-gch .gm-tag{margin-left:0}
+
+/* push / back for a player opened from the game page, and new pieces fading in during a live repaint */
+#modal .box.sw-r>*:not(.grab){animation:vInR .42s var(--soft-spring) both}
+#modal .box.sw-l>*:not(.grab){animation:vInL .42s var(--soft-spring) both}
+.mo-in{animation:pcIn .4s var(--ease) both}
+.gm-bk{margin:-2px 0 0}
+.gm-back{display:inline-flex;align-items:center;gap:1px;height:44px;margin-left:-6px;padding:0 12px 0 2px;border:0;background:none;color:var(--tint);font:inherit;font-size:17px;letter-spacing:-.022em;cursor:pointer;transition:opacity .35s var(--ease)}
+.gm-back:active{opacity:.32;transition:none}
+.gm-back svg{width:24px;height:24px;transform:rotate(180deg)}.gm-back svg .s{stroke-width:3.2}
+/* a row you can tap: the same press state as every other tappable row */
+.grp>.row[data-gp]{cursor:pointer;transition:background .35s var(--ease)}
+.grp>.row[data-gp]:active{background:var(--fill4);transition:none}
+.row[data-gp]:focus-visible{outline:2px solid var(--tint);outline-offset:-2px}
+@media (prefers-reduced-motion:reduce){#modal .box.sw-r>*,#modal .box.sw-l>*,.mo-in{animation:none!important}}
