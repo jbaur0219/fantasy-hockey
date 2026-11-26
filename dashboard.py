@@ -254,8 +254,9 @@ def move_limit(league, days):
     return move_limit_info(league, days)["limit"]
 
 
-def move_budget(league, my_id, days=None, days_left=None):
-    """How many adds you can still make this matchup, by this league's own rules.
+def move_budget(league, my_id, days=None, days_left=None, pending=0):
+    """How many adds you can still make this matchup, by this league's own rules. `pending`: waiver claims already in
+    with ESPN that process this matchup; ESPN only counts a claim once it processes, so they are added to `used` here.
     {"limit", "used", "left", "unlimited", "known", "used_known", "season_left"}. `left` also respects a season cap."""
     mp = ((league or {}).get("status") or {}).get("currentMatchupPeriod")
     if days is None:
@@ -269,13 +270,15 @@ def move_budget(league, my_id, days=None, days_left=None):
         used = int(v) if v is not None else (0 if "matchupAcquisitionTotals" in tc else None)
     except (TypeError, ValueError):
         used = None
-    left = max(0, info["limit"] - (used or 0))
+    if pending and used is not None:
+        used += pending
+    left = max(0, info["limit"] - (used or 0) - (pending if used is None else 0))
     if info.get("per_day") and days_left is not None:
         left = info["per_day"] * max(0, int(days_left))     # unused days don't carry over (today's own adds unknown)
     season_left = None
     if info["season_limit"] is not None:
         try:
-            season_left = max(0, info["season_limit"] - int(tc.get("acquisitions") or 0))
+            season_left = max(0, info["season_limit"] - int(tc.get("acquisitions") or 0) - (pending or 0))
             left = min(left, season_left)
         except (TypeError, ValueError):
             season_left = None

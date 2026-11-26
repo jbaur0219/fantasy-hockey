@@ -27,6 +27,7 @@ import edge as EDG
 import enrich as E
 import gamelog as GL
 import gameplan as GP
+import pending as PN
 import keep as KP
 import league as L
 import ledger as LG
@@ -283,6 +284,7 @@ def _main():
     cfg = A.get_config()
     print("Reading your ESPN league...")
     data = A.fetch_all(cfg)
+    data["pending"] = PN.fetch(cfg)                      # waiver claims you put in that have not processed yet (None: unreadable)
     base = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/fhl/seasons/{cfg['season']}"
     league = A.espn_get(f"{base}/segments/0/leagues/{cfg['league']}", cfg["cookies"],
                         params=[("view", "mSettings"), ("view", "mTeam"),
@@ -333,6 +335,18 @@ def _main():
     site_data["rules"] = L.page_data()                      # the league settings the model used
     _ab, _gm = D.schedule_maps(data["schedules"])
     site_data["g28"] = C.team_games(_gm, _ab, data["roster"].get("scoringPeriodId", 1), 28)   # trade values: next 4 weeks
+    try:                                                # claims already in with ESPN count as made from the day they process
+        _m0 = site_data.get("matchup")
+        _n0 = max(1, min(int(_m0["days_left"]) if _m0 else 7, D.MAX_DAYS))
+        site_data["pending"] = PN.resolve(data.get("pending"), cfg["team"], site_data, _n0)
+        PL.PENDING["n"] = PN.count_this_week(site_data["pending"])
+        for _c in site_data["pending"]:
+            print(f"  pending claim: add {_c['add_n'] or _c['add']} drop {_c['drop_n'] or _c['drop']}"
+                  f"{'' if _c['this_week'] else ' (lands next week)'}")
+    except Exception as e:
+        site_data["pending"] = []
+        PL.PENDING["n"] = 0
+        print(f"  pending claims skipped ({type(e).__name__}: {e})")
     PL.budget(league, cfg["team"])                      # this league's own weekly add limit, for every planner below
     try:
         _m = site_data.get("matchup")

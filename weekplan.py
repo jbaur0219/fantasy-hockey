@@ -79,6 +79,7 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
     if not state or state.get("mp") != mp:
         state = {"mp": mp, "moves": [], "done": [], "missed": [], "small": [], "small_logged": []}
     mine_ids = {p["id"] for p in site_data["mine"]}
+    claimed_ids = {c["add"] for c in site_data.get("pending") or [] if c.get("add") is not None}   # claim in with ESPN
     fa_by_id = {p["id"]: p for p in site_data["fas"]}
     fresh_keys = {(m["add"]["id"], m["day"], m["drop"]["id"]) for m in fresh["moves"]}
     fresh_adds = {m["add"]["id"] for m in fresh["moves"]}
@@ -94,6 +95,8 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
             continue
         if (m["add"]["id"], m["day"], m["drop"]["id"]) in fresh_keys:
             continue
+        if m["add"]["id"] in claimed_ids:
+            continue                      # claimed and waiting to process: neither changed nor missed; done once he is on your roster
         idx = labels.index(m["day"]) if m["day"] in labels else None
         if idx is None or D.day_locked(clock, idx, now_ms):
             missed.setdefault(k, {kk: m.get(kk) for kk in KEEP})
@@ -133,7 +136,7 @@ def build(cfg, data, league, standings, now_ms, site_data, healthy=True):
         # starting line for the track record: both players' season points, refreshed until the move's day locks
         import record as RC
         old_base = {(m["add"]["id"], m["day"], m["drop"]["id"]): m.get("base") for m in state.get("moves", [])}
-        saved = []
+        saved = [m for m in state.get("moves", []) if m["add"]["id"] in claimed_ids and m["add"]["id"] not in mine_ids]
         for m in fresh["moves"]:
             sm = {k: m.get(k) for k in KEEP if k != "base"}
             key = (m["add"]["id"], m["day"], m["drop"]["id"])
@@ -194,7 +197,9 @@ def next_week(cfg, data, league, standings, now_ms, site_data):
     STR.STATE["ref"] = 0
     import longterm as LT
     fut = C.team_games(games, abbr, sp + ndays, LT.HORIZON_DAYS)
-    plan = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, {}, PL.MOVE_LIMIT, fut)
+    # a claim in with ESPN processes tomorrow, which is the start of next week: it is on your roster for all of it
+    pend = [{**c, "t": 0} for c in site_data.get("pending") or [] if c.get("add") is not None]
+    plan = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, {}, PL.MOVE_LIMIT, fut, pending=pend)
     return {"base": plan["base"], "total": plan["total"], "gain": plan["gain"],
             "moves": [{**{k: mv.get(k) for k in KEEP}, "why": (mv.get("why_add") or [])[:1]} for mv in plan["moves"]],
             "first_day": days[0] if days else ""}

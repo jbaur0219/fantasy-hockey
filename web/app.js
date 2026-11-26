@@ -1422,6 +1422,14 @@ function gpClaimRow(m){
   return '<div class="row"><span class="ric">'+SF.clock+'</span><div class="row-m"><div class="row-t">Claim <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
     +'<div class="row-s">He is on waivers. Put the claim in today so he is yours '+esc(dayShort(m.day))+' (then '+(m.ir?'move '+esc(m.drop.n)+' to IR':'drop '+esc(m.drop.n))+').</div></div></div>';
 }
+/* claims already in with ESPN that haven't processed yet: the plan counts them as made, this row shows the app knows */
+function gpPendingRows(P){
+  return ((P&&P.pending)||[]).map(function(c){
+    var who=c.add_n?'<a class="pl" data-noav="1" data-id="'+c.add+'">'+esc(c.add_n)+'</a>':'your claim',
+        s=c.this_week===false?'Goes through overnight, so he is yours next week.':'Goes through overnight. '+(c.drop_n?esc(c.drop_n)+' is dropped then. ':'')+'The plan already counts it.';
+    return '<div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">Claim in: '+who+'</div><div class="row-s">'+s+'</div></div></div>';
+  }).join('');
+}
 function gpLockTxt(i){var C=D.clock,l=C&&C.lock&&C.lock[i];return l?'Before '+etTime(l):'';}
 function gpBudget(P){
   if(P.unlimited)return '<div class="sec-f">Your league has no weekly move limit.</div>';
@@ -1450,6 +1458,8 @@ function uiGamePlan(){
   if(P.hidden)warns.push(P.hidden+' move'+(P.hidden===1?'':'s')+' for a day that already started '+(P.hidden===1?'was':'were')+' taken off. A fresh plan builds shortly after puck drop.');
   if(P.cautious)warns.push('Line data couldn’t be loaded this update, so only moves from the last good update are shown.');
   if(WP.saved===false)warns.push('Some data was missing in this update. Double-check a move before you make it; the next good update replaces this plan.');
+  var pr=gpPendingRows(P);
+  if(pr)h+='<div class="grp gp-gap">'+pr+'</div>';
   if(warns.length)h+='<div class="grp gp-gap">'+warns.map(function(w){return '<div class="row"><span class="ric wn">'+SF.warn+'</span><div class="row-m"><div class="row-s" style="color:var(--label)">'+esc(w)+'</div></div></div>';}).join('')+'</div>';
   /* the moves, day by day, each with the deadline to make it */
   var any=false;
@@ -1938,6 +1948,7 @@ function uiToday(){
   UI.exp=UI.exp||{};
   h+='<div class="sec"><div class="sec-h"><span>Moves</span>'+(lk?'<span class="sec-r">'+SF.clock+'Before '+etTime(lk)+'</span>':'')+'</div><div class="grp">';
   if(warn)h+='<div class="row"><span class="ric wn">'+SF.warn+'</span><div class="row-m"><div class="row-t">Check the data</div><div class="row-s">'+esc(warn)+'</div></div></div>';
+  h+=gpPendingRows(P);
   if(all.length||cl.length){
     h+=cl.map(gpClaimRow).join('')+all.map(function(m){return glMoveRow(m);}).join('');
   }else{

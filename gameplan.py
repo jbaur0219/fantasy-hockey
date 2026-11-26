@@ -60,10 +60,11 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
     healthy = lh == "live" or (lh == "cached" and (R.STATE["cache_age_h"] or 0) <= 24)
     mp = (league.get("status") or {}).get("currentMatchupPeriod")
     kept = KP.load(mp)
+    pend = [c for c in site_data.get("pending") or [] if c.get("add") is not None]   # claims already in with ESPN
     res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, fut, prev=prev,
                  only_prev=cautious, keep_ids=kept, healthy=healthy, ir_free=D.ir_free(league, site_data["mine"]),
-                 per_day=bg.get("per_day"))
-    entries, _, pool = C.build_inputs(site_data["mine"], site_data["fas"], game, ndays, standings, starters)
+                 per_day=bg.get("per_day"), pending=pend)
+    entries, _, pool = C.build_inputs(site_data["mine"], site_data["fas"], game, ndays, standings, starters, pending=pend)
     before_rows = _day_rows(entries, ndays, days, game)
     after_rows = _day_rows(res["ents"], ndays, days, game)
     taken = {mv["add"]["id"] for mv in res["moves"]}
@@ -84,6 +85,8 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
             "small": res.get("small", []),
             "moves_left": moves_left, "limit": bg["limit"], "used_known": bg["used_known"], "moves_used": used,
             "unlimited": bg["unlimited"], "limit_known": bg["known"], "season_left": bg["season_left"],
+            "pending": [{"add": c["add"], "drop": c.get("drop"), "add_n": c.get("add_n"), "drop_n": c.get("drop_n"),
+                         "add_tm": c.get("add_tm"), "this_week": c.get("this_week")} for c in pend],
             "next_games": nxt, "fut": fut, "fut_days": LT.HORIZON_DAYS, "cautious": cautious, "mp": mp, "kept": sorted(kept), "healthy": healthy}
     plan["unused"] = max(0, moves_left - len(plan["moves"]))
     plan["ir_free"] = D.ir_free(league, site_data["mine"])
@@ -92,7 +95,7 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
         opp = next((t for t in site_data.get("teams", []) if t["id"] == m.get("opp_id")), None)
         try:
             pr = C.matchup_projection(site_data["mine"], opp["players"] if opp else [], game, ndays, standings, starters,
-                                      m["me_now"], m["opp_now"])
+                                      m["me_now"], m["opp_now"], pending=pend, fas=site_data["fas"])
             m.update({"proj_me": pr["proj_me"], "proj_opp": pr["proj_opp"], "p_win": pr["p_win"], "sd": pr["sd"]})
         except Exception as e:
             print(f"  matchup projection kept the old model ({type(e).__name__}: {e})")

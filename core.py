@@ -293,21 +293,51 @@ def team_games(games, abbr, sp0, n):
     return out
 
 
-def build_inputs(mine, fas, game, ndays, standings, starters):
+def apply_pending(entries, fas, pending, values_fn):
+    """Waiver claims already in with ESPN (pending.py) count as made from the day they process: the player you drop
+    leaves `entries` that day, the player you claim joins. Returns the ids of every player a claim touches, so the plan
+    never suggests adding the claimed player again or dropping either of them."""
+    touched = set()
+    by_id = {e["p"]["id"]: e for e in entries}
+    fa_by_id = {p["id"]: p for p in fas}
+    for pc in pending or []:
+        t = max(0, int(pc.get("t", 1)))
+        a, d = pc.get("add"), pc.get("drop")
+        touched.add(a)
+        if d is not None:
+            touched.add(d)
+            if d in by_id:
+                by_id[d]["leave"] = min(by_id[d]["leave"], t)
+        px = fa_by_id.get(a)
+        if px is not None and a not in by_id:
+            e = {"p": px, "v": values_fn(px), "grp": px["grp"], "join": t, "leave": INF}
+            entries.append(e)
+            by_id[a] = e
+    return touched
+
+
+def build_inputs(mine, fas, game, ndays, standings, starters, pending=None):
     entries = [{"p": p, "v": STR.values(p, game, ndays, standings, starters,
                                         lineup_goalie=(p["grp"] == "G" and p["slot"] == "G")),
                 "grp": p["grp"], "join": 0, "leave": INF} for p in mine if p["slot"] != "IR"]
+    touched = apply_pending(entries, fas, pending, lambda p: STR.values(p, game, ndays, standings, starters))
     cand = [{"p": p, "v": STR.values(p, game, ndays, standings, starters), "grp": p["grp"],
-             "waiver": p.get("st") == "WAIVERS"} for p in fas if STR.add_ok(p)]
+             "waiver": p.get("st") == "WAIVERS"} for p in fas if STR.add_ok(p) and p["id"] not in touched]
     sk = sorted((x for x in cand if x["grp"] != "G"), key=lambda x: -sum(x["v"]))[:POOL_SK]
     gk = sorted((x for x in cand if x["grp"] == "G"), key=lambda x: -sum(x["v"]))[:POOL_G]
     pool = [x for x in sk + gk if sum(x["v"]) > 0]
     ref = max([STR.STATE["ref"]] + [sum(1 for v in e["v"] if v > 0) for e in entries + pool if e["grp"] != "G"])
     base = []
     for e in entries:
-        gl = sum(1 for v in e["v"] if v > 0)
+        v = e["v"]
+        if e["join"] > 0 or e["leave"] < INF:               # a pending claim: he only counts on the days he is on your roster
+            v = [x if e["join"] <= d < e["leave"] else 0.0 for d, x in enumerate(v)]
+        gl = sum(1 for x in v if x > 0)
         ok, bar = STR.drop_rule(e["p"], gl, ref)
-        base.append({"g": e["grp"], "v": e["v"], "ok": ok, "bar": bar or STR.MIN_GAIN, "p": e["p"], "e": e})
+        claimed = e["p"]["id"] in touched
+        if claimed:
+            ok = False                                       # a claim in flight: not a drop candidate
+        base.append({"g": e["grp"], "v": v, "ok": ok, "bar": bar or STR.MIN_GAIN, "p": e["p"], "e": e, "claimed": claimed})
     return entries, base, [{"g": x["grp"], "v": x["v"], "waiver": x["waiver"], "p": x["p"], "x": x} for x in pool]
 
 
@@ -317,12 +347,12 @@ def show_bar(t, ndays):
 
 
 def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_games, prev=None, reasons=True, only_prev=False,
-         keep_ids=(), healthy=True, ir_free=0, per_day=None):
+         keep_ids=(), healthy=True, ir_free=0, per_day=None, pending=None):
     """The plan. prev = [(add_id, day_label, drop_id), ...] from the previous build (kept unless clearly beaten).
     keep_ids: players you chose to keep this week (never suggested as drops). healthy: data was complete enough to call
     a move Strong. nxt_games: {team: games} over the long-term horizon after this matchup (longterm.HORIZON_DAYS)."""
     t0 = time.time()
-    entries, base, pool = build_inputs(mine, fas, game, ndays, standings, starters)
+    entries, base, pool = build_inputs(mine, fas, game, ndays, standings, starters, pending=pending)
     keep_ids = set(keep_ids or ())
     for b in base:
         if b["p"]["id"] in keep_ids:
@@ -330,7 +360,7 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
     # Injured players (out / on injured reserve) with an open IR spot: move them to IR instead of dropping them. The add
     # still uses one of your weekly moves, but you lose nobody, so it costs nothing after this week.
     if ir_free:
-        hurt = sorted((b for b in base if b["p"].get("inj") in IR_STATUSES), key=lambda b: -(b["p"].get("out") or 0))
+        hurt = sorted((b for b in base if b["p"].get("inj") in IR_STATUSES and not b.get("claimed")), key=lambda b: -(b["p"].get("out") or 0))
         for b in hurt[:ir_free]:
             b.update(ok=True, ir=True, bar=STR.MIN_GAIN)
     M = Model(base, pool, ndays, nxt_games, per_day=per_day)
@@ -640,17 +670,21 @@ def why_drop(y, t, ndays, c, nxt_games, xp):
     return out
 
 
-def matchup_projection(my_players, opp_players, game, ndays, standings, starters, me_now, opp_now):
-    """Both teams' projected finals and your win chance, from the same daily-lineup model the plan uses."""
+def matchup_projection(my_players, opp_players, game, ndays, standings, starters, me_now, opp_now, pending=None,
+                       fas=None):
+    """Both teams' projected finals and your win chance, from the same daily-lineup model the plan uses. `pending`
+    (your waiver claims, pending.py) count as made from the day they process, like in the plan."""
     import math
 
     def team(players, mine):
         ents = [{"p": p, "v": STR.values(p, game, ndays, standings, starters,
                                          lineup_goalie=(mine and p["grp"] == "G" and p["slot"] == "G")),
                  "grp": p["grp"], "join": 0, "leave": INF} for p in players if p["slot"] != "IR"]
+        if mine and pending:
+            apply_pending(ents, fas or [], pending, lambda p: STR.values(p, game, ndays, standings, starters))
         mu = var = 0.0
         for d in range(ndays):
-            act = [(e["grp"], e["v"][d]) for e in ents if e["v"][d] > 0]
+            act = [(e["grp"], e["v"][d]) for e in ents if e["join"] <= d < e["leave"] and e["v"][d] > 0]
             mu += STR.day_value(act)
             nf, nd = sum(1 for g, _ in act if g == "F"), sum(1 for g, _ in act if g == "D")
             filled = (min(nf, SLOTS["F"]) + min(nd, SLOTS["D"])
