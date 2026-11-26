@@ -5,10 +5,12 @@ into the page files in web/ (page.html, app.css, app.js). build.py runs it; it n
 """
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import analyze as A
 import dashboard as D
+import logocolor as LC
 
 
 def r3(x):
@@ -38,6 +40,15 @@ def build_site_data(cfg, data, league, standings, now_ms):
     abbr, g7map = A.team_info(data["schedules"], sp, A.DAYS_AHEAD)
     meta = {t.get("id"): t for t in league.get("teams", [])}
 
+    # one color per team, read from its logo; every matchup card in the app tints itself with it
+    logos = {}
+    for t in data["roster"].get("teams", []):
+        lg = (meta.get(t.get("id"), {}).get("logo") or t.get("logo") or "")
+        if isinstance(lg, str) and lg.startswith("https://"):
+            logos[t.get("id")] = lg
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        hues = dict(zip(logos, ex.map(LC.hue_for_logo, logos.values())))
+
     teams = []
     for t in data["roster"].get("teams", []):
         tid = t.get("id")
@@ -50,7 +61,7 @@ def build_site_data(cfg, data, league, standings, now_ms):
         block = [int(k) for k, v in tb.items() if v == "ON_THE_BLOCK"]      # NORMAL = not actually offered
         logo = m.get("logo") or t.get("logo") or ""
         logo = logo if isinstance(logo, str) and logo.startswith("https://") else ""   # ESPN's team picture; blank -> initials
-        teams.append({"id": tid, "name": D.team_label(m) if m else f"Team {tid}", "logo": logo, "rec": f"{w}-{l}-{ti}",
+        teams.append({"id": tid, "name": D.team_label(m) if m else f"Team {tid}", "logo": logo, "hue": hues.get(tid), "rec": f"{w}-{l}-{ti}",
                       "w": w, "pf": r3(pf), "me": tid == cfg["team"], "block": block,
                       "players": [slim(p, standings) for p in players]})
 

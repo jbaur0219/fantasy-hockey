@@ -1907,8 +1907,7 @@ function uiToday(){
   var age=C.built?(Date.now()-C.built)/3600000:0,H=D.health||{};
   /* scoreboard */
   if(M){
-    var pw=Math.round(M.p_win*100),me=D.me,op=M.opp_name||'Opponent',h1=215,h2=hue(op);
-    if(Math.abs(h2-h1)<40)h2=(h2+150)%360;
+    var pw=Math.round(M.p_win*100),me=D.me,op=M.opp_name||'Opponent',ph=pairHues(todayTeam(true),todayTeam(false,M)),h1=ph[0],h2=ph[1];
     var mp=D.gameplan&&D.gameplan.mp,lead=M.me_now>=M.opp_now,mi=muMine();
     /* tap the scoreboard for the full head-to-head sheet (same one as League > Matchups) */
     h+='<section class="sb'+(mi>=0?' tap':'')+'" style="--h1:'+h1+';--h2:'+h2+'"'
@@ -2684,7 +2683,19 @@ gameplanRender();
 var MU={tab:'tn',open:-1,day:null,dd:false};   /* day = index of a past matchup day being viewed (null = today); dd = day picker open */
 function muTeam(id){for(var i=0;i<D.teams.length;i++)if(D.teams[i].id===id)return D.teams[i];return {id:id,name:'Team '+id,rec:'',players:[]};}
 function muInit(n){var w=String(n||'?').replace(/[^A-Za-z0-9 ]/g,' ').trim().split(/\s+/).filter(Boolean);if(!w.length)return '?';return (w[0].charAt(0)+(w[1]?w[1].charAt(0):w[0].charAt(1)||'')).toUpperCase();}
-function muHue(id){return ((+id||1)*67+200)%360;}
+/* ONE color per team, used by every card in the app (Today, matchup sheet, League > Matchups, game page).
+   The server reads it from the team's logo (t.hue: the most colorful thing in the picture); a logo it can't read gets a steady color from the team id.
+   pairHues() gives the two colors of a head-to-head: your team keeps its own; if the two logos are too alike the other side turns to a clear contrast. */
+function teamHue(t){return t&&t.hue!=null?t.hue:(((+(t&&t.id))||1)*67+200)%360;}
+function pairHues(ta,tb){
+  var a=teamHue(ta),b=teamHue(tb),d=Math.abs(a-b);d=Math.min(d,360-d);
+  if(d<40){
+    if(ta&&ta.me)b=(b+150)%360;else if(tb&&tb.me)a=(a+150)%360;
+    else if((+(tb&&tb.id)||0)>=(+(ta&&ta.id)||0))b=(b+150)%360;else a=(a+150)%360;
+  }
+  return [a,b];
+}
+function muHue(id){return teamHue(muTeam(id));}
 function muImg(t){return t.logo?'<img src="'+esc(t.logo)+'" loading="lazy" alt="" onerror="this.remove()">':'';}
 function muMono(t,cls){return '<span class="mono '+(cls||'')+'" style="--h:'+muHue(t.id)+'">'+esc(muInit(t.name))+muImg(t)+'</span>';}
 function muMe(g){var me=null;D.teams.forEach(function(t){if(t.me)me=t.id;});return me!=null&&(g.a===me||g.b===me);}
@@ -2699,7 +2710,7 @@ function muTile(g,i,S){
     return '<div class="mu-r'+(on?' lead':'')+'">'+muMono(t,'mu-mono')+'<div class="mu-n"><b>'+esc(t.name)+(t.me?' <i class="mu-you">You</i>':'')+'</b><span>'+esc(t.rec)+' &middot; '+left+' games left &middot; proj '+f(pr,0)+'</span></div><div class="mu-s">'+f(sc,1)+'</div></div>';}
   return '<button type="button" class="mu-tile'+(mine?' mine':'')+'" data-mu="'+i+'">'
     +row(A,g.as,g.ap,lead>0,g.al)+row(B,g.bs,g.bp,lead<0,g.bl)
-    +'<div class="mu-wp"><div class="mu-bar" style="--a:'+muHue(A.id)+';--b:'+muHue(B.id)+'"><i style="width:'+w.a+'%"></i><i></i></div>'
+    +'<div class="mu-wp"><div class="mu-bar" style="--a:'+pairHues(A,B)[0]+';--b:'+pairHues(A,B)[1]+'"><i style="width:'+w.a+'%"></i><i></i></div>'
     +'<div class="mu-wl"><span>'+w.a+'%</span><span class="mu-wk">'+(S.done?'Final':'Win chance')+'</span><span>'+w.b+'%</span></div></div></button>';
 }
 function uiMatchups(){
@@ -2880,14 +2891,14 @@ function muPastFill(g,S,i){
   if(typeof glLoad==='function'){glLoad().then(go,function(){go(null);});}else go(null);
 }
 function muWeek(g,S){
-  var A=muTeam(g.a),B=muTeam(g.b),mx=1,h='';
+  var A=muTeam(g.a),B=muTeam(g.b),ph=pairHues(A,B),mx=1,h='';
   g.ad.concat(g.bd).forEach(function(v){if(v!=null&&v>mx)mx=v;});
   h+='<div class="mu-gh">Points by day</div><div class="mu-bf">';
   S.dates.forEach(function(d,i){
     var a=g.ad[i],b=g.bd[i],fut=a==null&&b==null&&i>S.today,cls=i===S.today&&!S.done?' t':'';
     var lab=String(S.labels[i]||'').split(' ')[0];
-    h+='<div class="mu-bfr'+cls+(fut?' fut':'')+'"><div class="mu-bl">'+(a!=null?'<span>'+f(a,1)+'</span><i style="width:'+(a/mx*100)+'%;--h:'+muHue(A.id)+'"></i>':'')+'</div>'
-      +'<div class="mu-bd">'+esc(lab)+'</div><div class="mu-br">'+(b!=null?'<i style="width:'+(b/mx*100)+'%;--h:'+muHue(B.id)+'"></i><span>'+f(b,1)+'</span>':'')+'</div></div>';
+    h+='<div class="mu-bfr'+cls+(fut?' fut':'')+'"><div class="mu-bl">'+(a!=null?'<span>'+f(a,1)+'</span><i style="width:'+(a/mx*100)+'%;--h:'+ph[0]+'"></i>':'')+'</div>'
+      +'<div class="mu-bd">'+esc(lab)+'</div><div class="mu-br">'+(b!=null?'<i style="width:'+(b/mx*100)+'%;--h:'+ph[1]+'"></i><span>'+f(b,1)+'</span>':'')+'</div></div>';
   });
   h+='</div>';
   h+='<div class="mu-stats"><div><b>'+f(g.ap,1)+'</b><span>Projected</span><b>'+f(g.bp,1)+'</b></div><div><b>'+g.al+'</b><span>Games left</span><b>'+g.bl+'</b></div></div>';
@@ -3010,7 +3021,7 @@ function muMine(){var S=D.sb,k=-1;if(S&&S.games)S.games.forEach(function(g,i){if
 function muPageHtml(i){
   var S=D.sb,g=S.games[i],A=muTeam(g.a),B=muTeam(g.b),w=muWin(g);
   function side(t,sc,pr){return '<div class="sb-tm">'+muMono(t)+'<div class="sb-n">'+esc(t.name)+'</div><div class="sb-r">'+esc(t.rec)+' &middot; proj '+f(pr,0)+'</div></div>';}
-  var h='<div class="sb mu-sb" style="--h1:'+muHue(A.id)+';--h2:'+muHue(B.id)+'"><div class="sb-row">'+side(A,g.as,g.ap)
+  var ph=pairHues(A,B),h='<div class="sb mu-sb" style="--h1:'+ph[0]+';--h2:'+ph[1]+'"><div class="sb-row">'+side(A,g.as,g.ap)
     +'<div class="sb-sc"><span class="'+(g.as<g.bs?'dim':'')+'">'+f(g.as,1)+'</span><i class="sb-d"></i><span class="'+(g.bs<g.as?'dim':'')+'">'+f(g.bs,1)+'</span></div>'+side(B,g.bs,g.bp)+'</div>'
     +'<div class="wp"><div class="wp-bar" style="'+wpVars(w.a)+'"><i class="a"></i><i class="b"></i></div><div class="wp-l"><span>'+w.a+'%</span><span>'+(S.done?'Final':'Win chance')+'</span><span>'+w.b+'%</span></div></div></div>';
   h+='<div class="pcseg mu-seg'+(MU.tab==='wk'?' two':'')+'" id="muSeg"><span class="th"></span><button type="button" data-mut="tn"'+(MU.tab==='tn'?' class="on"':'')+'>'+(S.done?'Lineups':'Tonight')+'</button><button type="button" data-mut="wk"'+(MU.tab==='wk'?' class="on"':'')+'>Week</button></div>';
@@ -3540,7 +3551,7 @@ function gmStake(e){
   var a=0,b=0,na=0,nb=0;
   me.forEach(function(p){if(p.slot==='BN'||p.slot==='IR')return;if(pre&&!gmCounts(p))return;na++;a+=gmPts(p,e);});
   th.forEach(function(p){if(pre&&!gmCounts(p))return;nb++;b+=gmPts(p,e);});
-  var net=a-b,op=(M&&M.opp_name)||'Them',h1=215,h2=hue(op);if(Math.abs(h2-h1)<40)h2=(h2+150)%360;
+  var net=a-b,op=(M&&M.opp_name)||'Them',ph=pairHues(todayTeam(true),todayTeam(false,M)),h1=ph[0],h2=ph[1];
   var tot=a+b,w=tot>0?Math.round(a/tot*100):(na||nb?Math.round(na/(na+nb)*100):50);
   var big=Math.abs(net)<0.05?'Even':(net>0?'+':'−')+f(Math.abs(net),1);
   var lbl=pre?(Math.abs(net)<0.05?'An even game for your matchup':(net>0?'Projected edge for you in this game':'Projected edge for '+op+' in this game'))
