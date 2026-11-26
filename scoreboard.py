@@ -200,6 +200,10 @@ def build(cfg, data, league, standings, now_ms):
             pw.update(_player_pts(side, "rosterForMatchupPeriod"))
 
     me = cfg["team"]
+    for i, g in enumerate(out):      # your team is always the left side ("a"), like on the Today card; ESPN's home/away order doesn't matter
+        if g["b"] == me:
+            out[i] = {"a": g["b"], "b": g["a"], "as": g["bs"], "bs": g["as"], "ap": g["bp"], "bp": g["ap"],
+                      "pa": round(1 - g["pa"], 3), "ad": g["bd"], "bd": g["ad"], "al": g["bl"], "bl": g["al"]}
     out.sort(key=lambda g: (0 if me in (g["a"], g["b"]) else 1, abs(g["pa"] - 0.5)))    # yours first, then closest
     today = max(0, min(sp - start, length - 1))
     try:
