@@ -3173,6 +3173,7 @@ document.addEventListener('click',function(e){
   var nb=t.closest('.mu-nb');if(nb){muBd(nb);return;}
   var pd=t.closest('[data-mupg]');if(pd){muGo(+pd.getAttribute('data-mupg'));return;}
   if(t.closest('[data-gback]')){gmBack();return;}
+  var gb=t.closest('[data-gbd]');if(gb){var gi=gb.getAttribute('data-gbd');GM.bd=GM.bd===gi?null:gi;gmPaint();return;}
   var gp=t.closest('[data-gp]');if(gp){gmPlayer(gp.getAttribute('data-gp'));return;}
   var gm=t.closest('[data-gm]');if(gm){gmOpen(gm.getAttribute('data-gm'));return;}
   var a=t.closest('[data-mu]');if(a){muOpen(+a.getAttribute('data-mu'));return;}
@@ -3314,6 +3315,7 @@ var LIVE={ev:[],pts:{},done:{},at:0,tm:null,err:0};
 var LV_URL='https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/';
 var LV_AL={LA:'LAK',NJ:'NJD',SJ:'SJS',TB:'TBL',UTAH:'UTA',WAS:'WSH',MON:'MTL',CLB:'CBJ',CLS:'CBJ',NAS:'NSH',NSH:'NSH',VEG:'VGK',WIN:'WPG'};
 var LV_SK={goals:'13',assists:'14',shotsTotal:'29',hits:'31',blockedShots:'32'};
+var LV_LB={goals:'Goals',assists:'Assists',shotsTotal:'Shots on goal',hits:'Hits',blockedShots:'Blocked shots'};
 function lvAb(a){a=String(a||'').toUpperCase();return LV_AL[a]||a;}
 function lvDay(ms){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ms)).replace(/-/g,'');}catch(e){return '';}}
 function lvStarters(list){return (list||[]).filter(function(p){return p.slot!=='BN'&&p.slot!=='IR';});}
@@ -3332,18 +3334,20 @@ function lvBox(e,sm){
         if(g.name==='goalies'){
           var ga=val('goalsAgainst'),sv=k.indexOf('saves')>=0?val('saves'):Math.max(0,val('shotsAgainst')-ga);
           var o={id:id,ga:ga,sv:sv,f:sv+ga};gks.push(o);
-          LIVE.pts[id]={p:sv*lvW('6')+ga*lvW('4'),s:sv+' saves, '+ga+' GA',g:e.id};
+          var gl=[];if(sv&&lvW('6'))gl.push({l:'Saves',n:sv,pts:sv*lvW('6')});if(ga&&lvW('4'))gl.push({l:'Goals against',n:ga,pts:ga*lvW('4')});
+          LIVE.pts[id]={p:sv*lvW('6')+ga*lvW('4'),s:sv+' saves, '+ga+' GA',g:e.id,ln:gl};
         }else{
-          var p=0,bits=[];
-          for(var n in LV_SK){var x=val(n);p+=x*lvW(LV_SK[n]);if(x&&(n==='goals'||n==='assists'))bits.push(x+(n==='goals'?'G':'A'));}
+          var p=0,bits=[],ln=[];
+          for(var n in LV_SK){var x=val(n),w=lvW(LV_SK[n]);p+=x*w;if(x&&w)ln.push({l:LV_LB[n],n:x,pts:x*w});if(x&&(n==='goals'||n==='assists'))bits.push(x+(n==='goals'?'G':'A'));}
           var sog=val('shotsTotal');if(sog)bits.push(sog+' SOG');
-          LIVE.pts[id]={p:p,s:bits.join(' ')||'no points yet',g:e.id};
+          LIVE.pts[id]={p:p,s:bits.join(' ')||'no points yet',g:e.id,ln:ln};
         }
       });
     });
     if(won&&gks.length){                     /* the win goes to the goalie who faced the most shots */
       gks.sort(function(a,b){return b.f-a.f;});var w=gks[0],L=LIVE.pts[w.id];
-      if(L){L.p+=lvW('1')+(w.ga===0?lvW('7'):0);L.s+=w.ga===0?', win, shutout':', win';}
+      if(L){L.p+=lvW('1')+(w.ga===0?lvW('7'):0);L.s+=w.ga===0?', win, shutout':', win';
+        if(lvW('1'))L.ln.push({l:'Win',n:1,pts:lvW('1')});if(w.ga===0&&lvW('7'))L.ln.push({l:'Shutout',n:1,pts:lvW('7')});}
     }
   });
 }
@@ -3439,7 +3443,7 @@ function lvPaint(){
    players in this game with role and live stat line, every goal with the fantasy points it gave each side, and the team
    stats as mirrored bars. ESPN's game summary is read when the page opens and every 30 s while the game is live; anything
    it does not have is simply left out. */
-var GM={id:null,sm:null,tm:null};
+var GM={id:null,sm:null,tm:null,bd:null};
 function gmEv(){for(var i=0;i<LIVE.ev.length;i++)if(LIVE.ev[i].id===GM.id)return LIVE.ev[i];return null;}
 function gmHex(c){return /^[0-9a-f]{6}$/i.test(c||'')?c:'';}
 function gmLum(c){var n=parseInt(c,16),r=(n>>16)/255,g=(n>>8&255)/255,b=(n&255)/255;return .2126*r+.7152*g+.0722*b;}
@@ -3455,7 +3459,7 @@ function gmPair(e){
   return ['#'+ca,'#'+ch];
 }
 function gmOpen(id,back){
-  if(!back){GM.sm=null;GM.sy=0;}
+  if(!back){GM.sm=null;GM.sy=0;GM.bd=null;}
   GM.id=String(id);clearTimeout(GM.tm);
   var e=gmEv();if(!e)return;
   var bx=sheetShow('<div class="mhead gm-mh"><div class="pc-id"><b>'+esc(e.a.ab+' at '+e.h.ab)+'</b><span class="muted" id="gmSub">'+esc(gmSub(e))+'</span></div><button class="x" id="mx">&times;</button></div><div id="gmBody">'+gmHtml(e)+'</div>');
@@ -3586,11 +3590,26 @@ function gmPRow(p,e){
   if((pre||!L)&&p.grp!=='G'){var r=rlTxt(p.rl);if(r)bits.push(esc(r));}
   var sub=bits.join(' &middot; ')+(pre&&!sbn?' '+rdForm(p):'');
   if(!pre&&L)sub=bits.join(' &middot; ')+' &middot; <span class="gm-line">'+esc(L.s)+'</span>';
-  var v;
+  var v,card='';
   if(bn)v='<span class="gm-v z">&ndash;</span>';
   else if(pre)v=off?'<span class="gm-v z">&ndash;</span>':'<span class="gm-v pj">'+f(p.out||0,1)+'</span>';
-  else v='<span class="gm-v'+(L&&L.p>0?' up':(L&&L.p<0?' dn':''))+'">'+(L?(L.p>0?'+':'')+f(L.p,1):'0.0')+'</span>';
-  return '<div class="row gm-pr'+(off?' off':'')+'" data-k="p'+p.id+'" data-gp="'+p.id+'" role="button" tabindex="0">'+glAv(p)+'<div class="row-m"><div class="row-t">'+esc(p.n)+'</div><div class="row-s">'+sub+'</div></div>'+v+'</div>';
+  else{
+    var open=GM.bd===String(p.id);
+    v='<button type="button" class="gm-nb'+(open?' on':'')+'" data-gbd="'+p.id+'" aria-expanded="'+open+'" aria-label="How these points were scored"><span class="gm-v'+(L&&L.p>0?' up':(L&&L.p<0?' dn':''))+'">'+(L?(L.p>0?'+':'')+f(L.p,1):'0.0')+'</span></button>';
+    card=open?gmBd(p,L,e):'';
+  }
+  return '<div class="row gm-pr'+(off?' off':'')+'" data-k="p'+p.id+'" data-gp="'+p.id+'" role="button" tabindex="0">'+glAv(p)+'<div class="row-m"><div class="row-t">'+esc(p.n)+'</div><div class="row-s">'+sub+'</div></div>'+v+'</div>'+card;
+}
+/* tap a score: how it was made. The card opens under the row (the same card the matchup sheet uses), built from the stat line
+   the live game already gave us, so its lines always add up to the number that was tapped. It stays open while the game
+   updates and its numbers change with it. */
+function gmBd(p,L,e){
+  var ln=(L&&L.ln)||[],fin=e.st==='post',h='<div class="mu-bk" data-k="b'+p.id+'"><div class="mu-bkc"><div class="mu-bkh"><b>'+esc(p.n)+'</b><span>'+esc(e.a.ab+' at '+e.h.ab)+' &middot; '+(fin?'Final':'Live')+'</span></div>';
+  h+=ln.map(function(l){return '<div class="mu-bkr"><span>'+esc(l.l)+(l.n>1?' <i>&times;'+l.n+'</i>':'')+'</span><b class="'+(l.pts<0?'mu-neg':'')+'">'+(l.pts>=0?'+':'&minus;')+bdF(Math.abs(l.pts))+'</b></div>';}).join('');
+  if(!ln.length)h+='<div class="mu-bkm">No stats that score points yet.</div>';
+  h+='<div class="mu-bkt"><span>Total</span><b>'+bdF(L?L.p:0)+'</b></div>';
+  if(lvW('38')||lvW('15'))h+='<div class="mu-bkm">'+(fin?'Power-play points and similar extras':'Power-play points and similar extras')+' are added at the next full update.</div>';
+  return h+'</div></div>';
 }
 function gmPlayers(e){
   var M=D.matchup,me=gmMine(e),th=lvIn(lvOpp(),e),pre=e.st==='pre',h='';

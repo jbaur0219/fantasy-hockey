@@ -1385,3 +1385,8 @@ a.pl:after{content:'';position:absolute;inset:-7px -3px}
 .grp>.row[data-gp]:active{background:var(--fill4);transition:none}
 .row[data-gp]:focus-visible{outline:2px solid var(--tint);outline-offset:-2px}
 @media (prefers-reduced-motion:reduce){#modal .box.sw-r>*,#modal .box.sw-l>*,.mo-in{animation:none!important}}
+
+/* the score on a game-page row is its own button (how it was scored); the rest of the row opens the player */
+.gm-nb{appearance:none;-webkit-appearance:none;flex:none;margin:-12px -10px -12px 0;padding:12px 10px;min-width:56px;border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;text-align:right;cursor:pointer;transition:background .35s var(--ease)}
+.gm-nb:active,.gm-nb.on{background:var(--fill3);transition:none}
+.gm-nb .gm-v{display:block;min-width:0}
