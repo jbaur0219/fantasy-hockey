@@ -1390,3 +1390,24 @@ a.pl:after{content:'';position:absolute;inset:-7px -3px}
 .gm-nb{appearance:none;-webkit-appearance:none;flex:none;margin:-12px -10px -12px 0;padding:12px 10px;min-width:56px;border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;text-align:right;cursor:pointer;transition:background .35s var(--ease)}
 .gm-nb:active,.gm-nb.on{background:var(--fill3);transition:none}
 .gm-nb .gm-v{display:block;min-width:0}
+
+/* ---------- Today: To do checklist (2026-11-27) ----------
+   Moves, waiver claims and lineup changes in one list, each with a Reminders-style circle. Checking is transform/opacity only. */
+.tdc{position:relative;flex:none;width:26px;height:26px;margin:-9px -2px -9px -9px;padding:9px;box-sizing:content-box;border:0;background:none;color:var(--label3);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.gpr>.tdc,.row.chk>.tdc{align-self:flex-start;margin-top:-1px}
+.row.chk:not(.gpr)>.tdc{align-self:center;margin-top:-9px}
+.tdc svg{display:block;width:26px;height:26px;overflow:visible}
+.tdc .o{fill:none;stroke:currentColor;stroke-width:1.6}
+.tdc .f{fill:var(--green);transform-origin:14px 14px;transform:scale(.4);opacity:0;transition:transform .2s var(--ease),opacity .15s}
+.tdc .k{fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;transform-origin:14px 14px;transform:scale(.6);opacity:0;transition:transform .2s var(--ease),opacity .12s}
+.tdc.on .f{transform:none;opacity:1;transition:transform .45s var(--spring),opacity .1s}
+.tdc.on .k{transform:none;opacity:1;transition:transform .45s var(--spring) .05s,opacity .15s .05s}
+.tdc:active .o{opacity:.5}
+.row.chk>.mvr-av,.row.chk>.row-m,.row.chk>.rchev{transition:opacity .35s var(--ease)}
+.row.chk.done>.mvr-av,.row.chk.done>.row-m,.row.chk.done>.rchev{opacity:.4}
+.grp>.row.chk:not(:first-child):before,.grp>.rx+.row.chk:before{left:52px}
+/* a lineup change: green arrow up on the player going in, red arrow down on the player coming out */
+.rb.add svg .k,.rb.drop svg .k{stroke-width:3.2}
+.td-e{position:absolute;right:0;bottom:0;width:26px;height:26px;border-radius:50%;border:1.5px dashed var(--label3);box-sizing:border-box}
+
+.rd-fix .gpr-w{color:var(--label2)}

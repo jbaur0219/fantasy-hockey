@@ -238,6 +238,73 @@ function rdFixes(i,S){
   });
   return out;
 }
+/* Lineup changes for a day (2026-11-27): the game-based fixes above, plus "both play, start the better one" on days with
+   more of your skaters playing than spots. One list, used by Today's To do checklist and the Roster day view, so the two
+   always agree. Each change: b = start him, a = bench him (or empty = the open spot), why = 'no game' | 'not starting' |
+   an injury word | 'lower', gain = projected points the change adds that day. */
+function tdVal(p,si,S,W){
+  var C=D.clock,fi=C&&S?C.dates.indexOf(S.dates[si]):-1,w=W&&W[p.id];
+  return (w&&w.v&&fi>=0&&w.v[fi]!=null)?w.v[fi]:(p.out||0);
+}
+function tdFixes(si,S){
+  if(!S||si<0)return [];
+  var W={};((D.streams&&D.streams.whatif&&D.streams.whatif.mine)||[]).forEach(function(p){W[p.id]=p;});
+  var val=function(p){return tdVal(p,si,S,W);};
+  var out=rdFixes(si,S).map(function(x){return {b:x.b,a:x.a,why:x.why,empty:x.empty,gain:val(x.b)};});
+  if(si<rdT(S)||!rdKnown(si,S))return out;
+  var used={};out.forEach(function(x){used[x.b.id]=1;if(x.a)used[x.a.id]=1;});
+  var mine=(D.mine||[]).filter(function(p){return p.grp!=='G'&&!used[p.id];});
+  var up=function(p){var s=rdState(p,si,S);return !!s.g&&!s.np&&s.st==='up';};
+  var bench=mine.filter(function(p){return rdSl(p,si,S)==='BN'&&up(p);}).sort(function(a,b){return val(b)-val(a);});
+  var fits={F:['F','UTIL'],D:['D','UTIL']};
+  bench.forEach(function(b){
+    var ok=fits[b.grp]||[],best=null;
+    mine.forEach(function(a){if(used[a.id]||ok.indexOf(rdSl(a,si,S))<0||!up(a))return;if(!best||val(a)<val(best))best=a;});
+    if(!best||val(b)-val(best)<0.1)return;
+    used[b.id]=used[best.id]=1;
+    out.push({b:b,a:best,why:'lower',gain:val(b)-val(best),vb:val(b),va:val(best)});
+  });
+  return out;
+}
+function tdKey(x,si,S){return 'lu'+x.b.id+'-'+(x.a?x.a.id:x.empty)+'@'+(S.dates[si]||si);}
+/* one lineup change as a row, styled like a move row: who goes in (green arrow), who comes out (red arrow), why, points */
+function tdRow(x,si,S,chk){
+  var b=x.b,a=x.a,gb=rdGame(b,si,S),t=rdT(S),wb=lastName(b.n),wa=a?lastName(a.n):'',r;
+  var when=gb?(gb[2]?'vs ':'@ ')+esc(gb[1])+(si===t?' at '+etTime(gb[0]):''):'';
+  if(x.why==='lower')r='Both play. '+esc(wb)+' projects '+f(x.vb,1)+', '+esc(wa)+' '+f(x.va,1)+'.';
+  else if(!a)r=esc(wb)+' plays '+when+'. Your '+(x.empty==='UTIL'?'utility':x.empty)+' spot is empty.';
+  else if(x.why==='no game')r=esc(wb)+' plays '+when+'. '+esc(wa)+' has no game.';
+  else if(x.why==='not starting'){var al=(D.alerts||[]).filter(function(q){return q.t.indexOf(a.n)>=0;})[0],m=al&&/\(([^)]+)\)/.exec(al.t);
+    r=esc(wa)+' isn’t starting'+(m?' ('+esc(m[1])+')':'')+'. '+esc(wb)+' plays '+when+'.';}
+  else r=esc(wa)+' is '+esc(x.why)+'. '+esc(wb)+' plays '+when+'.';
+  var k=chk?tdKey(x,si,S):'',on=chk&&TD.on(k);
+  return '<div class="row mvr gpr td'+(chk?' chk':'')+(on?' done':'')+'"'+(chk?' data-tdk="'+k+'"':'')+'>'
+    +(chk?tdBox(k,on):'')
+    +'<span class="mvr-av">'+glAv(b,'add','up')+(a?glAv(a,'drop','dn'):'<span class="rav td-e"></span>')+'</span>'
+    +'<div class="row-m"><div class="gpr-h"><div class="row-t">Start <a class="pl" data-noav="1" data-id="'+b.id+'">'+esc(wb)+'</a></div>'
+    +(x.gain>=0.05?'<span class="gpr-p">+'+f(x.gain,1)+'<small>pts</small></span>':'')+'</div>'
+    +'<div class="gpr-d">'+(a?'Bench <a class="pl" data-noav="1" data-id="'+a.id+'">'+esc(wa)+'</a>':'In your open '+(x.empty==='UTIL'?'utility':x.empty)+' spot')+'</div>'
+    +'<div class="gpr-w">'+r+'</div></div></div>';
+}
+/* Today's checklist: tap the circle when it's done. Saved on this phone only; ESPN has the final word: if an update newer
+   than the tap (90 s grace) still shows the item, the check clears so a change that didn't save in ESPN shows up again. */
+var TD=(function(){
+  var K='fh_todo';
+  function all(){try{return JSON.parse(localStorage.getItem(K)||'{}')||{};}catch(e){return {};}}
+  function on(k){var t=all()[k],b=(D.clock&&D.clock.built)||0;return !!t&&!(b>t+90000);}
+  function set(k,v){var o=all(),now=Date.now();for(var q in o)if(now-o[q]>3*864e5)delete o[q];if(v)o[k]=now;else delete o[k];try{localStorage.setItem(K,JSON.stringify(o));}catch(e){}}
+  return {on:on,set:set};
+})();
+function tdBox(k,on){
+  return '<button type="button" class="tdc'+(on?' on':'')+'" data-chk="'+k+'" role="checkbox" aria-checked="'+(on?'true':'false')+'" aria-label="Done">'
+    +'<svg viewBox="0 0 28 28"><circle class="o" cx="14" cy="14" r="11"/><circle class="f" cx="14" cy="14" r="12"/><path class="k" d="M9.2 14.3l3.3 3.2 6.4-6.8"/></svg></button>';
+}
+function tdToggle(btn){
+  var k=btn.getAttribute('data-chk'),on=!btn.classList.contains('on');
+  TD.set(k,on);
+  $$('[data-chk="'+k+'"]').forEach(function(b){b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false');var r=b.closest('.row');if(r)r.classList.toggle('done',on);});
+  if(on&&navigator.vibrate)try{navigator.vibrate(8);}catch(e){}
+}
 function rdStrip(S){
   var n=S.dates.length,t=rdT(S),tn=rdNow(S),L=rdLineup(),tot=L.F+L.D+L.UTIL+L.G;
   var h='<div class="rd-days" id="rdDays" style="--n:'+n+'" role="tablist" aria-label="Matchup day"><span class="rd-sel" id="rdSel"></span>';
@@ -272,14 +339,8 @@ function rdSum(i,S){
 }
 function rdBody(i,S){
   var t=rdT(S),h=rdSum(i,S),L=rdLineup();
-  var fx=rdFixes(i,S);
-  if(fx.length){
-    h+='<div class="grp rd-fix">'+fx.map(function(x){
-      var b=x.b,gb=rdGame(b,i,S);
-      return '<div class="row"><span class="ric wn">'+(typeof SF!=='undefined'&&SF.warn?SF.warn:'!')+'</span><div class="row-m"><div class="row-t">Start '+esc(shortName(b.n))+(x.a?' over '+esc(shortName(x.a.n)):'')+'</div>'
-        +'<div class="row-s">'+esc(lastName(b.n))+' plays '+(gb[2]?'vs ':'@')+esc(gb[1])+'. '+(x.a?esc(lastName(x.a.n))+(x.why==='no game'?' has no game.':' is '+esc(x.why)+'.'):'Your '+(x.empty==='UTIL'?'utility':x.empty)+' spot is empty.')+' Set it in ESPN.</div></div></div>';
-    }).join('')+'</div>';
-  }
+  var fx=tdFixes(i,S);
+  if(fx.length)h+='<div class="grp rd-fix">'+fx.map(function(x){return tdRow(x,i,S,false);}).join('')+'</div>';
   var past=i<t,dp=past&&S.dp&&S.dp[String(i)],me=(D.teams.filter(function(x){return x.me;})[0]||{}).id,rows=dp&&dp[String(me)];
   if(past&&rows){
     var by={};rows.forEach(function(e){var sl=e[1]==='UTIL'?'UTIL':e[1];(by[sl]=by[sl]||[]).push(e);});
@@ -1120,7 +1181,7 @@ var ICON={
 };
 /* each sub-view lists its cards by title: [title, startsCollapsed] */
 var VIEWS=[
- {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['Today'],['Track record'],['Lineup sheet',1]]}]},
+ {id:'today',label:'Today',subs:[{id:'main',label:'Today',cards:[['Today'],['Track record']]}]},
  {id:'moves',label:'Moves',subs:[
    {id:'plan',label:'Game plan',cards:[['This week\'s moves'],['Next week preview'],['See the details',1]]},
    {id:'swap',label:'Swap lab',cards:[['Try a swap'],['Your roster: who to look at this week']]},
@@ -1226,7 +1287,6 @@ function uiLayout(){
   try{uiStreams();}catch(e){}
   try{uiPlaybook();}catch(e){}
   try{uiHelp();}catch(e){}
-  try{uiLineup();}catch(e){}
   try{uiEdge();}catch(e){}
   try{uiMatchups();}catch(e){}
   VIEWS.forEach(function(v){v.subs.forEach(function(s){
@@ -1401,8 +1461,9 @@ function wpMove(m,full){
 /* ---------- Game plan: one list of moves to make (each one a "make this move"), the details behind a tap ---------- */
 function gpWhy(m){return m.why1||'';}
 function gpRow(m,o){
-  o=o||{};var key='mv'+m.add.id+'-'+m.drop.id,open=!!(UI.exp&&UI.exp[key]);
-  return '<div class="row mvr gpr'+(open?' open':'')+'" data-exp="'+key+'">'
+  o=o||{};var key='mv'+m.add.id+'-'+m.drop.id,open=!!(UI.exp&&UI.exp[key]),ck=o.chk?key+'@'+o.chk:'',on=ck&&TD.on(ck);
+  return '<div class="row mvr gpr'+(open?' open':'')+(ck?' chk'+(on?' done':''):'')+'" data-exp="'+key+'">'
+    +(ck?tdBox(ck,on):'')
     +'<span class="mvr-av">'+glAv(m.add,'add')+glAv(m.drop,'drop')+'</span>'
     +'<div class="row-m"><div class="gpr-h"><div class="row-t">Add <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
     +'<span class="gpr-p">'+sgn(m.gain,1)+'<small>pts</small></span></div>'
@@ -1418,8 +1479,9 @@ function gpRow(m,o){
     +'<div class="rx-act">'+keepBtn(m.drop)+cmpBtn(m.add,m.drop)+(o.week?'<button type="button" class="gbtn2" data-go="moves/plan">Whole week</button>':'')+'</div>'
     +'</div></div>';
 }
-function gpClaimRow(m){
-  return '<div class="row"><span class="ric">'+SF.clock+'</span><div class="row-m"><div class="row-t">Claim <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
+function gpClaimRow(m,day){
+  var ck=day?'cl'+m.add.id+'@'+day:'',on=ck&&TD.on(ck);
+  return '<div class="row'+(ck?' chk'+(on?' done':''):'')+'">'+(ck?tdBox(ck,on):'<span class="ric">'+SF.clock+'</span>')+'<div class="row-m"><div class="row-t">Claim <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
     +'<div class="row-s">He is on waivers. Put the claim in today so he is yours '+esc(dayShort(m.day))+' (then '+(m.ir?'move '+esc(m.drop.n)+' to IR':'drop '+esc(m.drop.n))+').</div></div></div>';
 }
 /* claims already in with ESPN that haven't processed yet: the plan counts them as made, this row shows the app knows */
@@ -1537,20 +1599,6 @@ function uiPlaybook(){
 /* ---------- Today: what to do before the day's first puck drop (or that there is nothing to do), in one card ---------- */
 function etTime(ms){try{return new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'}).format(new Date(ms));}catch(e){return '';}}
 function etToday(){try{return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}catch(e){return '';}}
-function lsChanges(i){
-  var S=D.streams,W=S&&S.whatif,P=D.planner;
-  if(!W||!P)return null;
-  var gm={};P.teams.forEach(function(t){gm[t.tm]=t.g;});
-  var act=W.mine.filter(function(p){return p.slot!=='IR'&&!isInj(p)&&p.grp!=='G';});
-  var playing=act.filter(function(p){var g=gm[p.tm];return !!(g&&g[i]);});
-  var F=playing.filter(function(p){return p.grp==='F';}).sort(function(a,b){return lsVal(b,i)-lsVal(a,i);});
-  var Dn=playing.filter(function(p){return p.grp==='D';}).sort(function(a,b){return lsVal(b,i)-lsVal(a,i);});
-  var rest=F.slice(9).concat(Dn.slice(5)).sort(function(a,b){return lsVal(b,i)-lsVal(a,i);});
-  var start=F.slice(0,9).concat(Dn.slice(0,5)).concat(rest.slice(0,1)),ids={};start.forEach(function(p){ids[p.id]=1;});
-  var into=start.filter(function(p){return p.slot==='BN';});
-  var out=act.filter(function(p){return p.slot!=='BN'&&!ids[p.id];});
-  return {into:into,out:out,playing:playing.length};
-}
 /* =====================================================================================================
    LIQUID GLASS SHELL
    Floating glass tab bar with a sliding lens (tap or drag), minimizes on scroll; large title that
@@ -1571,6 +1619,8 @@ var SF={
   swap:'<svg viewBox="0 0 28 28"><path class="s" d="M8 6v15M4.5 17.5L8 21l3.5-3.5M20 22V7M16.5 10.5L20 7l3.5 3.5"/></svg>',
   plus:'<svg viewBox="0 0 28 28"><path class="k" d="M14 8v12M8 14h12"/></svg>',
   minus:'<svg viewBox="0 0 28 28"><path class="k" d="M8 14h12"/></svg>',
+  up:'<svg viewBox="0 0 28 28"><path class="k" d="M14 21V8M8.5 13L14 7.5l5.5 5.5"/></svg>',
+  dn:'<svg viewBox="0 0 28 28"><path class="k" d="M14 7v13M8.5 15l5.5 5.5 5.5-5.5"/></svg>',
   clock:'<svg viewBox="0 0 28 28"><circle class="s" cx="14" cy="14" r="10"/><path class="s" d="M14 8.5V14l3.5 2.2"/></svg>',
   chart:'<svg viewBox="0 0 28 28"><path class="s" d="M6 22V14M12 22V8M18 22v-6M24 22V11"/></svg>',
   goals:'<svg viewBox="0 0 28 28"><path class="s" d="M5 21V9.5h18V21M5 21h18M9 9.5 7 21M19 9.5l2 11.5"/><circle cx="14" cy="17" r="2" fill="currentColor"/></svg>'
@@ -1904,11 +1954,11 @@ function glCount(root){
 }
 
 /* ---------- Today: Apple Sports style scoreboard + inset grouped lists ---------- */
-function glAv(p,badge){
+function glAv(p,badge,ic){
   var id=p.id,tm=p.tm||(ALL[id]&&ALL[id].tm);
-  return '<span class="rav">'+(typeof avHtml==='function'?avHtml(id,tm):'')+(badge?'<i class="rb '+badge+'">'+SF[badge==='add'?'plus':'minus']+'</i>':'')+'</span>';
+  return '<span class="rav">'+(typeof avHtml==='function'?avHtml(id,tm):'')+(badge?'<i class="rb '+badge+'">'+SF[ic||(badge==='add'?'plus':'minus')]+'</i>':'')+'</span>';
 }
-function glMoveRow(m){return gpRow(m,{week:1});}
+function glMoveRow(m,day){return gpRow(m,{week:1,chk:day});}
 
 function uiToday(){
   var C=D.clock,P=(typeof lkPlan==='function'&&D.gameplan)?lkPlan(D.gameplan):null,M=D.matchup,h='';
@@ -1942,47 +1992,53 @@ function uiToday(){
     h+='<div class="sec"><div class="grp"><div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">You\'re set for this week</div><div class="row-s">Every game day has started. Next week\'s plan shows up after the next update.</div></div></div></div></div>';
     uiPut('Today',h,{v:'today',s:'main',c:0});glCount(document.getElementById('s-today-main'));return;
   }
-  var lk=C.lock[fi],when=isToday?'Today':esc(dayShort(C.labels[fi]));
+  var lk=C.lock[fi],S=D.sb,si=S&&S.dates?S.dates.indexOf(C.dates[fi]):-1,dk=C.dates[fi];
   var all=P?P.moves.filter(function(m){return m.t===fi;}):[];
   var cl=P?P.moves.filter(function(m){return m.waiver&&m.t-1===fi;}):[];
+  /* lineup changes for the same day (same list as Roster > Lineup); a move today that drops a player wins over starting him */
+  var dropT={};all.forEach(function(m){dropT[m.drop.id]=1;});
+  var fx=si>=0?tdFixes(si,S).filter(function(x){return !dropT[x.b.id];}):[];
   UI.exp=UI.exp||{};
-  h+='<div class="sec"><div class="sec-h"><span>Moves</span>'+(lk?'<span class="sec-r">'+SF.clock+'Before '+etTime(lk)+'</span>':'')+'</div><div class="grp">';
+  /* To do (2026-11-27): everything to do before the first puck drop, one checklist: waiver claims, moves, lineup changes */
+  h+='<div class="sec"><div class="sec-h"><span>To do</span>'+(lk?'<span class="sec-r">'+SF.clock+'Before '+etTime(lk)+'</span>':'')+'</div><div class="grp">';
   if(warn)h+='<div class="row"><span class="ric wn">'+SF.warn+'</span><div class="row-m"><div class="row-t">Check the data</div><div class="row-s">'+esc(warn)+'</div></div></div>';
   h+=gpPendingRows(P);
-  if(all.length||cl.length){
-    h+=cl.map(gpClaimRow).join('')+all.map(function(m){return glMoveRow(m);}).join('');
+  if(all.length||cl.length||fx.length){
+    h+=cl.map(function(m){return gpClaimRow(m,dk);}).join('')+all.map(function(m){return glMoveRow(m,dk);}).join('')
+      +fx.map(function(x){return tdRow(x,si,S,true);}).join('');
   }else{
     var nx=P?P.moves.filter(function(m){return m.t>fi;})[0]:null;
-    h+='<button type="button" class="row" data-go="moves/plan"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">No move to make '+(isToday?'today':'yet')+'</div><div class="row-s">'
-      +(nx?'Next: '+esc(dayShort(nx.day))+', add '+esc(nx.add.n)+' for '+esc(nx.drop.n):'No move planned for the rest of this week')+'</div></div><span class="rchev">'+SF.chev+'</span></button>';
+    h+='<button type="button" class="row" data-go="moves/plan"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">Nothing to do '+(isToday?'today':'yet')+'</div><div class="row-s">'
+      +(nx?'Next move: '+esc(dayShort(nx.day))+', add '+esc(nx.add.n)+' for '+esc(nx.drop.n):'No move planned for the rest of this week')+'</div></div><span class="rchev">'+SF.chev+'</span></button>';
   }
   h+='</div>';
+  var ft='';
   if(P&&P.moves_left!=null&&!P.unlimited){
     var lim=P.limit||0,ml=P.moves_left,dots='';
     if(lim>0&&lim<=14)for(var i=0;i<lim;i++)dots+='<i class="'+(i<lim-ml?'u':'')+'"></i>';
-    h+='<div class="sec-f">'+(dots?'<span class="mdots">'+dots+'</span>':'')+ml+' of '+lim+' moves left this week</div>';
+    ft=(dots?'<span class="mdots">'+dots+'</span>':'')+'<span>'+ml+' of '+lim+' moves left this week</span>';
   }
+  if(ft)h+='<div class="sec-f">'+ft+'</div>';
   h+='</div>';
-  /* lineup */
-  var lc=isToday?lsChanges(fi):null;
-  if(lc){var ng=function(p){return p.gl===0||!p.v||!(p.v[fi]>0);};
-    lc={into:lc.into,playing:lc.playing,out:lc.out.slice().sort(function(a,b){return ng(b)-ng(a);}).slice(0,lc.into.length)};}
+  /* Lineup: a glance (how many spots play, after the changes above), goalies, problems the To do list doesn't cover */
   var gl=[];(D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){if(r.day===C.labels[fi])gl.push({g:g.p,r:r});});});
   gl.sort(function(a,b){return (b.r.ev||0)-(a.r.ev||0);});
-  var al=(D.alerts||[]).filter(function(a){return a.k==='bad'||/injur|not starting/i.test(a.t);});
+  var fxN=fx.map(function(x){return x.a?x.a.n:'';}).concat(fx.map(function(x){return x.b.n;}));
+  var al=(D.alerts||[]).filter(function(a){return (a.k==='bad'||/injur|not starting/i.test(a.t))&&!fxN.some(function(n){return n&&a.t.indexOf(n)>=0;});});
   h+='<div class="sec"><div class="sec-h"><span>Lineup</span></div><div class="grp">';
-  if(!isToday)h+='<div class="row"><span class="ric gy">'+SF.clock+'</span><div class="row-m"><div class="row-t">Set it '+esc(dayShort(C.labels[fi]))+' morning</div></div></div>';
-  else if(lc&&(lc.into.length||lc.out.length)){
-    h+=lc.into.map(function(p){return '<div class="row">'+glAv(p)+'<div class="row-m"><div class="row-t"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a></div><div class="row-s">On your bench, has a game</div></div><span class="badge b-start">Start</span></div>';}).join('')
-      +lc.out.map(function(p){return '<div class="row">'+glAv(p)+'<div class="row-m"><div class="row-t"><a class="pl" data-noav="1" data-id="'+p.id+'">'+esc(p.n)+'</a></div><div class="row-s">'+(p.gl===0||!p.v||!(p.v[fi]>0)?'No game today':'Lower projection than the player replacing him')+'</div></div><span class="badge b-bench">Bench</span></div>';}).join('');
-  }else h+='<div class="row"><span class="ric ok">'+SF.check+'</span><div class="row-m"><div class="row-t">Skaters are set</div><div class="row-s">'+(lc?lc.playing+' play today':'')+'</div></div></div>';
+  if(si>=0&&S){
+    var L=rdLineup(),tot=L.F+L.D+L.UTIL+L.G,on=(D.mine||[]).filter(rdAct(si,S)).filter(function(p){return rdPlays(p,si,S);}).length;
+    var after=Math.min(tot,on+fx.filter(function(x){return x.why!=='lower';}).length),full=after>=tot;
+    h+='<button type="button" class="row" data-go="roster/team"><span class="ric '+(fx.length?'gy':(full?'ok':'gy'))+'">'+(fx.length?SF.roster:(full?SF.check:SF.roster))+'</span><div class="row-m"><div class="row-t">'
+      +(fx.length?'After the changes above':'Your lineup is set')+'</div><div class="row-s">'+after+' of '+tot+' spots have a game '+(isToday?'today':esc(dayShort(C.labels[fi])))+'</div></div><span class="rchev">'+SF.chev+'</span></button>';
+  }
   al.forEach(function(a){h+='<div class="row"><span class="ric '+(a.k==='bad'?'bd':'wn')+'">'+SF.warn+'</span><div class="row-m"><div class="row-s" style="color:var(--label)">'+esc(a.t)+'</div></div></div>';});
   gl.forEach(function(x){
-    var b=/bench/i.test(x.r.verdict)?'bench':(/risk/i.test(x.r.verdict)?'risky':'start');
-    h+='<div class="row">'+glAv(x.g)+'<div class="row-m"><div class="row-t"><a class="pl" data-noav="1" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a></div><div class="row-s">'+(x.r.home?'vs ':'@ ')+esc(x.r.opp)+(x.r.conf?' &middot; '+esc(x.r.conf):'')+'</div></div><span class="badge b-'+b+'">'+esc(x.r.verdict.replace(/\s*\(.*\)/,''))+'</span></div>';
+    var b=/bench/i.test(x.r.verdict)?'bench':(/risk/i.test(x.r.verdict)?'risky':'start'),v=x.r.verdict.replace(/\s*\(.*\)/,'').toLowerCase();
+    h+='<div class="row">'+glAv(x.g)+'<div class="row-m"><div class="row-t"><a class="pl" data-noav="1" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a></div><div class="row-s">'+(x.r.home?'vs ':'@ ')+esc(x.r.opp)+(x.r.conf?' &middot; '+esc(x.r.conf):'')+'</div></div><span class="badge b-'+b+'">'+esc(v.charAt(0).toUpperCase()+v.slice(1))+'</span></div>';
   });
   if(isToday&&!gl.length)h+='<div class="row"><span class="ric gy">'+SF.clock+'</span><div class="row-m"><div class="row-s">None of your goalies play</div></div></div>';
-  h+='</div><div class="sec-f">Updated '+esc(String(D.updated||'').replace(/^.*?,\s*/,''))+'</div></div>';
+  h+='</div><div class="sec-f">Lineup changes are made in ESPN &middot; updated '+esc(String(D.updated||'').replace(/^.*?,\s*/,''))+'</div></div>';
   uiPut('Today',h,{v:'today',s:'main',c:0});
   glCount(document.getElementById('s-today-main'));
 }
@@ -2156,55 +2212,6 @@ function uiHelp(){
   uiPut('Data health',x,{v:'league',s:'help',c:0});
 }
 
-/* ---------- Lineup sheet: goalies each day, and skater priorities only on days with more skaters than spots ---------- */
-function lsVal(p,i){var v=(p.v&&p.v[i]>0)?p.v[i]:(p.out||0)*((p.inj&&p.inj!=='ACTIVE')?0.75:1);return v;}
-function lsLine(p,i,tag){
-  return '<li><a class="pl" data-id="'+p.id+'">'+esc(p.n)+'</a> <span class="muted">'+esc(p.pos)+' '+esc(p.tm)+' &middot; '+f(lsVal(p,i),1)+' pts</span>'+(tag?' '+tag:'')+'</li>';
-}
-function uiLineup(){
-  var S=D.streams,W=S&&S.whatif,P=D.planner;
-  if(!S||!W||!P)return;
-  var gm={};P.teams.forEach(function(t){gm[t.tm]=t.g;});
-  var act=W.mine.filter(function(p){return p.slot!=='IR'&&!isInj(p)&&p.grp!=='G';});
-  var h='<div class="muted" style="margin-bottom:4px">Goalies each day, and skater start order only on days when more of your skaters play than you have spots (9 F, 5 D, 1 UTIL). On other days everyone with a game starts.</div>';
-  var anyTight=false;
-  S.days.forEach(function(lbl,i){
-    var playing=act.filter(function(p){var g=gm[p.tm];return !!(g&&g[i]);});
-    var F=playing.filter(function(p){return p.grp==='F';}).sort(function(a,b){return lsVal(b,i)-lsVal(a,i);});
-    var Dn=playing.filter(function(p){return p.grp==='D';}).sort(function(a,b){return lsVal(b,i)-lsVal(a,i);});
-    var startF=F.slice(0,9),startD=Dn.slice(0,5),rest=F.slice(9).concat(Dn.slice(5)).sort(function(a,b){return lsVal(b,i)-lsVal(a,i);});
-    var util=rest[0]||null,bench=rest.slice(1);
-    var gl=[];
-    (D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){if(r.day===lbl)gl.push({g:g.p,r:r});});});
-    gl.sort(function(a,b){return (b.r.ev||0)-(a.r.ev||0);});
-    var tight=bench.length>0;
-    if(tight)anyTight=true;
-    h+='<div class="pbh">'+esc(lbl)+(i===0?' <span class="muted">(today)</span>':'')+'</div>';
-    if(gl.length)h+='<div><b>Goalies</b></div><ul class="pbl">'+gl.map(function(x){
-      return '<li><a class="pl" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a> '+(x.r.home?'vs':'@')+' '+esc(x.r.opp)+' <span class="pill '+x.r.cls+'">'+esc(x.r.verdict)+'</span> <span class="muted">'+esc(x.r.conf||'')+' &middot; win '+Math.round(x.r.p*100)+'% &middot; '+sgn(x.r.e,1)+' pts if he starts</span></li>';}).join('')+'</ul>';
-    else h+='<div class="muted">No goalie of yours plays.</div>';
-    if(!tight){
-      h+='<div class="muted" style="margin-top:6px">Skaters: '+playing.length+' play and all fit your lineup. Start everyone with a game.</div>';
-      return;
-    }
-    var now=function(p,want){
-      if(i!==0)return '';
-      var onBench=p.slot==='BN';
-      if(want==='start'&&onBench)return '<span class="warn">move into lineup</span>';
-      if(want==='bench'&&!onBench)return '<span class="warn">move to bench</span>';
-      return '';
-    };
-    h+='<div style="margin-top:8px"><b>Skaters: '+playing.length+' play for '+(9+5+1)+' spots. Bench '+bench.length+'.</b></div>';
-    h+='<div class="muted" style="margin-top:4px">Start</div><ul class="pbl">'
-      +startF.map(function(p){return lsLine(p,i,now(p,'start'));}).join('')
-      +startD.map(function(p){return lsLine(p,i,now(p,'start'));}).join('')
-      +(util?lsLine(util,i,'<span class="muted">UTIL</span> '+now(util,'start')):'')+'</ul>';
-    h+='<div class="muted">Bench (lowest value first to sit)</div><ul class="pbl">'+bench.slice().reverse().map(function(p){return lsLine(p,i,now(p,'bench'));}).join('')+'</ul>';
-  });
-  if(!anyTight)h+='<div class="muted" style="margin-top:10px">No day this week has more skaters playing than lineup spots, so there are no skater sit/start decisions. Goalies are the only calls.</div>';
-  uiPut('Lineup sheet',h,{v:'today',s:'main',c:0});
-}
-
 /* ---------- Schedule edge: per-team games + opponents + best free agents ---------- */
 UI.edgeWin=UI.edgeWin||0;
 function uiEdge(){
@@ -2285,6 +2292,8 @@ function uiStart(){uiModalWatch();
   mo2.observe(document.body,{childList:true,subtree:true});
   document.addEventListener('click',function(e){
     var t=e.target;if(!t||!t.closest)return;
+    var ck=t.closest('[data-chk]');
+    if(ck){tdToggle(ck);return;}
     var ex=t.closest('[data-exp]');
     if(ex&&!t.closest('a,button:not([data-exp])')){var k=ex.getAttribute('data-exp'),nx=ex.nextElementSibling,x=(nx&&nx.id==='x-'+k)?nx:document.getElementById('x-'+k);/* the same move can be on Today and the Game plan: open the one tapped */UI.exp=UI.exp||{};UI.exp[k]=!UI.exp[k];ex.classList.toggle('open',UI.exp[k]);if(x)rxToggle(x,UI.exp[k]);return;}
     var kb=t.closest('[data-keep]');
