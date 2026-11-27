@@ -3611,7 +3611,8 @@ function gmOutlook(e){
     var pr=function(v){return v<0?-v/(-v+100):100/(v+100);},am=ml(pc.awayTeamOdds),hm=ml(pc.homeTeamOdds);
     if(am!=null&&hm!=null){
       var pa=pr(am),ph=pr(hm),fa=pa/(pa+ph),fav=fa>=.5?e.a:e.h,fp=Math.round(Math.max(fa,1-fa)*100);
-      odds+='<div class="row" data-k="fav"><span class="ric gy">'+SF.chart+'</span><div class="row-m"><div class="row-t">'+esc(fav.ab)+' favored, '+fp+'% to win</div><div class="row-s">From the betting line. Winning goalies score more.</div></div></div>';
+      var dog=fav===e.a?e.h:e.a,close=fp<=55;   // within 45-55% a game is a coin flip: never call one side "favored" (2026-11-27)
+      odds+='<div class="row" data-k="fav"><span class="ric gy">'+SF.chart+'</span><div class="row-m"><div class="row-t">'+(close?'Toss-up: '+esc(fav.ab)+' '+fp+'%, '+esc(dog.ab)+' '+(100-fp)+'%':esc(fav.ab)+' favored, '+fp+'% to win')+'</div><div class="row-s">'+(close?'From the betting line. Either goalie could get the win.':'From the betting line. Winning goalies score more.')+'</div></div></div>';
     }
     if(pc.overUnder){var ou=+pc.overUnder;odds+='<div class="row" data-k="ou"><span class="ric gy">'+SF.goals+'</span><div class="row-m"><div class="row-t">'+f(ou,1)+' goals expected</div><div class="row-s">'+(ou>=6.5?'A high-scoring line: good for skaters.':(ou<=5.5?'A low-scoring line: good for goalies.':'About an average night.'))+'</div></div></div>';}
   }
