@@ -39,6 +39,7 @@ import pwa
 import record as RC
 import roles as R
 import scoreboard as SBD
+import scout as SCT
 import site_builder as SB
 import starters as S
 import streams as STR
@@ -447,6 +448,17 @@ def _main():
         site_data["sb"] = SBD.build(cfg, data, league, standings, now_ms)   # every matchup in the league, Matchups tab
     except Exception as e:                                  # an extra: never fail the build over it
         print(f"  league scoreboard skipped ({type(e).__name__}: {e})")
+    try:                                                    # opponent scouting for the matchup sheet (display only)
+        _sab, _sgm = D.schedule_maps(data["schedules"])
+        _sc = SCT.build(league, site_data, site_data.get("sb"), _sgm, _sab, data["roster"].get("scoringPeriodId", 1),
+                        now_ms, cfg["team"], raw_tx=data.get("pending"), days_left=PL.DAYS_LEFT["n"])
+        SCT.apply(site_data.get("sb"), _sc)
+        if _sc:
+            print(f"  scouting: {len(_sc)} teams; " + "; ".join(
+                f"{t}: {v['n']} games, {v['mv']['left']} adds left, +{v.get('up', 0)} if they stream" for t, v in _sc.items()
+                if t != str(cfg["team"]))[:400])
+    except Exception as e:                                  # an extra: never fail the build over it
+        print(f"  scouting skipped ({type(e).__name__}: {e})")
     site_data["df"] = dict(S.STATE.get("by_team") or {})   # today's starting goalies (Daily Faceoff), for the game page
     gamelog = None
     try:

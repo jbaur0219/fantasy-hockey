@@ -67,7 +67,24 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
             opp0 = next((t for t in site_data.get("teams", []) if t["id"] == m.get("opp_id")), None)
             r0 = C.matchup_projection(site_data["mine"], opp0["players"] if opp0 else [], game, ndays, standings,
                                       starters, m["me_now"], m["opp_now"], pending=pend, fas=site_data["fas"])
-            risk = {"lead": r0["proj_me"] - r0["proj_opp"], "sd": r0["sd"], "p": r0["p_win"]}
+            risk = {"lead": r0["proj_me"] - r0["proj_opp"], "sd": r0["sd"], "p": r0["p_win"],
+                    "p_show": m.get("p_win", r0["p_win"])}     # notes quote the number Today shows
+            try:                                         # what the opponent can still add by streaming (scout.py)
+                import math
+                import scout as SCT
+                ob = D.move_budget(league, m.get("opp_id"), days_left=PL.DAYS_LEFT["n"])
+                up, picks = SCT.opponent_upside(opp0["players"] if opp0 else [], site_data["fas"], game, ndays,
+                                                None if ob.get("unlimited") else ob["left"], ob.get("per_day"))
+                if up:
+                    share = C.OPP_STREAM_SHARE
+                    risk["lead"] -= share * up
+                    risk["sd"] = math.sqrt(risk["sd"] ** 2 + share * sum(s["g"] for s in picks) * D.SKATER_SD ** 2)
+                    risk["p"] = D.clamp(D.norm_cdf(risk["lead"] / risk["sd"]), 0.01, 0.99)
+                risk["opp_up"] = up
+                print(f"  opponent could stream +{up} ({len(picks)} adds left used); "
+                      f"win chance for the plan's risk read {risk['p']:.0%} (shown {risk['p_show']:.0%})")
+            except Exception as e:
+                print(f"  opponent streaming read skipped ({type(e).__name__}: {e})")
         except Exception as e:
             print(f"  matchup risk check skipped ({type(e).__name__}: {e})")
     res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, fut, prev=prev,

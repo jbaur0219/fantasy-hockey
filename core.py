@@ -52,6 +52,17 @@ HOLD_SLACK = 0.5          # a move already on the plan stays until it falls this
 SAFE_WIN = 0.85
 SAFE_DP = 0.01
 LT_EDGE = 3.0
+# The other side of it (user, 2026-11-27: use the scouting logic "on the back end to make the risk feature more accurate",
+# "taking more chances when im behind"). When you are this unlikely to win, a small move (under the show bar, at least
+# BEHIND_FLOOR net points) is shown anyway if it raises your win chance by BEHIND_DP: extra games add swing, and swing is
+# what a trailing team needs. Producers keep their own drop bar; IR moves are unchanged.
+BEHIND = 0.30
+BEHIND_DP = 0.01
+BEHIND_FLOOR = 0.3
+# The matchup read counts what your opponent can still add by streaming (scout.opponent_upside: their best free agents
+# for their open spots, one add a day). Managers don't stream perfectly, so only this share of it is expected.
+# A guess, not measured: the backtest can't check it until there are weeks of opponents' moves to compare with.
+OPP_STREAM_SHARE = 0.5
 IR_STATUSES = {"OUT", "INJURY_RESERVE"}   # injured players ESPN lets you move to an IR spot
 ALTS = 3                  # other drops kept for each move, for the "Keep him" button
 POOL_SK, POOL_G = 45, 8
@@ -422,7 +433,13 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
         worth = min(mv["marg"], mv["net"])
         if ahead_hold(mv, risk, nxt_games):
             return False
-        return worth >= need - slack and round(mv["net"], 1) >= max(OPTIONAL_MIN, bar - slack)
+        if worth >= need - slack and round(mv["net"], 1) >= max(OPTIONAL_MIN, bar - slack):
+            mv["behind_only"] = False
+            return True
+        if mv["need"] <= STR.MIN_GAIN and worth >= BEHIND_FLOOR - slack and behind_keep(mv, risk):
+            mv["behind_only"] = True
+            return True
+        return False
 
     def sequence(tiers, with_reasons):
         """Moves in day order, each with its own gain (lineup points with the earlier moves made), cost and labels."""
@@ -497,6 +514,11 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
     after_total, after_days = M.lineup_total([m for m, _, _ in tiers])
     out, order, ents = sequence(tiers, True)
     for mv in out:
+        shows(mv)                               # sets behind_only: on the list only because you're well behind
+        if mv.pop("behind_only", False):
+            mv["behind"] = behind_note(mv, risk)
+            if mv.get("why1") and mv["behind"]:
+                mv["why1"] += " " + mv["behind"]
         if mv["conf"] == "optional":
             mv["conf"] = "lean"                 # every move on the list is one to make: never rated optional
     final = [m for m, _, _ in tiers]
@@ -559,6 +581,25 @@ def ahead_hold(mv, risk, nxt_games):
     return lt_edge(mv, nxt_games) < LT_EDGE
 
 
+def behind_keep(mv, risk):
+    """True when you are well behind and a small move still raises your win chance (it adds games, so it adds swing)."""
+    if not risk or mv.get("ir") or (risk.get("p") if risk.get("p") is not None else 1) >= BEHIND:
+        return False
+    if round(mv.get("net", 0), 1) < BEHIND_FLOOR:
+        return False
+    dp = win_change(mv, risk)
+    return dp is not None and dp >= BEHIND_DP
+
+
+def behind_note(mv, risk):
+    """The sentence a move gets when it is on the list only because you're behind."""
+    p = risk.get("p_show", risk.get("p")) if risk else None
+    if p is None:
+        return ""
+    return (f"You're {int(round(p * 100))}% to win this week, so a move that adds games is worth it: you need the "
+            f"chances more than the safe points.")
+
+
 def ahead_note(mv, risk, nxt_games):
     """The sentence a goalie add gets when you're well ahead and it stays on the list for the weeks after."""
     if not risk or mv.get("g") != "G" or mv.get("ir") or (risk.get("p") or 0) < SAFE_WIN:
@@ -568,7 +609,7 @@ def ahead_note(mv, risk, nxt_games):
         return ""
     if lt_edge(mv, nxt_games) < LT_EDGE:
         return ""
-    return (f"You're {int(round(risk['p'] * 100))}% to win this week already, so this move is about the weeks after, "
+    return (f"You're {int(round(risk.get('p_show', risk['p']) * 100))}% to win this week already, so this move is about the weeks after, "
             f"not this matchup.")
 
 
