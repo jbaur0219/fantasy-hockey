@@ -4,7 +4,7 @@ PENDING WAIVER CLAIMS (READ-ONLY): claims you have already put in with ESPN that
 
 A waiver claim is not on your roster until ESPN processes it (overnight), so for a day the app saw the player as still
 available and kept suggesting the move you had just made. This reads your pending claims from ESPN
-(view=mPendingTransactions) so the plan can treat each one as made from the day it processes:
+(view=mTransactions2; see fetch) so the plan can treat each one as made from the day it processes:
 
   - the player you claimed joins your lineup that day, the player you drop leaves it (core.apply_pending),
   - neither is suggested again, and the claim uses one of this matchup's moves (dashboard.move_budget),
@@ -19,15 +19,51 @@ PENDING_STATES = {"PENDING", "PROPOSED"}    # anything else (EXECUTED, CANCELED,
 
 
 def fetch(cfg):
-    """ESPN's raw pending-transactions answer for the league, or None when it could not be read."""
+    """Every recent league transaction ESPN will give us, merged into {"transactions": [...]}, or None if none could be read.
+
+    Checked against the live league (2026-11-27): `view=mPendingTransactions` answers with no transactions at all, while
+    `view=mTransactions2` lists a waiver claim the moment it is put in (status PENDING, type WAIVER, ADD / DROP items).
+    That PENDING record is never updated: when ESPN processes the claim overnight it adds a NEW record (EXECUTED or
+    FAILED_*) whose `relatedTransactionId` is the claim's id, filed under the day it processed. So we read today and the
+    two days before (a claim made yesterday is under yesterday; its result, if any, under today) and `parse` drops any
+    claim that a later record already answers."""
     c = cfg
     url = (f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/fhl/seasons/{c['season']}"
            f"/segments/0/leagues/{c['league']}")
-    try:
-        return A.espn_get(url, c["cookies"], params=[("view", "mPendingTransactions"), ("forTeamId", c["team"])])
-    except (Exception, SystemExit) as e:                      # SystemExit: espn_get quits on a 401/403
-        print(f"  pending claims skipped ({type(e).__name__}: {e})")
+    rows, ok = [], False
+
+    def get(params):
+        nonlocal ok
+        try:
+            js = A.espn_get(url, c["cookies"], params=params)
+        except (Exception, SystemExit) as e:                  # SystemExit: espn_get quits on a 401/403
+            print(f"  pending claims: {params} skipped ({type(e).__name__}: {e})")
+            return None
+        if isinstance(js, dict):
+            ok = True
+            rows.extend(r for r in (js.get("transactions") or js.get("pendingTransactions") or []) if isinstance(r, dict))
+        return js
+
+    today = get([("view", "mTransactions2")])
+    sp = today.get("scoringPeriodId") if isinstance(today, dict) else None
+    if isinstance(sp, int):
+        for back in (1, 2):
+            if sp - back >= 1:
+                get([("view", "mTransactions2"), ("scoringPeriodId", sp - back)])
+    get([("view", "mPendingTransactions"), ("forTeamId", c["team"])])   # kept in case ESPN ever fills it
+    if not ok:
         return None
+    seen, out = set(), []
+    for r in rows:
+        k = r.get("id") or id(r)
+        if k not in seen:
+            seen.add(k)
+            out.append(r)
+    for r in out:
+        if str(r.get("status")).upper() in PENDING_STATES and str(r.get("type")).upper() in CLAIM_TYPES \
+                and r.get("teamId") == c["team"]:
+            print(f"  pending claim seen: {[(i.get('type'), i.get('playerId')) for i in r.get('items') or []]}")
+    return {"transactions": out}
 
 
 def parse(raw, my_team):
@@ -38,9 +74,15 @@ def parse(raw, my_team):
     rows = raw.get("pendingTransactions")
     if rows is None:
         rows = raw.get("transactions")
+    rows = [tx for tx in rows or [] if isinstance(tx, dict)]
+    # a claim ESPN has already processed: a later record (EXECUTED / FAILED_*) points back to it
+    answered = {tx.get("relatedTransactionId") for tx in rows
+                if tx.get("relatedTransactionId") and str(tx.get("status") or "").upper() not in PENDING_STATES}
     out = []
-    for tx in rows or []:
-        if not isinstance(tx, dict):
+    for tx in rows:
+        if tx.get("id") is not None and tx.get("id") in answered:
+            continue
+        if tx.get("isPending") is False and str(tx.get("status") or "").upper() in PENDING_STATES:
             continue
         status = str(tx.get("status") or ("PENDING" if tx.get("isPending") else "")).upper()
         if status not in PENDING_STATES:
