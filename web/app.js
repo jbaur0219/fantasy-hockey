@@ -2035,7 +2035,9 @@ function uiToday(){
   al.forEach(function(a){h+='<div class="row"><span class="ric '+(a.k==='bad'?'bd':'wn')+'">'+SF.warn+'</span><div class="row-m"><div class="row-s" style="color:var(--label)">'+esc(a.t)+'</div></div></div>';});
   gl.forEach(function(x){
     var b=/bench/i.test(x.r.verdict)?'bench':(/risk/i.test(x.r.verdict)?'risky':'start'),v=x.r.verdict.replace(/\s*\(.*\)/,'').toLowerCase();
-    h+='<div class="row">'+glAv(x.g)+'<div class="row-m"><div class="row-t"><a class="pl" data-noav="1" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a></div><div class="row-s">'+(x.r.home?'vs ':'@ ')+esc(x.r.opp)+(x.r.conf?' &middot; '+esc(x.r.conf):'')+'</div></div><span class="badge b-'+b+'">'+esc(v.charAt(0).toUpperCase()+v.slice(1))+'</span></div>';
+    /* a goalie today's move drops is never "Start": the plan already counts him as gone (2026-11-27, Adin Hill) */
+    var dr=dropT[x.g.id];if(dr){b='bench';v='drop';}
+    h+='<div class="row">'+glAv(x.g)+'<div class="row-m"><div class="row-t"><a class="pl" data-noav="1" data-id="'+x.g.id+'">'+esc(x.g.n)+'</a></div><div class="row-s">'+(x.r.home?'vs ':'@ ')+esc(x.r.opp)+(dr?' &middot; today\u2019s move drops him':(x.r.conf?' &middot; '+esc(x.r.conf):''))+'</div></div><span class="badge b-'+b+'">'+esc(v.charAt(0).toUpperCase()+v.slice(1))+'</span></div>';
   });
   if(isToday&&!gl.length)h+='<div class="row"><span class="ric gy">'+SF.clock+'</span><div class="row-m"><div class="row-s">None of your goalies play</div></div></div>';
   h+='</div><div class="sec-f">Lineup changes are made in ESPN &middot; updated '+esc(String(D.updated||'').replace(/^.*?,\s*/,''))+'</div></div>';

@@ -249,6 +249,32 @@ def extra_alerts(site_data, now_ms):
     return out
 
 
+def reconcile_alerts(site_data):
+    """Today's lineup alerts are built from the roster as it is now, before the game plan exists. When a move planned for
+    today drops the goalie an alert says to swap in (seen 2026-11-27: "drop Adin Hill" next to "Swap in Adin Hill, who
+    is listed to start"), rewrite that alert so the app and the push agree with the plan. The plan itself already counts
+    the dropped player as gone from the move's day on, so nothing in the plan changes."""
+    gp = site_data.get("gameplan") or {}
+    today = {m["drop"]["n"]: m for m in gp.get("moves") or [] if m.get("t") == 0 and m.get("drop")}
+    if not today:
+        return
+    out = []
+    for a in site_data.get("alerts") or []:
+        t = a.get("t") or ""
+        for name, m in today.items():
+            tail = f"Swap in {name}, who is listed to start."
+            if tail not in t:
+                continue
+            add = m["add"]["n"]
+            if m.get("g") == "G" and 0 in (m.get("cda") or []):
+                new = f"Today's move drops {name}: add {add} and start him there instead."
+            else:
+                new = f"Today's move drops {name}, so he can't fill in."
+            t = t.replace(tail, new)
+        out.append(dict(a, t=t))
+    site_data["alerts"] = out
+
+
 def write_notify_payload(site_data, now_ms):
     """The morning push notification (notify_payload.json) and, when today has moves, the pre-game reminder
     (reminder_payload.json). The server sends the reminder with the pre-game build; the plan only lists moves you
@@ -385,6 +411,10 @@ def _main():
             print(f"     {mv['day']} [{mv['conf']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, cost {mv['cost']}, net {mv['net']}){' kept' if mv.get('kept') else ''}")
     except Exception as e:
         print(f"  game plan data failed ({type(e).__name__}: {e})")
+    try:
+        reconcile_alerts(site_data)
+    except Exception as e:                              # never fail the build over alert wording
+        print(f"  alert reconcile skipped ({type(e).__name__}: {e})")
     site_data["health"] = health_report(site_data, nhl_counts)
     try:
         site_data["weekplan"] = WK.build(cfg, data, league, standings, now_ms, site_data,
