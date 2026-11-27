@@ -2327,8 +2327,9 @@ function pcTrend(p){
 /* how many ESPN leagues roster and start him: a quick trust check on an add nobody knows */
 function ownLine(p){
   if(!p||(p.pst==null&&p.own==null))return '';
-  var a=[];if(p.pst!=null)a.push('Started in '+f(p.pst,0)+'%');if(p.own!=null)a.push('rostered in '+f(p.own,0)+'%'+(pcTrend(p)?' '+pcTrend(p):''));
-  var t=a.join(', ')+' of ESPN leagues';return t.charAt(0).toUpperCase()+t.slice(1);
+  var c=p.own_chg,tr=(c!=null&&Math.abs(c)>=1)?' '+pcTrend(p):'';
+  if(p.pst==null)return '<span>Rostered in '+f(p.own,0)+'% of ESPN leagues'+tr+'</span>';
+  return '<span>Started in '+f(p.pst,0)+'% of ESPN leagues</span>'+(p.own!=null?' &middot; <span>'+f(p.own,0)+'% rostered'+tr+'</span>':'');
 }
 function pcTag(p){
   if(p.out==null||p.ppg==null||(p.gp!=null&&p.gp<6))return '';
@@ -3812,7 +3813,7 @@ function psRow(e,q){
   return '<button type="button" class="ps-r" data-psid="'+p.id+'">'+avHtml(p.id,p.tm)
     +'<span class="ps-m"><span class="ps-n">'+(q?psMark(p.n,q):esc(p.n))+'</span>'
     +'<span class="ps-s"><span class="ps-st ps-k'+s.k+'">'+esc(s.t)+'</span>'+inj+blk+'</span>'
-    +'<span class="ps-d">'+esc(p.pos)+' &middot; '+esc(p.tm)+(g?' &middot; '+g:'')+((s.k==='fa'||s.k==='wv')&&p.pst!=null?' &middot; '+f(p.pst,0)+'% start':'')+'</span></span>'
+    +'<span class="ps-d">'+esc(p.pos)+' &middot; '+esc(p.tm)+(g?' &middot; '+g:'')+'</span></span>'
     +'<span class="ps-v"><b>'+f(p.out,1)+'</b><span>'+(p.grp==='G'?'per start':'per game')+'</span></span></button>';
 }
 var PS_RK='fh_recent_search';

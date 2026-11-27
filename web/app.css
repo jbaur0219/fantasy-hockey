@@ -530,7 +530,8 @@ html.sheet-on #gnav,html.sheet-on #bnav,html.sheet-on #rfbar{opacity:0;pointer-e
 .gpr .mvr-av{margin-top:1px}
 .gpr-d{font-size:15px;line-height:20px;color:var(--label2);letter-spacing:-.012em;margin-top:1px}
 .gpr-d a.pl{color:inherit}
-.gpr-o{font-size:12px;line-height:16px;color:var(--label3,var(--label2));margin-top:4px;font-variant-numeric:tabular-nums}
+.gpr-o{font-size:12px;line-height:16px;color:var(--label2);margin-top:4px;font-variant-numeric:tabular-nums}
+.gpr-o span{white-space:nowrap}
 .gpr-o .pc-tr{font-size:11px}
 .gpr-w{font-size:13px;line-height:18px;color:var(--label2);letter-spacing:-.005em;margin-top:6px}
 .gpr-h{display:flex;align-items:flex-start;gap:8px}.gpr-h>.row-t{flex:1;min-width:0}
