@@ -136,6 +136,7 @@ def parse_player(pl, season, slot=None, status=None):
         "team_id": pl.get("proTeamId"), "slot": slot, "status": status,
         "own": (pl.get("ownership") or {}).get("percentOwned"),
         "own_chg": (pl.get("ownership") or {}).get("percentChange"),
+        "start": (pl.get("ownership") or {}).get("percentStarted"),
         "injury": pl.get("injuryStatus", "ACTIVE"),
         "gp": gp, "applied": applied, "ppg": ppg, "proj_ppg": proj_ppg,
         "recent_ppg": recent_ppg, "recent_gp": r_gp, "flags": [],

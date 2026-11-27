@@ -81,7 +81,7 @@ var cG7={h:'Games left',v:function(p){return p.gl!=null?p.gl:p.g7;},num:1};
 var cTOI={h:'TOI',v:function(p){return p.toi;},num:1,fmt:function(x){return f(x,1);}};var cPP={h:'PP min',v:function(p){return p.pp;},num:1,fmt:function(x){return f(x,1);}};var cXG={h:'G vs xG',v:function(p){return p.gx;},num:1,r:function(p){return p.gx==null?'-':'<span class="'+(p.gx>=2?'warn':(p.gx<=-2?'good':''))+'">'+sgn(p.gx,1)+'</span>';}};var cRole={h:'Role',v:function(p){return p.rl||'';},r:function(p){return p.rl?('<span class="'+(p.cls==='core'?'good':(p.cls==='watch'?'warn':(p.cls==='streamer'?'muted':'')))+'">'+esc(p.rl)+'</span>'+(p.cls?' <span class="muted">'+esc(p.cls)+'</span>':'')):'-';}};var cFlags={h:'Flags',v:function(p){return (p.fl||[]).join('; ');},r:flagsHtml};
 var rosterCols=[cName,{h:'Slot',v:function(p){return p.slot;}},cGP,cPPG,{h:'Luck-adj',v:function(p){return p.exp;},num:1,fmt:f},cProj,cOut,cG7,cRole,cTOI,cPP,cXG,cFlags];
 var faCols=[cName,cOut,{h:'vs your worst',v:function(p){return up(p);},num:1,r:function(p){var u=up(p);return '<span class="'+(u>=0.2?'good':(u<0?'bad':''))+'">'+sgn(u)+'</span>';}},
-  cPPG,cProj,cGP,cG7,cRole,cTOI,cPP,cXG,{h:'Owned',v:function(p){return p.own;},num:1,r:function(p){return p.own==null?'-':f(p.own,0)+'%';}},{h:'Adds',v:function(p){return p.own_chg;},num:1,r:function(p){return pcTrend(p)||'<span class="muted">-</span>';}},
+  cPPG,cProj,cGP,cG7,cRole,cTOI,cPP,cXG,{h:'Started',v:function(p){return p.pst;},num:1,r:function(p){return p.pst==null?'-':f(p.pst,0)+'%';}},{h:'Owned',v:function(p){return p.own;},num:1,r:function(p){return p.own==null?'-':f(p.own,0)+'%';}},{h:'Adds',v:function(p){return p.own_chg;},num:1,r:function(p){return pcTrend(p)||'<span class="muted">-</span>';}},
   {h:'Status',v:function(p){return p.st||'';}},cFlags];
 
 /* ---------- overview ---------- */
@@ -1468,7 +1468,8 @@ function gpRow(m,o){
     +'<div class="row-m"><div class="gpr-h"><div class="row-t">Add <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
     +'<span class="gpr-p">'+sgn(m.gain,1)+'<small>pts</small></span></div>'
     +'<div class="gpr-d">'+(m.ir?'Move ':'Drop ')+'<a class="pl" data-noav="1" data-id="'+m.drop.id+'">'+esc(m.drop.n)+'</a>'+(m.ir?' to IR':'')+'</div>'
-    +(gpWhy(m)?'<div class="gpr-w">'+esc(gpWhy(m))+'</div>':'')+'</div>'
+    +(gpWhy(m)?'<div class="gpr-w">'+esc(gpWhy(m))+'</div>':'')
+    +(ownLine(ALL[m.add.id]||m.add)?'<div class="gpr-o">'+ownLine(ALL[m.add.id]||m.add)+'</div>':'')+'</div>'
     +'<span class="rchev">'+SF.chev+'</span></div>'
     +'<div class="rx'+(open?' open':'')+'" id="x-'+key+'"><div class="rxi">'
     +(m.swapped?'<div class="rx-n">Instead of dropping '+esc(m.swapped)+', who you chose to keep.</div>':'')
@@ -1482,7 +1483,7 @@ function gpRow(m,o){
 function gpClaimRow(m,day){
   var ck=day?'cl'+m.add.id+'@'+day:'',on=ck&&TD.on(ck);
   return '<div class="row'+(ck?' chk'+(on?' done':''):'')+'">'+(ck?tdBox(ck,on):'<span class="ric">'+SF.clock+'</span>')+'<div class="row-m"><div class="row-t">Claim <a class="pl" data-noav="1" data-id="'+m.add.id+'">'+esc(m.add.n)+'</a></div>'
-    +'<div class="row-s">He is on waivers. Put the claim in today so he is yours '+esc(dayShort(m.day))+' (then '+(m.ir?'move '+esc(m.drop.n)+' to IR':'drop '+esc(m.drop.n))+').</div></div></div>';
+    +'<div class="row-s">He is on waivers. Put the claim in today so he is yours '+esc(dayShort(m.day))+' (then '+(m.ir?'move '+esc(m.drop.n)+' to IR':'drop '+esc(m.drop.n))+').</div>'+(ownLine(ALL[m.add.id]||m.add)?'<div class="gpr-o">'+ownLine(ALL[m.add.id]||m.add)+'</div>':'')+'</div></div>';
 }
 /* claims already in with ESPN that haven't processed yet: the plan counts them as made, this row shows the app knows */
 function gpPendingRows(P){
@@ -2322,6 +2323,12 @@ function uiStart(){uiModalWatch();
 function pcTrend(p){
   var c=p.own_chg;if(c==null||isNaN(c)||Math.abs(c)<0.1)return '';
   return '<span class="pc-tr '+(c>0?'u':'d')+'">'+(c>0?'\u25B2':'\u25BC')+f(Math.abs(c),1)+'</span>';
+}
+/* how many ESPN leagues roster and start him: a quick trust check on an add nobody knows */
+function ownLine(p){
+  if(!p||(p.pst==null&&p.own==null))return '';
+  var a=[];if(p.pst!=null)a.push('Started in '+f(p.pst,0)+'%');if(p.own!=null)a.push('rostered in '+f(p.own,0)+'%'+(pcTrend(p)?' '+pcTrend(p):''));
+  var t=a.join(', ')+' of ESPN leagues';return t.charAt(0).toUpperCase()+t.slice(1);
 }
 function pcTag(p){
   if(p.out==null||p.ppg==null||(p.gp!=null&&p.gp<6))return '';
@@ -3805,7 +3812,7 @@ function psRow(e,q){
   return '<button type="button" class="ps-r" data-psid="'+p.id+'">'+avHtml(p.id,p.tm)
     +'<span class="ps-m"><span class="ps-n">'+(q?psMark(p.n,q):esc(p.n))+'</span>'
     +'<span class="ps-s"><span class="ps-st ps-k'+s.k+'">'+esc(s.t)+'</span>'+inj+blk+'</span>'
-    +'<span class="ps-d">'+esc(p.pos)+' &middot; '+esc(p.tm)+(g?' &middot; '+g:'')+'</span></span>'
+    +'<span class="ps-d">'+esc(p.pos)+' &middot; '+esc(p.tm)+(g?' &middot; '+g:'')+((s.k==='fa'||s.k==='wv')&&p.pst!=null?' &middot; '+f(p.pst,0)+'% start':'')+'</span></span>'
     +'<span class="ps-v"><b>'+f(p.out,1)+'</b><span>'+(p.grp==='G'?'per start':'per game')+'</span></span></button>';
 }
 var PS_RK='fh_recent_search';

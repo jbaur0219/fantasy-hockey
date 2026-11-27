@@ -23,7 +23,7 @@ def slim(p, standings):
          "slot": "FA" if p.get("slot") is None else A.slot_name(p["slot"]),
          "gp": int(p["gp"]), "ppg": r3(p["ppg"]), "exp": r3(p["exp_ppg"]), "proj": r3(p["proj_ppg"]),
          "out": r3(p["outlook"]), "rec": r3(p.get("recent_ppg")), "g7": p.get("g7", 0),
-         "own": r3(p.get("own")), "inj": p["injury"], "fl": p["flags"], "st": p.get("status")}
+         "own": r3(p.get("own")), "own_chg": r3(p.get("own_chg")), "pst": r3(p.get("start")), "inj": p["injury"], "fl": p["flags"], "st": p.get("status")}
     if p["group"] == "G":
         d.update({"svp": r3(p.get("svp")), "w": int(p.get("wins", 0)), "ga": int(p.get("ga", 0)),
                   "sp": r3(D.start_prob(p, standings))})
