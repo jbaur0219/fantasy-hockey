@@ -45,6 +45,13 @@ SHOW_NET = 1.0            # smallest net gain a move needs to be on the plan you
 LATE_NET = 0.5            # ...in the last LATE_DAYS days of the matchup: unused moves expire, so any real gain counts
 LATE_DAYS = 3
 HOLD_SLACK = 0.5          # a move already on the plan stays until it falls this far below the bar (no flip-flop)
+# Reading the matchup (user, 2026-11-27: "If I am up a lot and have a good chance to win, I don't need to pick up a
+# goalie and make a risky move like that"). When you are this likely to win already, a goalie add has to do one of two
+# things: raise your win chance by SAFE_DP, or be a clear long-term upgrade (LT_EDGE more points than the goalie you
+# drop over the weeks after this one). A pure goalie stream in a week that is already won only adds a goalie's swing.
+SAFE_WIN = 0.85
+SAFE_DP = 0.01
+LT_EDGE = 3.0
 IR_STATUSES = {"OUT", "INJURY_RESERVE"}   # injured players ESPN lets you move to an IR spot
 ALTS = 3                  # other drops kept for each move, for the "Keep him" button
 POOL_SK, POOL_G = 45, 8
@@ -347,10 +354,11 @@ def show_bar(t, ndays):
 
 
 def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_games, prev=None, reasons=True, only_prev=False,
-         keep_ids=(), healthy=True, ir_free=0, per_day=None, pending=None):
+         keep_ids=(), healthy=True, ir_free=0, per_day=None, pending=None, risk=None):
     """The plan. prev = [(add_id, day_label, drop_id), ...] from the previous build (kept unless clearly beaten).
     keep_ids: players you chose to keep this week (never suggested as drops). healthy: data was complete enough to call
-    a move Strong. nxt_games: {team: games} over the long-term horizon after this matchup (longterm.HORIZON_DAYS)."""
+    a move Strong. nxt_games: {team: games} over the long-term horizon after this matchup (longterm.HORIZON_DAYS).
+    risk: {"lead", "sd", "p"} from matchup_projection before any move (see SAFE_WIN); None skips the check."""
     t0 = time.time()
     entries, base, pool = build_inputs(mine, fas, game, ndays, standings, starters, pending=pending)
     keep_ids = set(keep_ids or ())
@@ -412,6 +420,8 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
         # the bar is cleared on the number you see (net) as well as the move's worth inside the whole plan (marg): a
         # producer's drop can't ride on later moves (a second stream, a later add that benches his last game)
         worth = min(mv["marg"], mv["net"])
+        if ahead_hold(mv, risk, nxt_games):
+            return False
         return worth >= need - slack and round(mv["net"], 1) >= max(OPTIONAL_MIN, bar - slack)
 
     def sequence(tiers, with_reasons):
@@ -454,9 +464,13 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
             # the show bar for that day and whether it is in the last days
             mv.update(nd=ndays, g=x["grp"], dg=y["grp"], bar=show_bar(t, ndays), late=ndays - t <= LATE_DAYS,
                       cda=cda, cdd=cdd, healthy=healthy)
+            mv["_xp"], mv["_yp"] = x["p"], y["p"]
+            mv["ahead"] = ahead_note(mv, risk, nxt_games)
             mv["conf"] = confidence(mv, y["p"], healthy, x["p"])
             if with_reasons:
                 mv["why1"] = headline(mv, x["p"], y["p"])
+                if mv["ahead"]:
+                    mv["why1"] += " " + mv["ahead"]
                 if reasons:
                     mv["why_add"] = STR._why_add(x, ents, y, t, ndays, days, game, standings)
                     mv["why_drop"] = why_drop(y, t, ndays, c, nxt_games, x["p"])
@@ -505,8 +519,57 @@ def plan(mine, fas, game, ndays, days, standings, starters, moves_left, nxt_game
                        "waiver": pool[xi]["waiver"], "nd": ndays, "g": pool[xi]["g"], "dg": y["g"],
                        "need": y["bar"], "bar": show_bar(t, ndays), "late": ndays - t <= LATE_DAYS,
                        "ir": bool(y.get("ir"))})
+    for mv in out:
+        mv.pop("_xp", None)
+        mv.pop("_yp", None)
     return {"base": round(base_total, 1), "total": round(after_total, 1), "gain": round(after_total - base_total, 1),
             "moves": out, "small": hidden, "before_days": before_days, "after_days": after_days, "ents": ents}
+
+
+def win_change(mv, risk):
+    """How much a move moves your win chance this week: its points shift the mean, and every extra game that counts in
+    your lineup adds that game's swing (a goalie start swings far more than a skater game, dashboard.GOALIE_SD)."""
+    import math
+    if not risk or not risk.get("sd"):
+        return None
+    unit = 0.6 * D.GOALIE_SD ** 2 if mv.get("g") == "G" else D.SKATER_SD ** 2
+    dvar = (mv.get("ca", 0) - mv.get("cd", 0)) * unit
+    sd0 = risk["sd"]
+    sd1 = math.sqrt(max(1.0, sd0 ** 2 + dvar))
+    p0 = D.norm_cdf(risk["lead"] / sd0)
+    p1 = D.norm_cdf((risk["lead"] + mv.get("gain", 0.0)) / sd1)
+    return p1 - p0
+
+
+def lt_edge(mv, nxt_games):
+    """Points the added player is worth over the dropped one in the weeks after this matchup (streaks taken out)."""
+    xp, yp = mv.get("_xp"), mv.get("_yp")
+    if not xp or not yp or not nxt_games:
+        return 0.0
+    return LT.true_pg(xp) * nxt_games.get(xp["tm"], 0) - LT.true_pg(yp) * nxt_games.get(yp["tm"], 0)
+
+
+def ahead_hold(mv, risk, nxt_games):
+    """True when you are already very likely to win and a goalie add neither helps that nor is a long-term upgrade."""
+    if not risk or mv.get("g") != "G" or mv.get("ir") or (risk.get("p") or 0) < SAFE_WIN:
+        return False
+    dp = win_change(mv, risk)
+    if dp is not None and dp >= SAFE_DP:
+        return False
+    return lt_edge(mv, nxt_games) < LT_EDGE
+
+
+def ahead_note(mv, risk, nxt_games):
+    """The sentence a goalie add gets when you're well ahead and it stays on the list for the weeks after."""
+    if not risk or mv.get("g") != "G" or mv.get("ir") or (risk.get("p") or 0) < SAFE_WIN:
+        return ""
+    dp = win_change(mv, risk)
+    if dp is not None and dp >= SAFE_DP:
+        return ""
+    if lt_edge(mv, nxt_games) < LT_EDGE:
+        return ""
+    return (f"You're {int(round(risk['p'] * 100))}% to win this week already, so this move is about the weeks after, "
+            f"not this matchup.")
 
 
 # ---------------------------------------------------------------------------

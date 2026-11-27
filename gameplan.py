@@ -61,9 +61,18 @@ def build(cfg, data, league, standings, now_ms, site_data, prev=None):
     mp = (league.get("status") or {}).get("currentMatchupPeriod")
     kept = KP.load(mp)
     pend = [c for c in site_data.get("pending") or [] if c.get("add") is not None]   # claims already in with ESPN
+    risk = None
+    if m:
+        try:                                             # the matchup as it stands before any move (core.SAFE_WIN)
+            opp0 = next((t for t in site_data.get("teams", []) if t["id"] == m.get("opp_id")), None)
+            r0 = C.matchup_projection(site_data["mine"], opp0["players"] if opp0 else [], game, ndays, standings,
+                                      starters, m["me_now"], m["opp_now"], pending=pend, fas=site_data["fas"])
+            risk = {"lead": r0["proj_me"] - r0["proj_opp"], "sd": r0["sd"], "p": r0["p_win"]}
+        except Exception as e:
+            print(f"  matchup risk check skipped ({type(e).__name__}: {e})")
     res = C.plan(site_data["mine"], site_data["fas"], game, ndays, days, standings, starters, moves_left, fut, prev=prev,
                  only_prev=cautious, keep_ids=kept, healthy=healthy, ir_free=D.ir_free(league, site_data["mine"]),
-                 per_day=bg.get("per_day"), pending=pend)
+                 per_day=bg.get("per_day"), pending=pend, risk=risk)
     entries, _, pool = C.build_inputs(site_data["mine"], site_data["fas"], game, ndays, standings, starters, pending=pend)
     before_rows = _day_rows(entries, ndays, days, game)
     after_rows = _day_rows(res["ents"], ndays, days, game)

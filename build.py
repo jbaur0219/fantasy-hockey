@@ -343,6 +343,11 @@ def _main():
     except Exception as e:
         print(f"  deeper stats failed ({type(e).__name__}: {e})")
     try:
+        import odds as ODDS
+        ODDS.install(ODDS.load())
+    except Exception as e:
+        print(f"  betting lines skipped ({type(e).__name__}: {e})")
+    try:
         S.install(S.load())
     except Exception as e:
         print(f"  starting goalies skipped ({type(e).__name__}: {e})")

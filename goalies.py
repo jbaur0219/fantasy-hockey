@@ -11,6 +11,7 @@ GOALIE CALLS (READ-ONLY): start / bench for each of your goalies on every day le
 import analyze as A
 import dashboard as D
 import enrich as E
+import odds as O
 import starters as S
 
 
@@ -41,10 +42,14 @@ def build(mine, sp, games, abbr, standings, now_ms, ndays, slots=2):
             for g in D.games_on(games, p["team_id"], sp + i):
                 home = g.get("homeProTeamId") == p["team_id"]
                 opp = abbr.get(g.get("awayProTeamId") if home else g.get("homeProTeamId"), "?")
-                pw = D.log5(s_me, D.team_strength(opp, standings)) + (D.HOME_ICE if home else -D.HOME_ICE)
-                if p.get("svp") and p["gp"] >= 5:
-                    pw += D.clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
-                pw = D.clamp(pw, 0.15, 0.85)
+                ln = O.p_win(p["team"], opp, home, g.get("date"))
+                if ln is not None:
+                    pw = D.clamp(ln, 0.15, 0.85)              # from the betting line (odds.py)
+                else:
+                    pw = D.log5(s_me, D.team_strength(opp, standings)) + (D.HOME_ICE if home else -D.HOME_ICE)
+                    if p.get("svp") and p["gp"] >= 5:
+                        pw += D.clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
+                    pw = D.clamp(pw, 0.15, 0.85)
                 e = p["outlook"] + _win_pts() * (pw - s_me)
                 spc = D.start_prob(p, standings)
                 st, conf, sure = _status(p, i, spc, today)

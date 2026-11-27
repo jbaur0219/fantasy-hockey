@@ -84,6 +84,21 @@ def make_game_fn(abbr, games, sp, now_ms):
         home = g.get("homeProTeamId") == tid
         opp = abbr.get(g.get("awayProTeamId") if home else g.get("homeProTeamId"), "?")
         return opp, home
+
+    def line(tm, i):
+        """Win chance for team tm on day i from the betting line (odds.py), or None when there is no line."""
+        if day_locked(i):
+            return None
+        tid = tid_of.get(tm)
+        gl = games.get(tid, {}).get(str(sp + i), [])
+        if not gl:
+            return None
+        g = gl[0]
+        home = g.get("homeProTeamId") == tid
+        opp = abbr.get(g.get("awayProTeamId") if home else g.get("homeProTeamId"), "?")
+        import odds as O
+        return O.p_win(tm, opp, home, g.get("date"))
+    game.line = line
     game.today = D.today_index(games, sp, now_ms)          # the day today's starting goalies are for
     return game
 
@@ -101,10 +116,14 @@ def _base_values(p, game, ndays, standings, starters, lineup_goalie=False):
         opp, home = g
         if p["grp"] == "G":
             s_me = D.team_strength(p["tm"], standings)
-            pw = D.log5(s_me, D.team_strength(opp, standings)) + (D.HOME_ICE if home else -D.HOME_ICE)
-            if p.get("svp") and p["gp"] >= 5:
-                pw += D.clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
-            pw = D.clamp(pw, 0.15, 0.85)
+            ln = game.line(p["tm"], i) if hasattr(game, "line") else None
+            if ln is not None:
+                pw = D.clamp(ln, 0.15, 0.85)                  # the betting line already prices both goalies (odds.py)
+            else:
+                pw = D.log5(s_me, D.team_strength(opp, standings)) + (D.HOME_ICE if home else -D.HOME_ICE)
+                if p.get("svp") and p["gp"] >= 5:
+                    pw += D.clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
+                pw = D.clamp(pw, 0.15, 0.85)
             e = (p["out"] or 0) + _win_pts() * (pw - s_me)
             st = p.get("sp") or 0.5
             # (review B1, 2026-11-25: your own goalies' start chance is no longer floored at 50%; a goalie only
