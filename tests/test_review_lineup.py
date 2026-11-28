@@ -155,13 +155,23 @@ class LineupBugs(unittest.TestCase):
         ents += [{"p": {}, "grp": "D", "v": [1.0], "join": 0, "leave": 99} for _ in range(5)]
         self.assertEqual(STR._fill(ents, {"grp": "F", "v": [1.0]}, {"grp": "G", "v": [0.0]}, 0, 1), (1, 1))
 
-    def test_per_day_move_limit_counts_only_days_left(self):
-        # BUG B5: with a per-day limit (1 a day), Saturday morning has 2 days left, so at most 2 adds remain;
-        # move_budget says 7 (limit x full matchup) and core.plan has no per-day cap.
+    def test_per_day_move_limit_is_pooled_over_game_days(self):
+        # Checked against ESPN 2026-11-28: 1 add per day, matchup Nov 23-29 with no NHL games on Thanksgiving ->
+        # ESPN shows "Matchup Acq. Limits 6/6" after 6 adds by Saturday. The cap counts only game days and is pooled.
         lg = {"status": {"currentMatchupPeriod": 9},
               "settings": {"acquisitionSettings": {"matchupAcquisitionLimit": 1, "matchupLimitPerScoringPeriod": True}},
-              "teams": [{"id": 1, "transactionCounter": {"matchupAcquisitionTotals": {"9": 0}}}]}
-        self.assertEqual(D.move_budget(lg, 1, days=7, days_left=2)["left"], 2)
+              "schedule": [{"matchupPeriodId": 9, "home": {"teamId": 1, "pointsByScoringPeriod": {"56": 1}},
+                            "away": {"teamId": 2}}],
+              "teams": [{"id": 1, "transactionCounter": {"matchupAcquisitionTotals": {"9": 6}}}]}
+        old = set(D.GAME_SPS)
+        try:
+            D.GAME_SPS.clear(); D.GAME_SPS.update({56, 57, 58, 60, 61, 62})
+            b = D.move_budget(lg, 1, days_left=2)
+            self.assertEqual((b["limit"], b["left"]), (6, 0))
+            lg["teams"][0]["transactionCounter"]["matchupAcquisitionTotals"]["9"] = 1
+            self.assertEqual(D.move_budget(lg, 1, days_left=2)["left"], 5)     # unused days carry over
+        finally:
+            D.GAME_SPS.clear(); D.GAME_SPS.update(old)
 
     @unittest.expectedFailure
     def test_matchup_days_known_before_any_points(self):

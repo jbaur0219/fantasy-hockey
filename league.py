@@ -55,7 +55,7 @@ def summary():
     if not STATE["known"]:
         return "league settings: not read, using the defaults (9 F, 5 D, 1 UTIL, 2 G)"
     lim = "no weekly limit" if s.moves.get("unlimited") else (
-        f"{s.moves.get('per_day')} adds a day" if s.moves.get("per_day") else f"{s.moves.get('weekly')} adds a matchup")
+        f"{s.moves.get('per_day')} add(s) per NHL game day, pooled for the matchup" if s.moves.get("per_day") else f"{s.moves.get('weekly')} adds a matchup")
     return (f"league settings ({s.platform}): {s.lineup['F']} F, {s.lineup['D']} D, {s.lineup['UTIL']} UTIL, "
             f"{s.lineup['G']} G, {s.bench} bench, {s.ir} IR; {lim}; goal {s.goal_points():g} pts"
             + (f"; {s.approx}" if s.approx else ""))

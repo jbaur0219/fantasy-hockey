@@ -154,7 +154,31 @@ def schedule_maps(schedules):
     for t in schedules.get("settings", {}).get("proTeams", []):
         abbr[t.get("id")] = t.get("abbrev", "?")
         games[t.get("id")] = t.get("proGamesByScoringPeriod") or {}
+        for sp, lst in games[t.get("id")].items():
+            if lst:
+                GAME_SPS.add(int(sp))
     return abbr, games
+
+
+GAME_SPS = set()    # scoring periods (days) with at least one NHL game, filled by schedule_maps
+
+
+def matchup_game_days(league, mp, length=None):
+    """Days in matchup mp that have NHL games. ESPN's per-day add limit counts only these (e.g. no games on
+    Thanksgiving 2026 made that week's cap 6, not 7). Falls back to the calendar length when the schedule is unknown."""
+    length = length or matchup_length(league or {}, mp)
+    if not GAME_SPS:
+        return length
+    start = None
+    for m in (league or {}).get("schedule", []):
+        if m.get("matchupPeriodId") == mp:
+            keys = [int(k) for side in (m.get("home") or {}, m.get("away") or {})
+                    for k in (side.get("pointsByScoringPeriod") or {})]
+            if keys:
+                start = min(keys) if start is None else min(start, min(keys))
+    if start is None:
+        return length
+    return max(1, sum(1 for sp in range(start, start + length) if sp in GAME_SPS))
 
 
 def games_on(games, team_id, sp, now_ms=None):
@@ -260,7 +284,7 @@ def move_budget(league, my_id, days=None, days_left=None, pending=0):
     {"limit", "used", "left", "unlimited", "known", "used_known", "season_left"}. `left` also respects a season cap."""
     mp = ((league or {}).get("status") or {}).get("currentMatchupPeriod")
     if days is None:
-        days = matchup_length(league or {}, mp)
+        days = matchup_game_days(league or {}, mp)
     info = move_limit_info(league, days)
     team = next((t for t in (league or {}).get("teams", []) if t.get("id") == my_id), {}) or {}
     tc = team.get("transactionCounter") or {}
@@ -273,8 +297,8 @@ def move_budget(league, my_id, days=None, days_left=None, pending=0):
     if pending and used is not None:
         used += pending
     left = max(0, info["limit"] - (used or 0) - (pending if used is None else 0))
-    if info.get("per_day") and days_left is not None:
-        left = info["per_day"] * max(0, int(days_left))     # unused days don't carry over (today's own adds unknown)
+    # A per-day limit is pooled across the matchup (1/day x 6 game days = 6 for the week, usable any day), which is
+    # how ESPN counts it ("Matchup Acq. Limits 6/6"), so `left` is simply limit - used.
     season_left = None
     if info["season_limit"] is not None:
         try:
@@ -284,7 +308,8 @@ def move_budget(league, my_id, days=None, days_left=None, pending=0):
             season_left = None
     return {"limit": info["limit"], "used": used, "left": left, "unlimited": info["unlimited"],
             "known": info["known"], "used_known": used is not None, "season_left": season_left,
-            "per_day": info.get("per_day")}
+            "per_day": None,            # pooled: no separate cap on any one day (ESPN lets you use the week's adds any day)
+            "per_game_day": info.get("per_day")}
 
 
 def matchup_periods(m, mp, length=7):
@@ -400,7 +425,7 @@ def build_context(cfg, data, league, standings, now_ms):
         ow, ol, ot, _ = record_of(teams.get(opp_id, {}))
         matchup = {"me_now": me_now, "opp_now": opp_now, "proj_me": me_now + mu_me, "proj_opp": opp_now + mu_opp,
                    "p_win": clamp(norm_cdf(z), 0.01, 0.99), "days_left": len(periods),
-                   "days_total": length, "move_limit": move_limit(league, length),
+                   "days_total": length, "move_limit": move_limit(league, matchup_game_days(league, mp, length)),
                    "opp_name": team_label(teams.get(opp_id, {})), "opp_rec": f"{ow}-{ol}-{ot}", "opp_id": opp_id}
 
     standings_rows = []

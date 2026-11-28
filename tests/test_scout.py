@@ -144,7 +144,8 @@ class Build(unittest.TestCase):
 
     def test_their_pickups_and_the_overlap_with_your_plan(self):
         them = self.run_()[str(OPP)]
-        self.assertEqual(them["mv"], {"left": 3, "used": 2, "known": True, "today": False})
+        self.assertEqual(them["mv"], {"left": 5, "used": 2,   # pooled: 1/day x 7 days - 2 used
+                                      "known": True, "today": False})
         self.assertEqual([s["id"] for s in them["st"]], [100])     # the 0.4 defenseman isn't worth listing
         self.assertEqual(them["st"][0]["mine"], 1)
         self.assertEqual(them["up"], 5.0)                          # CHI plays day 0 and day 2
@@ -153,7 +154,7 @@ class Build(unittest.TestCase):
         raw = {"transactions": [{"teamId": OPP, "scoringPeriodId": SP, "status": "EXECUTED", "type": "FREEAGENT",
                                  "items": [{"type": "ADD", "playerId": 5}]}]}
         them = self.run_(raw_tx=raw)[str(OPP)]
-        self.assertEqual((them["mv"]["left"], them["mv"]["today"]), (2, True))
+        self.assertEqual((them["mv"]["left"], them["mv"]["today"]), (5, True))   # ESPN already counts it in used
 
     def test_apply_sets_games_left_everywhere(self):
         s = sb()
