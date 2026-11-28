@@ -139,7 +139,9 @@ function rdLineup(){var L=(D.rules&&D.rules.lineup)||{};return {F:L.F!=null?L.F:
 /* ESPN keeps a lineup for every day. S.fl[day] = your lineup that day (read from ESPN for today and later days);
    without it the current slots are used and the page says so. */
 function rdKnown(i,S){return !!(S&&S.fl&&S.fl[String(i)])||i===rdT(S);}
-function rdSl(p,i,S){var d=S&&S.fl&&S.fl[String(i)];return (d&&d[String(p.id)])||p.slot;}
+/* a player's spot on day i: that day's ESPN lineup when it was read ('NA' = not on your roster that day, e.g. added or
+   dropped after today's lock); otherwise his current spot. nx = joins your roster tomorrow (nextroster.py). */
+function rdSl(p,i,S){var d=S&&S.fl&&S.fl[String(i)];if(d)return d[String(p.id)]||'NA';return p.nx&&i<=rdT(S)?'NA':p.slot;}
 function rdAct(i,S){return function(p){return ['F','D','UTIL','G'].indexOf(rdSl(p,i,S))>=0;};}
 /* the day to call "Today": the real date in New York once ESPN's day lags behind it after midnight */
 function rdNow(S){var k=S&&S.dates?S.dates.indexOf(muEtd(Date.now())):-1;return k>=0?k:rdT(S);}
@@ -223,7 +225,7 @@ function rdFixes(i,S){
   var t=rdT(S),mine=D.mine||[],L=rdLineup(),out=[],used={};
   if(i<t||!rdKnown(i,S))return out;
   var fits={F:['F','UTIL'],D:['D','UTIL'],G:['G']};
-  var bench=mine.filter(function(p){var s=rdState(p,i,S);return rdSl(p,i,S)==='BN'&&s.g&&!s.np&&s.st==='up';}).sort(function(a,b){return (b.out||0)-(a.out||0);});
+  var bench=mine.filter(function(p){var s=rdState(p,i,S);return p.grp!=='G'&&rdSl(p,i,S)==='BN'&&s.g&&!s.np&&s.st==='up';}).sort(function(a,b){return (b.out||0)-(a.out||0);});
   bench.forEach(function(b){
     var ok=fits[b.grp]||[],cand=null;
     ok.forEach(function(sl){
@@ -246,12 +248,50 @@ function tdVal(p,si,S,W){
   var C=D.clock,fi=C&&S?C.dates.indexOf(S.dates[si]):-1,w=W&&W[p.id];
   return (w&&w.v&&fi>=0&&w.v[fi]!=null)?w.v[fi]:(p.out||0);
 }
+/* Goalies (user, 2026-11-27: "I only have 2 starter goalie spots and it's suggesting I start all 3. It should tell me to
+   start whichever 2 goalies have the best chance of winning. If only 1 has a good chance of winning or none, that's
+   fine too"). Pick at most as many goalies as you have G spots, best first by projected points (start chance x win
+   chance), and only goalies whose team is at least TD_GW to win (betting line, else the standings guess). Then: start a
+   picked goalie who is on the bench, in an open G spot or in place of a G-spot goalie who wasn't picked. */
+var TD_GW=0.5;
+function tdWin(p,si,S,W){
+  var C=D.clock,fi=C&&S?C.dates.indexOf(S.dates[si]):-1,w=W&&W[p.id];
+  return (w&&w.w&&fi>=0&&w.w[fi]!=null)?w.w[fi]:null;
+}
+function tdGoalies(si,S,W,val){
+  var nG=rdLineup().G,mine=D.mine||[];
+  var gs=mine.filter(function(p){var sl=rdSl(p,si,S);return p.grp==='G'&&(sl==='G'||sl==='BN');});
+  var up=function(p){var s=rdState(p,si,S);return !!s.g&&!s.np&&s.st==='up'&&BAD.indexOf(p.inj)<0;};
+  var win=function(p){return tdWin(p,si,S,W);};
+  var pick=gs.filter(function(p){var w=win(p);return up(p)&&val(p)>=0.1&&(w==null||w>=TD_GW);})
+    .sort(function(a,b){return val(b)-val(a);}).slice(0,nG);
+  var picked={};pick.forEach(function(p){picked[p.id]=1;});
+  var inG=gs.filter(function(p){return rdSl(p,si,S)==='G';});
+  var open=Math.max(0,nG-inG.length);
+  /* G-spot goalies who weren't picked, the ones with no game first, then lowest value */
+  var outs=inG.filter(function(p){return !picked[p.id];}).sort(function(a,b){return (up(a)?1:0)-(up(b)?1:0)||val(a)-val(b);});
+  var res=[];
+  pick.filter(function(p){return rdSl(p,si,S)==='BN';}).forEach(function(b){
+    var x={b:b,g:1,wb:win(b)};
+    if(open>0){open--;x.empty='G';x.gain=val(b);}
+    else if(outs.length){
+      var a=outs.shift(),s=rdState(a,si,S);x.a=a;x.wa=win(a);
+      x.why=!s.g?'no game':(s.np?(BAD.indexOf(a.inj)>=0?injLabel(a.inj).toLowerCase():'not starting'):'lower');
+      x.gain=val(b)-(up(a)?val(a):0);x.vb=val(b);x.va=val(a);
+    }else return;
+    if(x.why==='lower'&&x.gain<0.1)return;
+    res.push(x);
+  });
+  return res;
+}
+function tdPct(w){return w==null?'':Math.round(w*100)+'% to win';}
 function tdFixes(si,S){
   if(!S||si<0)return [];
   var W={};((D.streams&&D.streams.whatif&&D.streams.whatif.mine)||[]).forEach(function(p){W[p.id]=p;});
   var val=function(p){return tdVal(p,si,S,W);};
   var out=rdFixes(si,S).map(function(x){return {b:x.b,a:x.a,why:x.why,empty:x.empty,gain:val(x.b)};});
   if(si<rdT(S)||!rdKnown(si,S))return out;
+  out=out.concat(tdGoalies(si,S,W,val));
   var used={};out.forEach(function(x){used[x.b.id]=1;if(x.a)used[x.a.id]=1;});
   var mine=(D.mine||[]).filter(function(p){return p.grp!=='G'&&!used[p.id];});
   var up=function(p){var s=rdState(p,si,S);return !!s.g&&!s.np&&s.st==='up';};
@@ -271,7 +311,9 @@ function tdKey(x,si,S){return 'lu'+x.b.id+'-'+(x.a?x.a.id:x.empty)+'@'+(S.dates[
 function tdRow(x,si,S,chk){
   var b=x.b,a=x.a,gb=rdGame(b,si,S),t=rdT(S),wb=lastName(b.n),wa=a?lastName(a.n):'',r;
   var when=gb?(gb[2]?'vs ':'@ ')+esc(gb[1])+(si===t?' at '+etTime(gb[0]):''):'';
-  if(x.why==='lower')r='Both play. '+esc(wb)+' projects '+f(x.vb,1)+', '+esc(wa)+' '+f(x.va,1)+'.';
+  if(x.g&&x.why==='lower')r='Both play. '+esc(wb)+(x.wb!=null?'’s team is '+Math.round(x.wb*100)+'% to win'+(x.wa!=null?', '+esc(wa)+'’s '+Math.round(x.wa*100)+'%':'')+'.':' projects '+f(x.vb,1)+', '+esc(wa)+' '+f(x.va,1)+'.');
+  else if(x.why==='lower')r='Both play. '+esc(wb)+' projects '+f(x.vb,1)+', '+esc(wa)+' '+f(x.va,1)+'.';
+  else if(x.g&&!a)r=esc(wb)+' plays '+when+(x.wb!=null?', '+tdPct(x.wb):'')+'. Your G spot is open.';
   else if(!a)r=esc(wb)+' plays '+when+'. Your '+(x.empty==='UTIL'?'utility':x.empty)+' spot is empty.';
   else if(x.why==='no game')r=esc(wb)+' plays '+when+'. '+esc(wa)+' has no game.';
   else if(x.why==='not starting'){var al=(D.alerts||[]).filter(function(q){return q.t.indexOf(a.n)>=0;})[0],m=al&&/\(([^)]+)\)/.exec(al.t);

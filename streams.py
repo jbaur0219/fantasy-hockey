@@ -103,6 +103,22 @@ def make_game_fn(abbr, games, sp, now_ms):
     return game
 
 
+def goalie_win(p, i, game, standings):
+    """Chance goalie p's team wins its game on day i (None: no game). The betting line when there is one (odds.py),
+    otherwise the standings guess with home ice and his save % nudge. Used for his value and for Today's start calls."""
+    g = game(p["tm"], i)
+    if not g:
+        return None
+    opp, home = g
+    ln = game.line(p["tm"], i) if hasattr(game, "line") else None
+    if ln is not None:
+        return D.clamp(ln, 0.15, 0.85)                    # the betting line already prices both goalies (odds.py)
+    pw = D.log5(D.team_strength(p["tm"], standings), D.team_strength(opp, standings)) + (D.HOME_ICE if home else -D.HOME_ICE)
+    if p.get("svp") and p["gp"] >= 5:
+        pw += D.clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
+    return D.clamp(pw, 0.15, 0.85)
+
+
 def _base_values(p, game, ndays, standings, starters, lineup_goalie=False):
     """Expected fantasy points for player p on each of the next ndays days (before the form blend)."""
     v = [0.0] * ndays
@@ -116,14 +132,7 @@ def _base_values(p, game, ndays, standings, starters, lineup_goalie=False):
         opp, home = g
         if p["grp"] == "G":
             s_me = D.team_strength(p["tm"], standings)
-            ln = game.line(p["tm"], i) if hasattr(game, "line") else None
-            if ln is not None:
-                pw = D.clamp(ln, 0.15, 0.85)                  # the betting line already prices both goalies (odds.py)
-            else:
-                pw = D.log5(s_me, D.team_strength(opp, standings)) + (D.HOME_ICE if home else -D.HOME_ICE)
-                if p.get("svp") and p["gp"] >= 5:
-                    pw += D.clamp((p["svp"] - 0.905) * 2.0, -0.05, 0.05)
-                pw = D.clamp(pw, 0.15, 0.85)
+            pw = goalie_win(p, i, game, standings)
             e = (p["out"] or 0) + _win_pts() * (pw - s_me)
             st = p.get("sp") or 0.5
             # (review B1, 2026-11-25: your own goalies' start chance is no longer floored at 50%; a goalie only
@@ -485,6 +494,8 @@ def whatif_data(site_data, game, ndays, days, standings, starters):
              "gl": sum(1 for x in v if x > 0), "e": round(sum(v), 1), "v": [round(x, 2) for x in v],
              "inj": p.get("inj")}
         d["o"] = _opps(p, 0, ndays, days, game, standings)
+        if p["grp"] == "G":                                # each day's win chance, for Today's "start which goalies" call
+            d["w"] = [None if (x := goalie_win(p, i, game, standings)) is None else round(x, 3) for i in range(ndays)]
         return d
     mine = [rec(p, True) for p in site_data["mine"] if p["slot"] != "IR"]
     fa_sk = sorted((p for p in site_data["fas"] if p["grp"] != "G" and p["inj"] not in A.BAD_INJURY),

@@ -39,6 +39,7 @@ import pwa
 import record as RC
 import roles as R
 import scoreboard as SBD
+import nextroster as NR
 import scout as SCT
 import site_builder as SB
 import starters as S
@@ -194,7 +195,7 @@ def injury_alerts(site_data, now_ms):
     moves = (site_data.get("gameplan") or {}).get("moves") or []
     out = {}
     for p in site_data.get("mine") or []:
-        if p.get("inj") not in INJURY_WORD or p.get("slot") == "IR":
+        if p.get("inj") not in INJURY_WORD or p.get("slot") == "IR" or p.get("irn"):   # irn: in IR from tomorrow
             continue
         mv = next((m for m in moves if (m.get("drop") or {}).get("id") == p["id"]), None) or (moves[0] if moves else None)
         head = f"{p['n']} {INJURY_WORD[p['inj']]}."
@@ -396,6 +397,18 @@ def _main():
         PC.annotate(site_data, data, now_ms)                # games left in this matchup, for the player card
     except Exception as e:
         print(f"  games-left skipped ({type(e).__name__}: {e})")
+    real_mine, plan_mine = site_data["mine"], None
+    try:                                                # today locked: plan from tomorrow's ESPN roster (nextroster.py)
+        if NR.locked_today(data, now_ms):
+            plan_mine, why = NR.plan_roster(cfg, data, site_data, standings, SB.slim)
+            print(f"  tomorrow's roster: {why}")
+            if plan_mine is not None:
+                PC.annotate(dict(site_data, mine=plan_mine + [p for p in real_mine if p.get("nx")], fas=[], teams=[]),
+                            data, now_ms)
+                site_data["mine"] = plan_mine
+    except Exception as e:
+        print(f"  tomorrow's roster skipped ({type(e).__name__}: {e})")
+        site_data["mine"] = real_mine
     try:
         site_data["planner"] = PL.build(cfg, data, league, standings, now_ms, site_data)
     except Exception as e:
@@ -417,6 +430,7 @@ def _main():
             print(f"     {mv['day']} [{mv['conf']}]: add {mv['add']['n']} drop {mv['drop']['n']} (+{mv['gain']}, cost {mv['cost']}, net {mv['net']}){' kept' if mv.get('kept') else ''}")
     except Exception as e:
         print(f"  game plan data failed ({type(e).__name__}: {e})")
+    site_data["mine"] = real_mine                       # the page keeps today's slots (live views read them)
     try:
         reconcile_alerts(site_data)
     except Exception as e:                              # never fail the build over alert wording
