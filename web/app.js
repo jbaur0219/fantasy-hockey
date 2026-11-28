@@ -2065,7 +2065,23 @@ function uiToday(){
   h+='</div>';
   /* Lineup: a glance (how many spots play, after the changes above), goalies, problems the To do list doesn't cover */
   var gl=[];(D.goalies||[]).forEach(function(g){(g.rows||[]).forEach(function(r){if(r.day===C.labels[fi])gl.push({g:g.p,r:r});});});
-  gl.sort(function(a,b){return (b.r.ev||0)-(a.r.ev||0);});
+  /* Goalie badges follow the To do list (user, 2026-11-28: To do said start Hellebuyck + Hill while these rows said
+     Vasilevskiy + Hellebuyck). goalies.py ranks by start chance with no win check; tdGoalies adds the 50%-to-win bar.
+     So for a day the To do list covers, a goalie is Start only if he is in a G spot after the changes above. */
+  var gCall=null;
+  if(si>=0&&S&&si>=rdT(S)&&rdKnown(si,S)){
+    var gW={};((D.streams&&D.streams.whatif&&D.streams.whatif.mine)||[]).forEach(function(p){gW[p.id]=p;});
+    var inG={};(D.mine||[]).forEach(function(p){if(p.grp==='G'&&rdSl(p,si,S)==='G')inG[p.id]=1;});
+    fx.forEach(function(x){if(x.g){inG[x.b.id]=1;if(x.a)delete inG[x.a.id];}});
+    gCall={inG:inG,win:function(p){return tdWin(p,si,S,gW);}};
+  }
+  gl.forEach(function(x){
+    if(!gCall||!/^(START|BENCH)$/.test(x.r.verdict||''))return;
+    var w=gCall.win(x.g);
+    if(gCall.inG[x.g.id]){x.r=Object.assign({},x.r,{verdict:'START',conf:(w!=null?Math.round(w*100)+'% to win':x.r.conf)});x.st=1;}
+    else x.r=Object.assign({},x.r,{verdict:'BENCH',conf:(w!=null&&w<TD_GW)?Math.round(w*100)+'% to win, not worth a start':'your other goalies are better bets tonight'});
+  });
+  gl.sort(function(a,b){return (b.st||0)-(a.st||0)||(b.r.ev||0)-(a.r.ev||0);});
   var fxN=fx.map(function(x){return x.a?x.a.n:'';}).concat(fx.map(function(x){return x.b.n;}));
   var al=(D.alerts||[]).filter(function(a){return (a.k==='bad'||/injur|not starting/i.test(a.t))&&!fxN.some(function(n){return n&&a.t.indexOf(n)>=0;});});
   h+='<div class="sec"><div class="sec-h"><span>Lineup</span></div><div class="grp">';
