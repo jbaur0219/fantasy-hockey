@@ -173,8 +173,8 @@ function rdState(p,i,S){
   else o.st=now<g[0]?'up':(now<g[0]+3*3600e3?'live':'final');
   o.e=e;
   if(o.st!=='up'){
-    var L=(typeof LIVE!=='undefined'&&LIVE&&LIVE.pts&&LIVE.pts[p.id])||null,sp=S.pt?S.pt[p.id]:null;
-    o.pts=o.st==='final'&&sp!=null?sp:(L?Math.round(L.p*10)/10:(sp!=null?sp:null));
+    var L=(typeof lvGet==='function'&&lvGet(p.id))||null,sp=S.pt?S.pt[p.id]:null;
+    o.pts=L?Math.round(L.p*10)/10:(sp!=null?sp:null);
     if(L&&L.s&&o.st==='live')o.line=L.s;
   }
   return o;
@@ -2860,7 +2860,8 @@ function muFutSum(T,S,k){
 }
 function muInj(p){return (p.inj&&p.inj!=='ACTIVE')?' <i class="mu-inj">'+esc(injShort(p.inj))+'</i>':'';}
 function muPts(p,st,S,k){
-  var v=(k==null&&S.pt)?S.pt[p.id]:undefined;
+  var v=(k==null&&S.pt)?S.pt[p.id]:undefined,Lg=k==null?lvGet(p.id):null;
+  if(Lg&&st.on&&!st.up)v=Math.round(Lg.p*10)/10;
   if(v!=null&&(st.on&&!st.up||v!==0))return muNum(p.id,v,'t');
   if(st.on&&st.up&&!st.np&&p.out!=null)return '<span class="mu-pj">'+f(p.out,1)+'</span>';
   return '<span class="mu-dash">&ndash;</span>';
@@ -3045,6 +3046,8 @@ function bdKeys(sc,S){
 }
 function bdBuild(id,v,sc){
   var S=D.sb,p=ALL[id],keys=bdKeys(sc,S);
+  var Lg=sc==='t'?lvGet(id):null;
+  if(Lg&&Math.abs(Math.round(Lg.p*10)/10-v)<0.05){var hw=Object.keys(D.scoring||{}).length>0;return {p:p,rows:glRows(id).filter(function(r){return keys.indexOf(muEtd(r[0]))>=0;}),lines:Lg.ln,hasW:hw,live:1};}
   var rows=glRows(id).filter(function(r){return keys.indexOf(muEtd(r[0]))>=0;});
   var hasW=Object.keys(D.scoring||{}).length>0,spec=(p&&p.grp==='G')?BD_GK:BD_SK,lines=[],sum=0;
   spec.forEach(function(s){
@@ -3058,8 +3061,8 @@ function bdBuild(id,v,sc){
 function bdHtml(id,v,sc,key){
   var b=bdBuild(id,v,sc),p=b.p,games=b.rows.map(function(r){return (r[2]?'vs ':'@')+r[1];}).join(', ');
   var h='<div class="mu-bk" data-bdk="'+key+'"><div class="mu-bkc"><div class="mu-bkh"><b>'+esc(p?p.n:'Player')+'</b><span>'+(sc==='w'?'This week':'')+(sc==='w'&&games?' &middot; ':'')+esc(games)+'</span></div>';
-  if(!b.rows.length){
-    var L=(sc==='t'&&typeof LIVE!=='undefined'&&LIVE.pts&&LIVE.pts[id])||null;
+  if(!b.rows.length&&!b.live){
+    var L=(sc==='t'&&lvGet(id))||null;
     h+='<div class="mu-bkm">'+(L&&L.s?'So far: '+esc(L.s)+'. The full breakdown shows after the next update.':'The stat line for this game is not in yet. It shows after the next update.')+'</div>';
   }else{
     h+=b.lines.map(function(l){
@@ -3415,7 +3418,7 @@ function uiMorph(el,html){
    From ESPN's public scoreboard (the NHL's own feed blocks browser apps). It refreshes every 45 s while a game you
    care about is on and the app is open. Points use your league's scoring for goals, assists, shots, hits, blocks,
    saves, goals against, wins and shutouts; power-play and short-handed points show up after the next full update. */
-var LIVE={ev:[],pts:{},done:{},at:0,tm:null,err:0};
+var LIVE={ev:[],pts:{},done:{},fin:{},at:0,tm:null,err:0};
 var LV_URL='https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/';
 var LV_AL={LA:'LAK',NJ:'NJD',SJ:'SJS',TB:'TBL',UTAH:'UTA',WAS:'WSH',MON:'MTL',CLB:'CBJ',CLS:'CBJ',NAS:'NSH',NSH:'NSH',VEG:'VGK',WIN:'WPG'};
 var LV_SK={goals:'13',assists:'14',shotsTotal:'29',hits:'31',blockedShots:'32'};
@@ -3439,7 +3442,7 @@ function lvBox(e,sm){
           var ga=val('goalsAgainst'),sv=k.indexOf('saves')>=0?val('saves'):Math.max(0,val('shotsAgainst')-ga);
           var o={id:id,ga:ga,sv:sv,f:sv+ga};gks.push(o);
           var gl=[];if(sv&&lvW('6'))gl.push({l:'Saves',n:sv,pts:sv*lvW('6')});if(ga&&lvW('4'))gl.push({l:'Goals against',n:ga,pts:ga*lvW('4')});
-          LIVE.pts[id]={p:sv*lvW('6')+ga*lvW('4'),s:sv+' saves, '+ga+' GA',g:e.id,ln:gl};
+          LIVE.pts[id]={p:sv*lvW('6')+ga*lvW('4'),s:sv+' saves, '+ga+' GA',g:e.id,ln:gl,gk:1};
         }else{
           var p=0,bits=[],ln=[];
           for(var n in LV_SK){var x=val(n),w=lvW(LV_SK[n]);p+=x*w;if(x&&w)ln.push({l:LV_LB[n],n:x,pts:x*w});if(x&&(n==='goals'||n==='assists'))bits.push(x+(n==='goals'?'G':'A'));}
@@ -3454,8 +3457,51 @@ function lvBox(e,sm){
         if(lvW('1'))L.ln.push({l:'Win',n:1,pts:lvW('1')});if(w.ga===0&&lvW('7'))L.ln.push({l:'Shutout',n:1,pts:lvW('7')});}
     }
   });
+  /* power-play points (2026-11-28: Robertson's 2 PPP were missing on the game page while ESPN counted them). The box score has
+     no PPP column, so they come from the scoring plays: every skater credited on a power-play goal gets one. */
+  var wp=lvW('38');
+  if(wp)((sm&&sm.plays)||[]).forEach(function(pl){
+    if(!pl.scoringPlay||!lvPP(pl))return;
+    (pl.participants||[]).forEach(function(x){
+      if(x.type&&/goalie/i.test(x.type))return;
+      var id=+(x.athlete&&x.athlete.id),L=LIVE.pts[id];if(!L||L.gk)return;
+      L.p+=wp;var o=L.ln.filter(function(l){return l.l==='Power-play points';})[0];
+      if(o){o.n++;o.pts+=wp;}else L.ln.push({l:'Power-play points',n:1,pts:wp});
+    });
+  });
+  if(e.st==='post'&&!LIVE.fin[e.id])LIVE.fin[e.id]=Date.now();
 }
-function lvSum(list){var s=0,n=0;lvStarters(list).forEach(function(p){var L=LIVE.pts[p.id];if(L){s+=L.p;n++;}});return {s:s,n:n};}
+/* was this scoring play on the power play? ESPN marks the strength on the play; read it whichever way it is written */
+function lvPP(pl){
+  var st=pl.strength||{},t=[st.text,st.abbreviation,st.name,pl.type&&pl.type.text,pl.type&&pl.type.abbreviation].join(' ');
+  if(/short/i.test(t))return false;
+  return /power ?play|\bppg?\b/i.test(t)||/\(PPG\)|power[- ]play goal/i.test(pl.text||'');
+}
+/* ONE number per player per game, wherever it shows (game page, Tonight tiles, Roster, matchup sheet). While a game is on it is
+   our live count from the box score; once ESPN's own total for the day is in (the update after the final horn), ESPN's number
+   wins, so the app always ends on exactly what ESPN fantasy shows. Anything ESPN counts that the box score lacks becomes its
+   own line, so the breakdown still adds up. Returns null when there is no live entry for this player in a game on the slate. */
+function lvBuiltAfter(e){
+  var b=(D.clock&&D.clock.built)||0,f=LIVE.fin[e.id];
+  return b>e.start+3*3600e3||(f&&b>f);
+}
+function lvGet(id){
+  var L=LIVE.pts[id];if(!L)return null;
+  var e=null;for(var i=0;i<LIVE.ev.length;i++)if(LIVE.ev[i].id===L.g)e=LIVE.ev[i];
+  if(!e)return null;
+  var S=D.sb,sp=S&&S.pt?S.pt[id]:null;
+  if(e.st!=='post'||sp==null||!S.dates||muEtd(e.start)!==S.dates[Math.min(S.today,S.dates.length-1)]||!lvBuiltAfter(e))return L;
+  var d=Math.round((sp-L.p)*100)/100,ln=L.ln.slice();
+  if(Math.abs(d)>=0.05){
+    var wp=lvW('38'),k=wp?Math.round(d/wp):0;
+    if(k>0&&Math.abs(d-k*wp)<0.01){
+      var o=null;ln=ln.map(function(l){if(l.l==='Power-play points'){o={l:l.l,n:l.n+k,pts:l.pts+d};return o;}return l;});
+      if(!o)ln.push({l:'Power-play points',n:k,pts:d});
+    }else ln.push({l:'Other scoring',n:1,pts:d});
+  }
+  return {p:sp,s:L.s,g:L.g,ln:ln,espn:true,gk:L.gk};
+}
+function lvSum(list){var s=0,n=0;lvStarters(list).forEach(function(p){var L=lvGet(p.id);if(L){s+=L.p;n++;}});return {s:s,n:n};}
 /* ---------- Tonight (Today tab): one tile per game that matters to your matchup, Apple Sports style (2026-11-25) ----------
    A sideways row of game tiles so Today stays short: both teams' logos, puck drop / live score / final, your players in
    that game with their gray projection (or live points), and the opponent's starters in the same game. The header sums
@@ -3482,7 +3528,7 @@ window.lgErr=function(i){           /* dark logo missing -> light one -> the ori
 };
 function lvLast(n){var w=String(n||'').trim().split(/\s+/);return w.length>1?w.slice(1).join(' '):n;}
 function lvPts(p,e){
-  var L=LIVE.pts[p.id];
+  var L=lvGet(p.id);
   if(e.st!=='pre')return L?'<span class="tn-pv'+(L.p>0?' up':'')+'">'+(L.p>0?'+':'')+L.p.toFixed(1)+'</span>':'<span class="tn-pv z">0.0</span>';
   if(lvOut(p))return '<span class="tn-pv z">&ndash;</span>';
   return p.out!=null?'<span class="tn-pv pj">'+f(p.out,1)+'</span>':'';
@@ -3505,7 +3551,7 @@ function lvTile(e,mi){
   if(!mine.length)ps='<span class="tn-none">None of yours</span>';
   var op='';
   if(theirs.length){
-    var os=0;theirs.forEach(function(p){var L=LIVE.pts[p.id];if(L)os+=L.p;});
+    var os=0;theirs.forEach(function(p){var L=lvGet(p.id);if(L)os+=L.p;});
     op='<span class="tn-op"><b>'+(pre?'Them':'Them '+(os>0?'+':'')+os.toFixed(1))+'</b>'+esc(theirs.map(function(p){return lvLast(p.n);}).join(', '))+'</span>';
   }
   var cls='tn-g'+(e.st==='in'?' live':'')+(fin?' fin':'');
@@ -3531,7 +3577,7 @@ function lvHtml(){
   var h='<div class="sec tn" data-k="tn"><div class="sec-h"><span>Tonight</span><span class="sec-r tn-r">'+(on?'<span class="sb-live"></span>':'')+r+'</span></div>';
   h+='<div class="tn-car'+(evs.length<=2?' few':'')+'" id="tnCar">'+evs.map(function(e){return lvTile(e,mi);}).join('')+'</div>';
   var n=lvStarters(me).filter(function(p){return lvPlays(p)&&evs.some(function(e){return lvIn([p],e).length;});}).length;
-  h+='<div class="sec-f">'+(any?'Live points are a close estimate.':n+' of yours play tonight. Tap a game for the full picture.')+'</div>';
+  h+='<div class="sec-f">'+(any?'Live points count as the game goes; ESPN\'s own totals take over after each game.':n+' of yours play tonight. Tap a game for the full picture.')+'</div>';
   return h+'</div>';
 }
 function lvPaint(){
@@ -3612,9 +3658,10 @@ function gmPaint(){
   uiMorph(b,gmHtml(e));var sb=document.getElementById('gmSub');if(sb)sb.textContent=gmSub(e);
 }
 function gmMine(e){return lvIn(lvMe(),e);}
+function gmEspn(e){return e.st==='post'&&!!(D.sb&&D.sb.pt)&&lvBuiltAfter(e);}
 function gmTheirs(e){return lvStarters(lvIn(lvOpp(),e));}
 function gmCounts(p){return lvPlays(p)&&!lvSt(p).np;}
-function gmPts(p,e){var L=LIVE.pts[p.id];return e.st==='pre'?(gmCounts(p)?(p.out||0):0):(L&&p.slot!=='BN'&&p.slot!=='IR'?L.p:0);}
+function gmPts(p,e){var L=lvGet(p.id);return e.st==='pre'?(gmCounts(p)?(p.out||0):0):(L&&p.slot!=='BN'&&p.slot!=='IR'?L.p:0);}
 function gmHero(e){
   var pre=e.st==='pre',fin=e.st==='post',ca=gmColor(e.a,'#3a3a3c'),ch=gmColor(e.h,'#3a3a3c');
   function side(t,o){
@@ -3654,7 +3701,7 @@ function gmStake(e){
     +'<div class="gm-skt"><b class="'+(net>0.05?'up':(net<-0.05?'dn':''))+'">'+big+'</b><span>'+esc(lbl)+'</span></div>'
     +'<div class="wp-bar gm-bar" style="'+wpVars(Math.max(4,Math.min(96,w)))+'"><i class="a"></i><i class="b"></i></div>'
     +'<div class="gm-skl"><span>You <b>'+(pre?f(a,1):(a>=0?'+':'')+f(a,1))+'</b></span><span>'+esc(op)+' <b>'+(pre?f(b,1):(b>=0?'+':'')+f(b,1))+'</b></span></div>'
-    +'</div><div class="sec-f">'+(pre?'Projected fantasy points from the players each of you starts in this game.':(e.st==='post'?'Fantasy points from this game (close estimate until the next full update).':'Fantasy points from this game so far (close estimate).'))+'</div></div>';
+    +'</div><div class="sec-f">'+(pre?'Projected fantasy points from the players each of you starts in this game.':(e.st==='post'?'Fantasy points from this game'+(gmEspn(e)?', as ESPN scored them.':' (ESPN\'s own total replaces this after its next update).'):'Fantasy points from this game so far (close estimate).'))+'</div></div>';
 }
 /* before puck drop: who is in net (Daily Faceoff) and what the betting line expects */
 function gmOutlook(e){
@@ -3686,7 +3733,7 @@ function gmOutlook(e){
 function gmStarter(p,e){var df=D.df||{},ab=lvAb(p.tm),g=null;Object.keys(df).forEach(function(k){if(lvAb(k)===ab)g=df[k];});
   if(!g||!g.name)return null;return psNorm(g.name)===psNorm(p.n);}
 function gmPRow(p,e){
-  var pre=e.st==='pre',bn=p.slot==='BN'||p.slot==='IR',st=lvSt(p),L=LIVE.pts[p.id],off=bn||st.np||lvOut(p);
+  var pre=e.st==='pre',bn=p.slot==='BN'||p.slot==='IR',st=lvSt(p),L=lvGet(p.id),off=bn||st.np||lvOut(p);
   var bits=[esc(p.pos)];
   var gs=p.grp==='G'?gmStarter(p,e):null,sbn=bn&&gs===true&&pre;
   if(bn)bits.push(sbn?'<b class="gm-warn">Starts tonight, benched</b>':'Bench');
@@ -3713,7 +3760,7 @@ function gmBd(p,L,e){
   h+=ln.map(function(l){return '<div class="mu-bkr"><span>'+esc(l.l)+(l.n>1?' <i>&times;'+l.n+'</i>':'')+'</span><b class="'+(l.pts<0?'mu-neg':'')+'">'+(l.pts>=0?'+':'&minus;')+bdF(Math.abs(l.pts))+'</b></div>';}).join('');
   if(!ln.length)h+='<div class="mu-bkm">No stats that score points yet.</div>';
   h+='<div class="mu-bkt"><span>Total</span><b>'+bdF(L?L.p:0)+'</b></div>';
-  if(lvW('38')||lvW('15'))h+='<div class="mu-bkm">'+(fin?'Power-play points and similar extras':'Power-play points and similar extras')+' are added at the next full update.</div>';
+  if(!(L&&L.espn))h+='<div class="mu-bkm">'+(fin?'Matches ESPN once its update after the game is in.':'Live count. ESPN\'s own total replaces it after the game.')+'</div>';
   return h+'</div></div>';
 }
 function gmPlayers(e){
@@ -3766,7 +3813,7 @@ function gmStats(e){
 }
 function gmHtml(e){
   return gmHero(e)+gmStake(e)+gmOutlook(e)+gmPlayers(e)+gmGoals(e)+gmStats(e)
-    +'<div class="muted gm-ft" data-k="ft">'+(e.st==='pre'?'Gray numbers are projected fantasy points.':'Live fantasy points are a close estimate; power-play points come with the next full update.')+'</div>';
+    +'<div class="muted gm-ft" data-k="ft">'+(e.st==='pre'?'Gray numbers are projected fantasy points.':(e.st==='post'&&gmEspn(e)?'Points match ESPN fantasy.':'Live fantasy points count power-play points as they happen; ESPN\'s own total replaces them after the game.'))+'</div>';
 }
 function lvLater(ms){clearTimeout(LIVE.tm);LIVE.tm=setTimeout(lvFetch,ms);}
 function lvNext(){
